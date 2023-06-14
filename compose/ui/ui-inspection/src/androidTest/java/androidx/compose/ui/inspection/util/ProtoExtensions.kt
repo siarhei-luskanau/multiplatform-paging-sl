@@ -21,14 +21,25 @@ import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.Command
 import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.ComposableNode
 import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.GetAllParametersCommand
 import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.GetComposablesCommand
-import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.GetParametersCommand
 import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.GetParameterDetailsCommand
+import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.GetParametersCommand
 import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.ParameterReference
 import layoutinspector.compose.inspection.LayoutInspectorComposeProtocol.UpdateSettingsCommand
 
 fun List<LayoutInspectorComposeProtocol.StringEntry>.toMap() = associate { it.id to it.str }
 
 fun GetParametersCommand(
+    rootViewId: Long,
+    node: ComposableNode,
+    useDelayedParameterExtraction: Boolean,
+    skipSystemComposables: Boolean = true
+): Command = if (useDelayedParameterExtraction) {
+    GetParametersByAnchorIdCommand(rootViewId, node.anchorHash, node.id, skipSystemComposables)
+} else {
+    GetParametersByIdCommand(rootViewId, node.id, skipSystemComposables)
+}
+
+fun GetParametersByIdCommand(
     rootViewId: Long,
     composableId: Long,
     skipSystemComposables: Boolean = true
@@ -43,11 +54,13 @@ fun GetParametersCommand(
 fun GetParametersByAnchorIdCommand(
     rootViewId: Long,
     anchorId: Int,
+    composableId: Long,
     skipSystemComposables: Boolean = true
 ): Command = Command.newBuilder().apply {
     getParametersCommand = GetParametersCommand.newBuilder().apply {
         this.rootViewId = rootViewId
         this.anchorHash = anchorId
+        this.composableId = composableId
         this.skipSystemComposables = skipSystemComposables
     }.build()
 }.build()

@@ -16,6 +16,9 @@
 
 package androidx.work.testing;
 
+import static androidx.work.testing.TestWorkManagerImplKt.createTestWorkManagerImpl;
+import static androidx.work.testing.WorkManagerTestInitHelper.ExecutorsMode.LEGACY_OVERRIDE_WITH_SYNCHRONOUS_EXECUTORS;
+
 import android.content.Context;
 
 import androidx.annotation.NonNull;
@@ -46,7 +49,8 @@ public final class WorkManagerTestInitHelper {
 
     /**
      * Initializes a test {@link androidx.work.WorkManager} with a user-specified
-     * {@link androidx.work.Configuration}.
+     * {@link androidx.work.Configuration}, but using
+     * {@link SynchronousExecutor} instead of main thread.
      *
      * @param context The application {@link Context}
      * @param configuration The {@link androidx.work.Configuration}
@@ -54,22 +58,82 @@ public final class WorkManagerTestInitHelper {
     public static void initializeTestWorkManager(
             @NonNull Context context,
             @NonNull Configuration configuration) {
+        initializeTestWorkManager(context, configuration,
+                LEGACY_OVERRIDE_WITH_SYNCHRONOUS_EXECUTORS);
+    }
 
-        // Check if the configuration being used has overridden the task executor. If not,
-        // swap to SynchronousExecutor. This is to preserve existing behavior.
-        SerialExecutor serialExecutor;
-        if (configuration.isUsingDefaultTaskExecutor()) {
-            Configuration.Builder builder = new Configuration.Builder(configuration)
-                    .setTaskExecutor(new SynchronousExecutor());
-            configuration = builder.build();
-            serialExecutor = new SynchronousSerialExecutor();
+    /**
+     * Modes that control which executors are used in tests.
+     */
+    public enum ExecutorsMode {
+        /**
+         * Use executors as they are configured in passed {@link Configuration} and preserving
+         * real main thread.
+         */
+        PRESERVE_EXECUTORS,
+
+        /**
+         * Preserve old behavior of {@link #initializeTestWorkManager(Context)} and
+         * {@link #initializeTestWorkManager(Context, Configuration)}.
+         *
+         * <p> In this mode {@link SynchronousExecutor} is used instead of main thread. Similarly,
+         * {@link SynchronousExecutor} is used as {@link Configuration#getTaskExecutor()}, unless
+         * {@link Configuration#getTaskExecutor()} was explicitly set in {@code configuration}
+         * passed in {@link #initializeTestWorkManager(Context, Configuration, ExecutorsMode)}
+         */
+        LEGACY_OVERRIDE_WITH_SYNCHRONOUS_EXECUTORS
+    }
+
+    /**
+     * Initializes a test {@link androidx.work.WorkManager} that can be controlled via {@link
+     * TestDriver}.
+     *
+     * @param context The application {@link Context}
+     * @param configuration test configuration of WorkManager
+     * @param executorsMode mode controlling executors used by WorkManager in tests. See
+     *                      documentation of modes in {@link ExecutorsMode}
+     */
+    public static void initializeTestWorkManager(@NonNull Context context,
+            @NonNull Configuration configuration, @NonNull ExecutorsMode executorsMode) {
+        WorkManagerImpl workManager;
+        if (executorsMode == LEGACY_OVERRIDE_WITH_SYNCHRONOUS_EXECUTORS) {
+            SerialExecutor serialExecutor;
+            if (configuration.isUsingDefaultTaskExecutor()) {
+                Configuration.Builder builder = new Configuration.Builder(configuration)
+                        .setTaskExecutor(new SynchronousExecutor());
+                configuration = builder.build();
+                serialExecutor = new SynchronousSerialExecutor();
+            } else {
+                serialExecutor = new SerialExecutorImpl(configuration.getTaskExecutor());
+            }
+            workManager = createTestWorkManagerImpl(context, configuration, serialExecutor);
         } else {
-            serialExecutor = new SerialExecutorImpl(configuration.getTaskExecutor());
+            workManager = createTestWorkManagerImpl(context, configuration);
         }
+        WorkManagerImpl.setDelegate(workManager);
+    }
 
-        WorkManagerImpl.setDelegate(
-                new TestWorkManagerImpl(context, configuration, serialExecutor)
-        );
+    /**
+     * Initializes a test {@link androidx.work.WorkManager} that can be controlled via {@link
+     * TestDriver}.
+     *
+     * @param context The application {@link Context}
+     * @param executorsMode mode controlling executors used by WorkManager in tests. See
+     *                      documentation of modes in {@link ExecutorsMode}
+     */
+    public static void initializeTestWorkManager(@NonNull Context context,
+            @NonNull ExecutorsMode executorsMode) {
+        Configuration configuration;
+        if (executorsMode == LEGACY_OVERRIDE_WITH_SYNCHRONOUS_EXECUTORS) {
+            SynchronousExecutor synchronousExecutor = new SynchronousExecutor();
+            configuration = new Configuration.Builder()
+                    .setExecutor(synchronousExecutor)
+                    .setTaskExecutor(synchronousExecutor)
+                    .build();
+        } else {
+            configuration = new Configuration.Builder().build();
+        }
+        initializeTestWorkManager(context, configuration, executorsMode);
     }
 
     /**
@@ -83,7 +147,7 @@ public final class WorkManagerTestInitHelper {
         if (workManager == null) {
             return null;
         } else {
-            return (TestWorkManagerImpl) workManager;
+            return TestWorkManagerImplKt.getTestDriver(workManager);
         }
     }
 
@@ -93,7 +157,7 @@ public final class WorkManagerTestInitHelper {
      */
     public static @Nullable TestDriver getTestDriver(@NonNull Context context) {
         try {
-            return (TestWorkManagerImpl) WorkManagerImpl.getInstance(context);
+            return TestWorkManagerImplKt.getTestDriver(WorkManagerImpl.getInstance(context));
         } catch (IllegalStateException e) {
             return null;
         }

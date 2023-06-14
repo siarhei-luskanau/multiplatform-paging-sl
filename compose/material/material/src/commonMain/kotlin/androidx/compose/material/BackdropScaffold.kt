@@ -59,11 +59,11 @@ import androidx.compose.ui.unit.offset
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastMap
 import androidx.compose.ui.zIndex
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.launch
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 
 /**
  * Possible values of [BackdropScaffoldState].
@@ -453,6 +453,7 @@ private fun BackdropStack(
     modifier: Modifier,
     backLayer: @Composable @UiComposable () -> Unit,
     calculateBackLayerConstraints: (Constraints) -> Constraints,
+    @Suppress("PrimitiveInLambda")
     frontLayer: @Composable @UiComposable (Constraints, Float) -> Unit
 ) {
     SubcomposeLayout(modifier) { constraints ->

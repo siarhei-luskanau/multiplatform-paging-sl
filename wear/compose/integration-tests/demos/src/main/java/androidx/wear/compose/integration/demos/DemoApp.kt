@@ -16,7 +16,6 @@
 
 package androidx.wear.compose.integration.demos
 
-import android.annotation.SuppressLint
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.FlingBehavior
@@ -33,7 +32,6 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.focus.FocusRequester
@@ -43,23 +41,28 @@ import androidx.compose.ui.input.rotary.onRotaryScrollEvent
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.wear.compose.material.AutoCenteringParams
+import androidx.wear.compose.foundation.lazy.AutoCenteringParams
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumn
+import androidx.wear.compose.foundation.lazy.ScalingLazyColumnDefaults
+import androidx.wear.compose.foundation.lazy.ScalingLazyListScope
+import androidx.wear.compose.foundation.lazy.ScalingLazyListState
+import androidx.wear.compose.foundation.lazy.ScalingParams
+import androidx.wear.compose.foundation.lazy.rememberScalingLazyListState
+import androidx.wear.compose.integration.demos.common.ActivityDemo
+import androidx.wear.compose.integration.demos.common.ComposableDemo
+import androidx.wear.compose.integration.demos.common.Demo
+import androidx.wear.compose.integration.demos.common.DemoCategory
+import androidx.wear.compose.integration.demos.common.DemoParameters
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.ListHeader
 import androidx.wear.compose.material.LocalTextStyle
 import androidx.wear.compose.material.MaterialTheme
-import androidx.wear.compose.material.ScalingLazyColumn
-import androidx.wear.compose.material.ScalingLazyColumnDefaults
-import androidx.wear.compose.material.ScalingLazyListScope
-import androidx.wear.compose.material.ScalingLazyListState
-import androidx.wear.compose.material.ScalingParams
 import androidx.wear.compose.material.SwipeToDismissBox
 import androidx.wear.compose.material.SwipeToDismissBoxState
 import androidx.wear.compose.material.SwipeToDismissKeys
 import androidx.wear.compose.material.SwipeToDismissValue
 import androidx.wear.compose.material.Text
-import androidx.wear.compose.material.rememberScalingLazyListState
 import androidx.wear.compose.material.rememberSwipeToDismissBoxState
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.channels.Channel
@@ -107,12 +110,15 @@ private fun BoxScope.BoxDemo(
         is ActivityDemo<*> -> {
             /* should never get here as activity demos are not added to the backstack*/
         }
+
         is ComposableDemo -> {
             demo.content(DemoParameters(onNavigateBack, state))
         }
+
         is DemoCategory -> {
             DisplayDemoList(demo, onNavigateTo)
         }
+
         else -> {
         }
     }
@@ -152,13 +158,13 @@ internal fun BoxScope.DisplayDemoList(
                     modifier = Modifier.fillMaxWidth()
                 )
             }
-            if (demo.description != null) {
+            demo.description?.let { description ->
                 item {
                     CompositionLocalProvider(
                         LocalTextStyle provides MaterialTheme.typography.caption3
                     ) {
                         Text(
-                            text = demo.description,
+                            text = description,
                             modifier = Modifier.fillMaxWidth().align(Alignment.Center),
                             textAlign = TextAlign.Center
                         )
@@ -185,14 +191,12 @@ internal fun swipeDismissStateWithNavigation(
 
 internal data class TimestampedDelta(val time: Long, val delta: Float)
 
-@SuppressLint("ModifierInspectorInfo")
-@OptIn(ExperimentalComposeUiApi::class)
 @Suppress("ComposableModifierFactory")
 @Composable
 fun Modifier.rsbScroll(
     scrollableState: ScrollableState,
     flingBehavior: FlingBehavior,
-    focusRequester: FocusRequester
+    focusRequester: FocusRequester? = null
 ): Modifier {
     val channel = remember {
         Channel<TimestampedDelta>(
@@ -249,9 +253,12 @@ fun Modifier.rsbScroll(
             channel.trySend(TimestampedDelta(it.uptimeMillis, it.verticalScrollPixels))
             rsbScrollInProgress = true
             true
+        }.let {
+            if (focusRequester != null) {
+                it.focusRequester(focusRequester)
+                    .focusable()
+            } else it
         }
-            .focusRequester(focusRequester)
-            .focusable()
     }
 }
 

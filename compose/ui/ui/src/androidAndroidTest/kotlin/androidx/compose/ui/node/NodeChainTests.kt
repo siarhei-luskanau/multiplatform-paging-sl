@@ -14,12 +14,11 @@
  * limitations under the License.
  */
 
-@file:OptIn(ExperimentalComposeUiApi::class)
 package androidx.compose.ui.node
 
-import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.areObjectsOfSameType
+import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 
 class NodeChainTests {
@@ -139,6 +138,18 @@ class NodeChainTests {
                 assert(entA === entA2)
                 assert(entC !== entB2)
             }
+    }
+
+    @Test
+    fun getModifierNode_returnsModifiers() {
+        val a = modifierA()
+        val b = modifierB()
+        val modifierInfo = chainTester()
+            .withModifiers(a, b)
+            .chain
+            .getModifierInfo()
+
+        assertThat(modifierInfo.map { it.modifier }).isEqualTo(listOf(a, b))
     }
 
     // TODO(b/241856927)

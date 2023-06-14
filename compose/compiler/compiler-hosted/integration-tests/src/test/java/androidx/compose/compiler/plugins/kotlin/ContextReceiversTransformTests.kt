@@ -17,10 +17,23 @@
 package androidx.compose.compiler.plugins.kotlin
 
 import org.intellij.lang.annotations.Language
+import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.config.LanguageFeature
+import org.jetbrains.kotlin.config.LanguageVersionSettingsImpl
+import org.jetbrains.kotlin.config.languageVersionSettings
 import org.junit.Test
 
-class ContextReceiversTransformTests : ComposeIrTransformTest() {
+class ContextReceiversTransformTests(useFir: Boolean) : AbstractIrTransformTest(useFir) {
+    override fun CompilerConfiguration.updateConfiguration() {
+        put(ComposeConfiguration.SOURCE_INFORMATION_ENABLED_KEY, true)
+        languageVersionSettings = LanguageVersionSettingsImpl(
+            languageVersion = languageVersionSettings.languageVersion,
+            apiVersion = languageVersionSettings.apiVersion,
+            specificFeatures = mapOf(
+                LanguageFeature.ContextReceivers to LanguageFeature.State.ENABLED
+            )
+        )
+    }
 
     private fun contextReceivers(
         @Language("kotlin")
@@ -42,7 +55,6 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
 
             fun used(x: Any?) {}
         """.trimIndent(),
-        compilation = JvmCompilation(specificFeature = setOf(LanguageFeature.ContextReceivers))
     )
 
     @Test
@@ -57,7 +69,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
         """,
         """
             @Composable
-            fun Test(%this%: Foo, %composer: Composer?, %changed: Int) {
+            fun Test(_context_receiver_0: Foo, %composer: Composer?, %changed: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(Test):Test.kt")
               if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -71,7 +83,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(%this%, %composer, %changed or 0b0001)
+                Test(_context_receiver_0, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """
@@ -95,7 +107,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
         """,
         """
             @Composable
-            fun A(%this%: Foo, %this%: Bar, %composer: Composer?, %changed: Int) {
+            fun A(_context_receiver_0: Foo, _context_receiver_1: Bar, %composer: Composer?, %changed: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(A):Test.kt")
               if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -109,11 +121,11 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                A(%this%, %this%, %composer, %changed or 0b0001)
+                A(_context_receiver_0, _context_receiver_1, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
             @Composable
-            fun B(%this%: Foo, %this%: Bar, %this%: FooBar, %composer: Composer?, %changed: Int) {
+            fun B(_context_receiver_0: Foo, _context_receiver_1: Bar, _context_receiver_2: FooBar, %composer: Composer?, %changed: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(B):Test.kt")
               if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -127,7 +139,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                B(%this%, %this%, %this%, %composer, %changed or 0b0001)
+                B(_context_receiver_0, _context_receiver_1, _context_receiver_2, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """
@@ -151,7 +163,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
         """,
         """
             @Composable
-            fun String.A(%this%: Foo, %this%: Bar, %composer: Composer?, %changed: Int) {
+            fun String.A(_context_receiver_0: Foo, _context_receiver_1: Bar, %composer: Composer?, %changed: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(A):Test.kt")
               if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -165,11 +177,11 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                A(%this%, %this%, %composer, %changed or 0b0001)
+                A(_context_receiver_0, _context_receiver_1, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
             @Composable
-            fun String.B(%this%: Foo, %this%: Bar, %this%: FooBar, %composer: Composer?, %changed: Int) {
+            fun String.B(_context_receiver_0: Foo, _context_receiver_1: Bar, _context_receiver_2: FooBar, %composer: Composer?, %changed: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(B):Test.kt")
               if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -183,7 +195,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                B(%this%, %this%, %this%, %composer, %changed or 0b0001)
+                B(_context_receiver_0, _context_receiver_1, _context_receiver_2, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """
@@ -211,7 +223,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
         """,
         """
             @Composable
-            fun A(%this%: Foo, %this%: Bar, a: Int, %composer: Composer?, %changed: Int, %default: Int) {
+            fun A(_context_receiver_0: Foo, _context_receiver_1: Bar, a: Int, %composer: Composer?, %changed: Int, %default: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(A):Test.kt")
               if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -228,11 +240,11 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                A(%this%, %this%, a, %composer, %changed or 0b0001, %default)
+                A(_context_receiver_0, _context_receiver_1, a, %composer, updateChangedFlags(%changed or 0b0001), %default)
               }
             }
             @Composable
-            fun B(%this%: Foo, %this%: Bar, %this%: FooBar, a: Int, b: String?, c: Int, %composer: Composer?, %changed: Int, %default: Int) {
+            fun B(_context_receiver_0: Foo, _context_receiver_1: Bar, _context_receiver_2: FooBar, a: Int, b: String?, c: Int, %composer: Composer?, %changed: Int, %default: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(B):Test.kt")
               if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -252,11 +264,11 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                B(%this%, %this%, %this%, a, b, c, %composer, %changed or 0b0001, %default)
+                B(_context_receiver_0, _context_receiver_1, _context_receiver_2, a, b, c, %composer, updateChangedFlags(%changed or 0b0001), %default)
               }
             }
             @Composable
-            fun C(%this%: Foo, a: Int, bar: Bar?, %composer: Composer?, %changed: Int, %default: Int) {
+            fun C(_context_receiver_0: Foo, a: Int, bar: Bar?, %composer: Composer?, %changed: Int, %default: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(C):Test.kt")
               val %dirty = %changed
@@ -284,7 +296,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                C(%this%, a, bar, %composer, %changed or 0b0001, %default)
+                C(_context_receiver_0, a, bar, %composer, updateChangedFlags(%changed or 0b0001), %default)
               }
             }
         """
@@ -304,7 +316,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
         """,
         """
         @Composable
-        fun String.B(%this%: Foo, %this%: Bar, %this%: FooBar, a: Int, b: String?, c: Int, %composer: Composer?, %changed: Int, %default: Int) {
+        fun String.B(_context_receiver_0: Foo, _context_receiver_1: Bar, _context_receiver_2: FooBar, a: Int, b: String?, c: Int, %composer: Composer?, %changed: Int, %default: Int) {
           %composer = %composer.startRestartGroup(<>)
           sourceInformation(%composer, "C(B):Test.kt")
           if (%changed and 0b0001 !== 0 || !%composer.skipping) {
@@ -324,7 +336,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
             %composer.skipToGroupEnd()
           }
           %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-            B(%this%, %this%, %this%, a, b, c, %composer, %changed or 0b0001, %default)
+            B(_context_receiver_0, _context_receiver_1, _context_receiver_2, a, b, c, %composer, updateChangedFlags(%changed or 0b0001), %default)
           }
         }
         """
@@ -371,7 +383,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(foo, %composer, %changed or 0b0001)
+                Test(foo, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """
@@ -428,7 +440,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(foo, %composer, %changed or 0b0001)
+                Test(foo, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """
@@ -474,7 +486,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(foo, %composer, %changed or 0b0001)
+                Test(foo, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """
@@ -504,9 +516,9 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
         """,
         """
             @Composable
-            fun Test(%this%: A, %this%: B, %this%: C, %this%: D, %this%: E, %this%: F, %this%: G, %this%: H, %this%: I, %this%: J, %this%: K, %this%: L, %composer: Composer?, %changed: Int, %changed1: Int) {
+            fun Test(_context_receiver_0: A, _context_receiver_1: B, _context_receiver_2: C, _context_receiver_3: D, _context_receiver_4: E, _context_receiver_5: F, _context_receiver_6: G, _context_receiver_7: H, _context_receiver_8: I, _context_receiver_9: J, _context_receiver_10: K, _context_receiver_11: L, %composer: Composer?, %changed: Int, %changed1: Int) {
               %composer = %composer.startRestartGroup(<>)
-              sourceInformation(%composer, "C(Test):Test.kt")
+              sourceInformation(%composer, "C(Test)P(!2,4,5,6,7,8,9,10,11):Test.kt")
               if (%changed and 0b0001 !== 0 || %changed1 and 0b0001 !== 0 || !%composer.skipping) {
                 if (isTraceInProgress()) {
                   traceEventStart(<>, %changed, %changed1, <>)
@@ -518,7 +530,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(%this%, %this%, %this%, %this%, %this%, %this%, %this%, %this%, %this%, %this%, %this%, %this%, %composer, %changed or 0b0001, %changed1)
+                Test(_context_receiver_0, _context_receiver_1, _context_receiver_2, _context_receiver_3, _context_receiver_4, _context_receiver_5, _context_receiver_6, _context_receiver_7, _context_receiver_8, _context_receiver_9, _context_receiver_10, _context_receiver_11, %composer, updateChangedFlags(%changed or 0b0001), updateChangedFlags(%changed1))
               }
             }
         """
@@ -539,12 +551,12 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
         """
             @Composable
             @ComposableInferredTarget(scheme = "[0[0]]")
-            fun Test(%this%: Foo, a: String, b: Function3<String, Composer, Int, Unit>, %composer: Composer?, %changed: Int) {
+            fun Test(_context_receiver_0: Foo, a: String, b: Function3<String, Composer, Int, Unit>, %composer: Composer?, %changed: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(Test)<b("yay...>:Test.kt")
               val %dirty = %changed
               if (%changed and 0b001110000000 === 0) {
-                %dirty = %dirty or if (%composer.changed(b)) 0b000100000000 else 0b10000000
+                %dirty = %dirty or if (%composer.changedInstance(b)) 0b000100000000 else 0b10000000
               }
               if (%dirty and 0b001010000001 !== 0b10000000 || !%composer.skipping) {
                 if (isTraceInProgress()) {
@@ -558,7 +570,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(%this%, a, b, %composer, %changed or 0b0001)
+                Test(_context_receiver_0, a, b, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """
@@ -613,18 +625,18 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Parent(%composer, %changed or 0b0001)
+                Parent(%composer, updateChangedFlags(%changed or 0b0001))
               }
             }
             @Composable
-            fun Test(%this%: Foo, a: String?, b: Int, %composer: Composer?, %changed: Int, %default: Int) {
+            fun Test(_context_receiver_0: Foo, a: String?, b: Int, %composer: Composer?, %changed: Int, %default: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(Test):Test.kt")
               val %dirty = %changed
               if (%default and 0b0001 !== 0) {
                 %dirty = %dirty or 0b0110
               } else if (%changed and 0b1110 === 0) {
-                %dirty = %dirty or if (%composer.changed(%this%)) 0b0100 else 0b0010
+                %dirty = %dirty or if (%composer.changed(_context_receiver_0)) 0b0100 else 0b0010
               }
               if (%default and 0b0010 !== 0) {
                 %dirty = %dirty or 0b00110000
@@ -647,7 +659,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                   traceEventStart(<>, %changed, -1, <>)
                 }
                 val combineParams = a + b
-                if (%this%.someString == combineParams) {
+                if (_context_receiver_0.someString == combineParams) {
                   println("Same same")
                 }
                 if (isTraceInProgress()) {
@@ -657,7 +669,7 @@ class ContextReceiversTransformTests : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(%this%, a, b, %composer, %changed or 0b0001, %default)
+                Test(_context_receiver_0, a, b, %composer, updateChangedFlags(%changed or 0b0001), %default)
               }
             }
         """

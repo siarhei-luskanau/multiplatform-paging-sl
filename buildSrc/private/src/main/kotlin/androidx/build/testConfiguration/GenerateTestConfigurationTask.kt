@@ -17,13 +17,17 @@
 package androidx.build.testConfiguration
 
 import androidx.build.dependencyTracker.ProjectSubset
-import androidx.build.renameApkForTesting
 import com.android.build.api.variant.BuiltArtifactsLoader
+import java.io.File
+import javax.inject.Inject
 import org.gradle.api.DefaultTask
+import org.gradle.api.GradleException
+import org.gradle.api.file.ConfigurableFileCollection
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.file.RegularFileProperty
+import org.gradle.api.model.ObjectFactory
+import org.gradle.api.provider.ListProperty
 import org.gradle.api.provider.Property
-import org.gradle.api.tasks.CacheableTask
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
@@ -32,7 +36,7 @@ import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
-import java.io.File
+import org.gradle.work.DisableCachingByDefault
 
 /**
  * Writes a configuration file in
@@ -40,20 +44,22 @@ import java.io.File
  * format that gets zipped alongside the APKs to be tested.
  * This config gets ingested by Tradefed.
  */
-@CacheableTask
-abstract class GenerateTestConfigurationTask : DefaultTask() {
+@DisableCachingByDefault(because = "Doesn't benefit from caching")
+abstract class GenerateTestConfigurationTask @Inject constructor(
+    private val objects: ObjectFactory
+) : DefaultTask() {
 
     @get:InputFiles
     @get:Optional
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val appFolder: DirectoryProperty
 
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val appFileCollection: ConfigurableFileCollection
+
     @get:Internal
     abstract val appLoader: Property<BuiltArtifactsLoader>
-
-    @get:Input
-    @get:Optional
-    abstract val appProjectPath: Property<String>
 
     @get:InputFiles
     @get:PathSensitive(PathSensitivity.RELATIVE)
@@ -72,10 +78,6 @@ abstract class GenerateTestConfigurationTask : DefaultTask() {
     abstract val hasBenchmarkPlugin: Property<Boolean>
 
     @get:Input
-    @get:Optional
-    abstract val benchmarkRunAlsoInterpreted: Property<Boolean>
-
-    @get:Input
     abstract val testRunner: Property<String>
 
     @get:Input
@@ -84,16 +86,43 @@ abstract class GenerateTestConfigurationTask : DefaultTask() {
     @get:Input
     abstract val presubmit: Property<Boolean>
 
+    @get:Input
+    abstract val additionalApkKeys: ListProperty<String>
+
+    @get:Input
+    abstract val additionalTags: ListProperty<String>
+
     @get:OutputFile
     abstract val outputXml: RegularFileProperty
 
     @get:OutputFile
+    abstract val outputJson: RegularFileProperty
+
+    @get:OutputFile
     abstract val constrainedOutputXml: RegularFileProperty
+
+    @get:OutputFile
+    abstract val outputTestApk: RegularFileProperty
+
+    @get:OutputFile
+    abstract val constrainedOutputTestApk: RegularFileProperty
+
+    @get:[OutputFile Optional]
+    abstract val outputAppApk: RegularFileProperty
+
+    @get:[OutputFile Optional]
+    abstract val constrainedOutputAppApk: RegularFileProperty
 
     @TaskAction
     fun generateAndroidTestZip() {
-        writeConfigFileContent(constrainedOutputXml, true)
-        writeConfigFileContent(outputXml)
+        writeConfigFileContent(
+            outputFile = constrainedOutputXml,
+            isConstrained = true,
+        )
+        writeConfigFileContent(
+            outputFile = outputXml,
+            isConstrained = false,
+        )
     }
 
     private fun writeConfigFileContent(
@@ -107,19 +136,35 @@ abstract class GenerateTestConfigurationTask : DefaultTask() {
         configurations testing Android Application projects, so that both APKs get installed.
          */
         val configBuilder = ConfigBuilder()
+        configBuilder.configName = outputFile.asFile.get().name
         if (appLoader.isPresent) {
-            val appApk = appLoader.get().load(appFolder.get())
+
+            // Decides where to load the app apk from, depending on whether appFolder or
+            // appFileCollection has been set.
+            val appDir = if (appFolder.isPresent && appFileCollection.files.isEmpty()) {
+                appFolder.get()
+            } else if (!appFolder.isPresent && appFileCollection.files.size == 1) {
+                objects.directoryProperty().also { it.set(appFileCollection.files.first()) }.get()
+            } else {
+                throw IllegalStateException("""
+                    App apk not specified or both appFileCollection and appFolder specified.
+                """.trimIndent())
+            }
+
+            val appApk = appLoader.get().load(appDir)
                 ?: throw RuntimeException("Cannot load required APK for task: $name")
             // We don't need to check hasBenchmarkPlugin because benchmarks shouldn't have test apps
-            val appName = appApk.elements.single().outputFile.substringAfterLast("/")
-                .renameApkForTesting(appProjectPath.get(), hasBenchmarkPlugin = false)
-            // TODO(b/178776319): Clean up this hardcoded hack
-            if (appProjectPath.get().contains("macrobenchmark-target")) {
-                configBuilder.appApkName(appName.replace("debug-androidTest", "release"))
+            val appApkBuiltArtifact = appApk.elements.single()
+            val destinationApk = if (isConstrained) {
+                constrainedOutputAppApk.get().asFile
             } else {
-                configBuilder.appApkName(appName)
+                outputAppApk.get().asFile
             }
+            File(appApkBuiltArtifact.outputFile).copyTo(destinationApk, overwrite = true)
+            configBuilder.appApkName(destinationApk.name)
+                .appApkSha256(sha256(File(appApkBuiltArtifact.outputFile)))
         }
+        configBuilder.additionalApkKeys(additionalApkKeys.get())
         val isPresubmit = presubmit.get()
         configBuilder.isPostsubmit(!isPresubmit)
         // Will be using the constrained configs for all devices api 26 and below.
@@ -154,9 +199,6 @@ abstract class GenerateTestConfigurationTask : DefaultTask() {
         if (hasBenchmarkPlugin.get()) {
             configBuilder.isBenchmark(true)
             if (configBuilder.isPostsubmit) {
-                if (benchmarkRunAlsoInterpreted.get()) {
-                    configBuilder.tag("microbenchmarks_interpreted")
-                }
                 configBuilder.tag("microbenchmarks")
             } else {
                 // in presubmit, we treat micro benchmarks as regular correctness tests as
@@ -168,30 +210,43 @@ abstract class GenerateTestConfigurationTask : DefaultTask() {
             configBuilder.tag("macrobenchmarks")
         } else {
             configBuilder.tag("androidx_unit_tests")
-            if (testProjectPath.get().startsWith(":compose:")) {
-                configBuilder.tag("compose")
-            } else if (testProjectPath.get().startsWith(":wear:")) {
-                configBuilder.tag("wear")
-            }
         }
+        additionalTags.get().forEach { configBuilder.tag(it) }
         val testApk = testLoader.get().load(testFolder.get())
             ?: throw RuntimeException("Cannot load required APK for task: $name")
-        val testName = testApk.elements.single().outputFile
-            .substringAfterLast("/")
-            .renameApkForTesting(testProjectPath.get(), hasBenchmarkPlugin.get())
-        configBuilder.testApkName(testName)
+        val testApkBuiltArtifact = testApk.elements.single()
+        val destinationApk = if (isConstrained) {
+            constrainedOutputTestApk.get().asFile
+        } else {
+            outputTestApk.get().asFile
+        }
+        File(testApkBuiltArtifact.outputFile).copyTo(destinationApk, overwrite = true)
+        configBuilder.testApkName(destinationApk.name)
             .applicationId(testApk.applicationId)
             .minSdk(minSdk.get().toString())
             .testRunner(testRunner.get())
-
-        val resolvedOutputFile: File = outputFile.asFile.get()
-        if (!resolvedOutputFile.exists()) {
-            if (!resolvedOutputFile.createNewFile()) {
-                throw RuntimeException(
-                    "Failed to create test configuration file: $resolvedOutputFile"
-                )
+            .testApkSha256(sha256(File(testApkBuiltArtifact.outputFile)))
+        createOrFail(outputFile).writeText(configBuilder.buildXml())
+        if (!isConstrained) {
+            if (!outputJson.asFile.get().name.startsWith("_")) {
+                // Prefixing json file names with _ allows us to collocate these files
+                // inside of the androidTest.zip to make fetching them less expensive.
+                throw GradleException("json output file names are expected to use _ prefix to, " +
+                    "currently set to ${outputJson.asFile.get().name}")
             }
+            createOrFail(outputJson).writeText(configBuilder.buildJson())
         }
-        resolvedOutputFile.writeText(configBuilder.build())
     }
+}
+
+internal fun createOrFail(fileProperty: RegularFileProperty): File {
+    val resolvedFile: File = fileProperty.asFile.get()
+    if (!resolvedFile.exists()) {
+        if (!resolvedFile.createNewFile()) {
+            throw RuntimeException(
+                "Failed to create test configuration file: $resolvedFile"
+            )
+        }
+    }
+    return resolvedFile
 }

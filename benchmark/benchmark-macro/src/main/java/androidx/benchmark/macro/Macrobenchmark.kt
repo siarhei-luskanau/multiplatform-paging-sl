@@ -16,6 +16,7 @@
 
 package androidx.benchmark.macro
 
+import android.content.pm.ApplicationInfo
 import android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE
 import android.content.pm.PackageManager
 import android.os.Build
@@ -25,12 +26,17 @@ import androidx.benchmark.Arguments
 import androidx.benchmark.BenchmarkResult
 import androidx.benchmark.ConfigurationError
 import androidx.benchmark.DeviceInfo
+import androidx.benchmark.Errors
 import androidx.benchmark.InstrumentationResults
 import androidx.benchmark.ResultWriter
+import androidx.benchmark.Shell
 import androidx.benchmark.UserspaceTracing
 import androidx.benchmark.checkAndGetSuppressionState
 import androidx.benchmark.conditionalError
 import androidx.benchmark.perfetto.PerfettoCaptureWrapper
+import androidx.benchmark.perfetto.PerfettoConfig
+import androidx.benchmark.perfetto.PerfettoTrace
+import androidx.benchmark.perfetto.PerfettoTraceProcessor
 import androidx.benchmark.perfetto.UiState
 import androidx.benchmark.perfetto.appendUiState
 import androidx.benchmark.userspaceTrace
@@ -38,18 +44,26 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.tracing.trace
 import java.io.File
 
+/**
+ * Get package ApplicationInfo, throw if not found
+ */
 @Suppress("DEPRECATION")
-internal fun checkErrors(packageName: String): ConfigurationError.SuppressionState? {
+internal fun getInstalledPackageInfo(packageName: String): ApplicationInfo {
     val pm = InstrumentationRegistry.getInstrumentation().context.packageManager
-
-    val applicationInfo = try {
-        pm.getApplicationInfo(packageName, 0)
+    try {
+        return pm.getApplicationInfo(packageName, 0)
     } catch (notFoundException: PackageManager.NameNotFoundException) {
         throw AssertionError(
             "Unable to find target package $packageName, is it installed?",
             notFoundException
         )
     }
+}
+
+internal fun checkErrors(packageName: String): ConfigurationError.SuppressionState? {
+    Arguments.throwIfError()
+
+    val applicationInfo = getInstalledPackageInfo(packageName)
 
     val errorNotProfileable = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
         applicationInfo.isNotProfileableByShell()
@@ -57,6 +71,7 @@ internal fun checkErrors(packageName: String): ConfigurationError.SuppressionSta
         false
     }
 
+    val instrumentation = InstrumentationRegistry.getInstrumentation()
     val errors = DeviceInfo.errors +
         // TODO: Merge this debuggable check / definition with Errors.kt in benchmark-common
         listOfNotNull(
@@ -89,6 +104,38 @@ internal fun checkErrors(packageName: String): ConfigurationError.SuppressionSta
                     <!--suppress AndroidElementNotAllowed -->
                     <profileable android:shell="true"/>
                 """.trimIndent()
+            ),
+            conditionalError(
+                hasError = instrumentation.targetContext.packageName !=
+                    instrumentation.context.packageName,
+                id = "NOT-SELF-INSTRUMENTING",
+                summary = "Benchmark manifest is instrumenting separate process",
+                message = """
+                    Macrobenchmark instrumentation target in manifest
+                    ${instrumentation.targetContext.packageName} does not match macrobenchmark
+                    package ${instrumentation.context.packageName}. While macrobenchmarks 'target' a
+                    separate app they measure, they can not declare it as their instrumentation
+                    targetPackage in their manifest. Doing so would cause the macrobenchmark test
+                    app to be loaded into the target application process, which would prevent
+                    macrobenchmark from killing, compiling, or launching the target process.
+
+                    Ensure your macrobenchmark test apk's manifest matches the manifest package, and
+                    instrumentation target package, also called 'self-instrumenting':
+
+                    <manifest
+                        package="com.mymacrobenchpackage" ...>
+                        <instrumentation
+                            android:name="androidx.benchmark.junit4.AndroidBenchmarkRunner"
+                            android:targetPackage="mymacrobenchpackage"/>
+
+                    In gradle library modules, this is the default behavior. In gradle test modules,
+                    specify the experimental self-instrumenting property:
+                    android {
+                        targetProjectPath = ":app"
+                        // Enable the benchmark to run separately from the app process
+                        experimentalProperties["android.experimental.self-instrumenting"] = true
+                    }
+                """.trimIndent()
             )
         ).sortedBy { it.id }
 
@@ -110,6 +157,7 @@ private fun macrobenchmark(
     iterations: Int,
     launchWithClearTask: Boolean,
     startupModeMetricHint: StartupMode?,
+    userspaceTracingPackage: String?,
     setupBlock: MacrobenchmarkScope.() -> Unit,
     measureBlock: MacrobenchmarkScope.() -> Unit
 ) {
@@ -120,11 +168,10 @@ private fun macrobenchmark(
         "Empty list of metrics passed to metrics param, must pass at least one Metric"
     }
 
+    val suppressionState = checkErrors(packageName)
+    var warningMessage = buildWarningMessage(suppressionState)
     // skip benchmark if not supported by vm settings
     compilationMode.assumeSupportedWithVmSettings()
-
-    val suppressionState = checkErrors(packageName)
-    var warningMessage = suppressionState?.warningMessage ?: ""
 
     val startTime = System.nanoTime()
     val scope = MacrobenchmarkScope(packageName, launchWithClearTask)
@@ -153,86 +200,119 @@ private fun macrobenchmark(
         metrics.forEach {
             it.configure(packageName)
         }
-        val measurements = List(iterations) { iteration ->
-            // Wake the device to ensure it stays awake with large iteration count
-            userspaceTrace("wake device") {
-                scope.device.wakeUp()
-            }
-
-            scope.iteration = iteration
-            userspaceTrace("setupBlock") {
-                setupBlock(scope)
-            }
-
-            val tracePath = perfettoCollector.record(
-                benchmarkName = uniqueName,
-                iteration = iteration,
-
-                /**
-                 * Prior to API 24, every package name was joined into a single setprop which can
-                 * overflow, and disable *ALL* app level tracing.
-                 *
-                 * For safety here, we only trace the macrobench package on newer platforms, and use
-                 * reflection in the macrobench test process to trace important sections
-                 *
-                 * @see androidx.benchmark.macro.perfetto.ForceTracing
-                 */
-                packages = if (Build.VERSION.SDK_INT >= 24) {
-                    listOf(packageName, macrobenchPackageName)
-                } else {
-                    listOf(packageName)
+        val measurements = PerfettoTraceProcessor.runServer {
+            val runIterations = if (Arguments.dryRunMode) 1 else iterations
+            List(runIterations) { iteration ->
+                // Wake the device to ensure it stays awake with large iteration count
+                userspaceTrace("wake device") {
+                    scope.device.wakeUp()
                 }
-            ) {
-                try {
-                    trace("start metrics") {
-                        metrics.forEach {
-                            it.start()
+
+                scope.iteration = iteration
+                userspaceTrace("setupBlock") {
+                    setupBlock(scope)
+                }
+
+                val iterString = iteration.toString().padStart(3, '0')
+                val fileLabel = "${uniqueName}_iter$iterString"
+                val tracePath = perfettoCollector.record(
+                    fileLabel = fileLabel,
+                    config = PerfettoConfig.Benchmark(
+                        /**
+                         * Prior to API 24, every package name was joined into a single setprop
+                         * which can overflow, and disable *ALL* app level tracing.
+                         *
+                         * For safety here, we only trace the macrobench package on newer platforms,
+                         * and use reflection in the macrobench test process to trace important
+                         * sections
+                         *
+                         * @see androidx.benchmark.macro.perfetto.ForceTracing
+                         */
+                        appTagPackages = if (Build.VERSION.SDK_INT >= 24) {
+                            listOf(packageName, macrobenchPackageName)
+                        } else {
+                            listOf(packageName)
+                        },
+                        useStackSamplingConfig = true
+                    ),
+                    userspaceTracingPackage = userspaceTracingPackage
+                ) {
+                    try {
+                        trace("start metrics") {
+                            if (Arguments.methodTracingOptions.isNotEmpty()) {
+                                // Once you turn on method tracing its okay to ignore
+                                // the costs of true CompilationMode.COLD as the numbers cannot
+                                // be used for anything reasonable.
+
+                                // It would be nice if our metrics infra supported this use case
+                                // better.
+                                MethodTracing.startTracing(
+                                    packageName = packageName,
+                                    options = Arguments.methodTracingOptions,
+                                    uniqueName = fileLabel
+                                )
+                            }
+                            metrics.forEach {
+                                it.start()
+                            }
+                        }
+                        trace("measureBlock") {
+                            measureBlock(scope)
+                        }
+                    } finally {
+                        trace("stop metrics") {
+                            metrics.forEach {
+                                it.stop()
+                            }
+                            if (Arguments.methodTracingOptions.isNotEmpty()) {
+                                MethodTracing.stopTracing(
+                                    packageName = packageName,
+                                    uniqueName = fileLabel
+                                )
+                            }
                         }
                     }
-                    trace("measureBlock") {
-                        measureBlock(scope)
-                    }
-                } finally {
-                    trace("stop metrics") {
-                        metrics.forEach {
-                            it.stop()
-                        }
+                }!!
+
+                tracePaths.add(tracePath)
+
+                val measurementList = loadTrace(PerfettoTrace(tracePath)) {
+                    // Extracts the metrics using the perfetto trace processor
+                    userspaceTrace("extract metrics") {
+                        metrics
+                            // capture list of Measurements
+                            .map {
+                                it.getResult(
+                                    Metric.CaptureInfo(
+                                        targetPackageName = packageName,
+                                        testPackageName = macrobenchPackageName,
+                                        startupMode = startupModeMetricHint,
+                                        apiLevel = Build.VERSION.SDK_INT
+                                    ),
+                                    this
+                                )
+                            }
+                            // merge together
+                            .reduce { sum, element -> sum.merge(element) }
                     }
                 }
-            }!!
 
-            tracePaths.add(tracePath)
+                // append UI state to trace, so tools opening trace will highlight relevant part in UI
+                val uiState = UiState(
+                    highlightPackage = packageName
+                )
+                File(tracePath).apply {
+                    // Disabled currently, see b/194424816 and b/174007010
+                    // appendBytes(UserspaceTracing.commitToTrace().encode())
+                    UserspaceTracing.commitToTrace() // clear buffer
 
-            val iterationResult = userspaceTrace("extract metrics") {
-                metrics
-                    // capture list of Map<String,Long> per metric
-                    .map { it.getMetrics(Metric.CaptureInfo(
-                        targetPackageName = packageName,
-                        testPackageName = macrobenchPackageName,
-                        startupMode = startupModeMetricHint,
-                        apiLevel = Build.VERSION.SDK_INT
-                    ), tracePath) }
-                    // merge into one map
-                    .reduce { sum, element -> sum + element }
-            }
-            // append UI state to trace, so tools opening trace will highlight relevant part in UI
-            val uiState = UiState(
-                timelineStart = iterationResult.timelineRangeNs?.first,
-                timelineEnd = iterationResult.timelineRangeNs?.last,
-                highlightPackage = packageName
-            )
-            File(tracePath).apply {
-                // Disabled currently, see b/194424816 and b/174007010
-                // appendBytes(UserspaceTracing.commitToTrace().encode())
-                UserspaceTracing.commitToTrace() // clear buffer
-
-                appendUiState(uiState)
-            }
-            Log.d(TAG, "Iteration $iteration captured $uiState")
-
-            // report just the metrics
-            iterationResult
-        }.mergeIterationMeasurements()
+                    appendUiState(uiState)
+                }
+                Log.d(TAG, "Iteration $iteration captured $uiState")
+                // report just the metrics
+                measurementList
+            }.mergeMultiIterResults()
+        }
 
         require(measurements.isNotEmpty()) {
             """
@@ -298,6 +378,13 @@ fun macrobenchmarkWithStartupMode(
     setupBlock: MacrobenchmarkScope.() -> Unit,
     measureBlock: MacrobenchmarkScope.() -> Unit
 ) {
+    val userspaceTracingPackage = if (Arguments.fullTracingEnable &&
+        startupMode != StartupMode.COLD // can't use with COLD, since the broadcast wakes up target
+    ) {
+        packageName
+    } else {
+        null
+    }
     macrobenchmark(
         uniqueName = uniqueName,
         className = className,
@@ -307,36 +394,56 @@ fun macrobenchmarkWithStartupMode(
         compilationMode = compilationMode,
         iterations = iterations,
         startupModeMetricHint = startupMode,
+        userspaceTracingPackage = userspaceTracingPackage,
         setupBlock = {
             if (startupMode == StartupMode.COLD) {
-                killProcess()
+                // Run setup before killing process
+                setupBlock(this)
+
                 // Shader caches are stored in the code cache directory. Make sure that
-                // they are cleared every iteration.
+                // they are cleared every iteration. Must be done before kill, since on user builds
+                // this broadcasts to the target app
                 dropShaderCache()
-                // drop app pages from page cache to ensure it is loaded from disk, from scratch
 
-                // resetAndCompile uses ProfileInstallReceiver to write a skip file.
-                // This is done to reduce the interference from ProfileInstaller,
-                // so long-running benchmarks don't get optimized due to a background dexopt.
+                // Kill - code below must not wake process!
+                killProcess()
 
-                // To restore the state of the process we need to drop app pages so its
-                // loaded from disk, from scratch.
+                // Ensure app's pages are not cached in memory for a true _cold_ start.
                 dropKernelPageCache()
-            } else if (iteration == 0 && startupMode != null) {
-                try {
-                    iteration = null // override to null for warmup, before starting measurements
 
-                    // warmup process by running the measure block once unmeasured
-                    setupBlock(this)
-                    measureBlock()
-                } finally {
-                    iteration = 0
+                // validate process is not running just before returning
+                check(!Shell.isPackageAlive(packageName)) {
+                    "Package $packageName must not be running prior to cold start!"
                 }
+            } else {
+                if (iteration == 0 && startupMode != null) {
+                    try {
+                        iteration = null // override to null for warmup
+
+                        // warmup process by running the measure block once unmeasured
+                        setupBlock(this)
+                        measureBlock()
+                    } finally {
+                        iteration = 0 // resume counting
+                    }
+                }
+                setupBlock(this)
             }
-            setupBlock(this)
         },
         // Don't reuse activities by default in COLD / WARM
         launchWithClearTask = startupMode == StartupMode.COLD || startupMode == StartupMode.WARM,
         measureBlock = measureBlock
     )
+}
+
+private fun buildWarningMessage(suppressionState: ConfigurationError.SuppressionState?): String {
+    val warnings = Errors.acquireWarningStringForLogging()
+    val builder = StringBuilder()
+    if (suppressionState != null) {
+        builder.append(suppressionState)
+    }
+    if (warnings != null) {
+        builder.append("\n").append(warnings)
+    }
+    return builder.toString()
 }

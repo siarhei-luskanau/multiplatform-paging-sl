@@ -31,6 +31,8 @@ import android.hardware.camera2.CameraDevice;
 import android.hardware.camera2.CameraManager;
 import android.hardware.camera2.CameraMetadata;
 import android.hardware.camera2.CaptureRequest;
+import android.hardware.camera2.params.OutputConfiguration;
+import android.hardware.camera2.params.StreamConfigurationMap;
 import android.media.CamcorderProfile;
 import android.media.MediaCodec;
 import android.media.MediaCodecInfo;
@@ -39,6 +41,7 @@ import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.util.Log;
+import android.util.Size;
 import android.view.Surface;
 
 import androidx.annotation.DoNotInline;
@@ -48,15 +51,18 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.annotation.RequiresPermission;
-import androidx.annotation.RestrictTo;
+import androidx.annotation.VisibleForTesting;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.CameraX;
 import androidx.camera.core.CameraXConfig;
 import androidx.camera.core.Logger;
 import androidx.camera.core.UseCase;
+import androidx.camera.core.concurrent.CameraCoordinator;
 import androidx.camera.core.impl.CameraInternal;
+import androidx.camera.core.impl.utils.CompareSizesByArea;
 import androidx.camera.core.impl.utils.futures.Futures;
 import androidx.camera.core.internal.CameraUseCaseAdapter;
+import androidx.camera.testing.fakes.FakeCameraCoordinator;
 import androidx.concurrent.futures.CallbackToFutureAdapter;
 import androidx.concurrent.futures.CallbackToFutureAdapter.Completer;
 import androidx.core.util.Preconditions;
@@ -358,7 +364,30 @@ public final class CameraUtil {
                 mCameraCaptureSessionHolder.close();
                 mCameraCaptureSessionHolder = null;
             }
-            mCameraCaptureSessionHolder = new CameraCaptureSessionHolder(this, surfaces, null);
+            mCameraCaptureSessionHolder = CameraCaptureSessionHolder.create(this, surfaces, null);
+            return mCameraCaptureSessionHolder;
+        }
+
+        /**
+         * Create a {@link CameraCaptureSession} by the hold CameraDevice
+         *
+         * @param outputConfigurations the outputConfigurations used to create CameraCaptureSession
+         * @return the CameraCaptureSession holder
+         */
+        @RequiresApi(24)
+        @NonNull
+        public CameraCaptureSessionHolder createCaptureSessionByOutputConfigurations(
+                @NonNull List<OutputConfiguration> outputConfigurations)
+                throws ExecutionException, InterruptedException, TimeoutException {
+            synchronized (mLock) {
+                Preconditions.checkState(mCameraDevice != null, "Camera is closed.");
+            }
+            if (mCameraCaptureSessionHolder != null) {
+                mCameraCaptureSessionHolder.close();
+                mCameraCaptureSessionHolder = null;
+            }
+            mCameraCaptureSessionHolder = CameraCaptureSessionHolder.createByOutputConfigurations(
+                    this, outputConfigurations, null);
             return mCameraCaptureSessionHolder;
         }
     }
@@ -381,37 +410,75 @@ public final class CameraUtil {
         private CameraCaptureSession mCameraCaptureSession;
         private ListenableFuture<Void> mCloseFuture;
 
-        CameraCaptureSessionHolder(@NonNull CameraDeviceHolder cameraDeviceHolder,
+        @NonNull
+        static CameraCaptureSessionHolder create(@NonNull CameraDeviceHolder cameraDeviceHolder,
                 @NonNull List<Surface> surfaces,
+                @Nullable CameraCaptureSession.StateCallback stateCallback
+        ) throws ExecutionException, InterruptedException, TimeoutException {
+            return new CameraCaptureSessionHolder(cameraDeviceHolder, surfaces, stateCallback);
+        }
+
+        @RequiresApi(24)
+        @NonNull
+        static CameraCaptureSessionHolder createByOutputConfigurations(
+                @NonNull CameraDeviceHolder cameraDeviceHolder,
+                @NonNull List<OutputConfiguration> outputConfigurations,
+                @Nullable CameraCaptureSession.StateCallback stateCallback
+        ) throws ExecutionException, InterruptedException, TimeoutException {
+            return new CameraCaptureSessionHolder(cameraDeviceHolder, outputConfigurations,
+                    stateCallback);
+        }
+
+        private CameraCaptureSessionHolder(@NonNull CameraDeviceHolder cameraDeviceHolder,
+                @NonNull Object paramToCreateSession,
                 @Nullable CameraCaptureSession.StateCallback stateCallback
         ) throws ExecutionException, InterruptedException, TimeoutException {
             mCameraDeviceHolder = cameraDeviceHolder;
             CameraDevice cameraDevice = Preconditions.checkNotNull(cameraDeviceHolder.get());
             ListenableFuture<CameraCaptureSession> openFuture = openCaptureSession(cameraDevice,
-                    surfaces, stateCallback, cameraDeviceHolder.mHandler);
+                    paramToCreateSession, stateCallback, cameraDeviceHolder.mHandler);
 
             mCameraCaptureSession = openFuture.get(5, TimeUnit.SECONDS);
         }
 
-        @SuppressWarnings("deprecation")
+        @SuppressLint("ClassVerificationFailure")
+        @SuppressWarnings({"deprecation", "newApi", "unchecked"})
         @NonNull
         private ListenableFuture<CameraCaptureSession> openCaptureSession(
                 @NonNull CameraDevice cameraDevice,
-                @NonNull List<Surface> surfaces,
+                @NonNull Object paramToCreateSession,
                 @Nullable CameraCaptureSession.StateCallback stateCallback,
                 @NonNull Handler handler) {
             return CallbackToFutureAdapter.getFuture(
                     openCompleter -> {
                         mCloseFuture = CallbackToFutureAdapter.getFuture(
                                 closeCompleter -> {
-                                    cameraDevice.createCaptureSession(surfaces,
-                                            new SessionStateCallbackImpl(
-                                                    openCompleter, closeCompleter, stateCallback),
-                                            handler);
+                                    if (isOutputConfigurationList(paramToCreateSession)) {
+                                        cameraDevice.createCaptureSessionByOutputConfigurations(
+                                                (List<OutputConfiguration>) paramToCreateSession,
+                                                new SessionStateCallbackImpl(
+                                                        openCompleter, closeCompleter,
+                                                        stateCallback),
+                                                handler);
+                                    } else {
+                                        cameraDevice.createCaptureSession(
+                                                (List<Surface>) paramToCreateSession,
+                                                new SessionStateCallbackImpl(
+                                                        openCompleter, closeCompleter,
+                                                        stateCallback),
+                                                handler);
+                                    }
                                     return "Close CameraCaptureSession";
                                 });
                         return "Open CameraCaptureSession";
                     });
+        }
+
+        private static boolean isOutputConfigurationList(@NonNull Object param) {
+            List<?> list;
+            return Build.VERSION.SDK_INT >= 24 && param instanceof List
+                    && !(list = (List<?>) param).isEmpty()
+                    && OutputConfiguration.class.isInstance(list.get(0));
         }
 
         void close() throws ExecutionException, InterruptedException, TimeoutException {
@@ -544,16 +611,18 @@ public final class CameraUtil {
      *
      * <p>A new CameraUseCaseAdapter instance will be created every time this method is called.
      * UseCases previously attached to CameraUseCasesAdapters returned by this method or
-     * {@link #createCameraAndAttachUseCase(Context, CameraSelector, UseCase...)} will not be
-     * attached to the new CameraUseCaseAdapter returned by this method.
+     * {@link #createCameraAndAttachUseCase(Context, CameraSelector, UseCase...)}
+     * will not be attached to the new CameraUseCaseAdapter returned by this method.
      *
      * @param context        The context used to initialize CameraX
+     * @param cameraCoordinator The camera coordinator for concurrent cameras.
      * @param cameraSelector The selector to select cameras with.
-     * @hide
      */
-    @RestrictTo(RestrictTo.Scope.TESTS)
+    @VisibleForTesting
     @NonNull
-    public static CameraUseCaseAdapter createCameraUseCaseAdapter(@NonNull Context context,
+    public static CameraUseCaseAdapter createCameraUseCaseAdapter(
+            @NonNull Context context,
+            @NonNull CameraCoordinator cameraCoordinator,
             @NonNull CameraSelector cameraSelector) {
         try {
             CameraX cameraX = CameraXUtil.getOrCreateInstance(context, null).get(5000,
@@ -561,10 +630,35 @@ public final class CameraUtil {
             LinkedHashSet<CameraInternal> cameras =
                     cameraSelector.filter(cameraX.getCameraRepository().getCameras());
             return new CameraUseCaseAdapter(cameras,
-                    cameraX.getCameraDeviceSurfaceManager(), cameraX.getDefaultConfigFactory());
+                    cameraCoordinator,
+                    cameraX.getCameraDeviceSurfaceManager(),
+                    cameraX.getDefaultConfigFactory());
         } catch (ExecutionException | InterruptedException | TimeoutException e) {
             throw new RuntimeException("Unable to retrieve CameraX instance");
         }
+    }
+
+    /**
+     * Creates the CameraUseCaseAdapter that would be created with the given CameraSelector.
+     *
+     * <p>This requires that {@link CameraXUtil#initialize(Context, CameraXConfig)} has been called
+     * to properly initialize the cameras. {@link CameraXUtil#shutdown()} also needs to be
+     * properly called by the caller class to release the created {@link CameraX} instance.
+     *
+     * <p>A new CameraUseCaseAdapter instance will be created every time this method is called.
+     * UseCases previously attached to CameraUseCasesAdapters returned by this method or
+     * {@link #createCameraAndAttachUseCase(Context, CameraSelector, UseCase...)}
+     * will not be attached to the new CameraUseCaseAdapter returned by this method.
+     *
+     * @param context        The context used to initialize CameraX
+     * @param cameraSelector The selector to select cameras with.
+     */
+    @VisibleForTesting
+    @NonNull
+    public static CameraUseCaseAdapter createCameraUseCaseAdapter(
+            @NonNull Context context,
+            @NonNull CameraSelector cameraSelector) {
+        return createCameraUseCaseAdapter(context, new FakeCameraCoordinator(), cameraSelector);
     }
 
     /**
@@ -583,12 +677,13 @@ public final class CameraUtil {
      * @param context        The context used to initialize CameraX
      * @param cameraSelector The selector to select cameras with.
      * @param useCases       The UseCases to attach to the CameraUseCaseAdapter.
-     * @hide
      */
-    @RestrictTo(RestrictTo.Scope.TESTS)
+    @VisibleForTesting
     @NonNull
-    public static CameraUseCaseAdapter createCameraAndAttachUseCase(@NonNull Context context,
-            @NonNull CameraSelector cameraSelector, @NonNull UseCase... useCases) {
+    public static CameraUseCaseAdapter createCameraAndAttachUseCase(
+            @NonNull Context context,
+            @NonNull CameraSelector cameraSelector,
+            @NonNull UseCase... useCases) {
         CameraUseCaseAdapter cameraUseCaseAdapter = createCameraUseCaseAdapter(context,
                 cameraSelector);
 
@@ -924,6 +1019,46 @@ public final class CameraUtil {
     }
 
     /**
+     * Retrieves the max high resolution output size if the camera has high resolution output sizes
+     * with the specified lensFacing.
+     *
+     * @param lensFacing The desired camera lensFacing.
+     * @return the max high resolution output size if the camera has high resolution output sizes
+     * with the specified LensFacing. Returns null otherwise.
+     * @throws IllegalStateException if the CAMERA permission is not currently granted.
+     */
+    @Nullable
+    public static Size getMaxHighResolutionOutputSizeWithLensFacing(
+            @CameraSelector.LensFacing int lensFacing, int imageFormat) {
+        @SupportedLensFacingInt
+        int lensFacingInteger = getLensFacingIntFromEnum(lensFacing);
+        for (String cameraId : getBackwardCompatibleCameraIdListOrThrow()) {
+            CameraCharacteristics characteristics = getCameraCharacteristicsOrThrow(cameraId);
+            Integer cameraLensFacing = characteristics.get(CameraCharacteristics.LENS_FACING);
+            if (cameraLensFacing == null || cameraLensFacing != lensFacingInteger) {
+                continue;
+            }
+
+            StreamConfigurationMap map = characteristics.get(
+                    CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                @SuppressLint("ClassVerificationFailure")
+                Size[] highResolutionOutputSizes = map.getHighResolutionOutputSizes(imageFormat);
+
+                if (highResolutionOutputSizes == null || Arrays.asList(
+                        highResolutionOutputSizes).isEmpty()) {
+                    return null;
+                }
+
+                Arrays.sort(highResolutionOutputSizes, new CompareSizesByArea(true));
+                return highResolutionOutputSizes[0];
+            }
+        }
+        return null;
+    }
+
+    /**
      * Grant the camera permission and test the camera.
      *
      * <p>It will
@@ -967,6 +1102,7 @@ public final class CameraUtil {
     public static TestRule grantCameraPermissionAndPreTest(@Nullable PreTestCamera cameraTestRule,
             @Nullable PreTestCameraIdList cameraIdListTestRule) {
         RuleChain rule = RuleChain.outerRule(GrantPermissionRule.grant(Manifest.permission.CAMERA));
+        rule = rule.around(new IgnoreProblematicDeviceRule());
         if (cameraIdListTestRule != null) {
             rule = rule.around(cameraIdListTestRule);
         }

@@ -25,8 +25,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.Measured
 import androidx.compose.ui.layout.VerticalAlignmentLine
-import androidx.compose.ui.platform.debugInspectorInfo
-import androidx.compose.foundation.layout.internal.JvmDefaultWithCompatibility
 
 /**
  * A layout composable that places its children in a vertical sequence. For a layout composable
@@ -99,21 +97,21 @@ internal val DefaultColumnMeasurePolicy = rowColumnMeasurePolicy(
 internal fun columnMeasurePolicy(
     verticalArrangement: Arrangement.Vertical,
     horizontalAlignment: Alignment.Horizontal
-) = remember(verticalArrangement, horizontalAlignment) {
-    if (verticalArrangement == Arrangement.Top && horizontalAlignment == Alignment.Start) {
+) = if (verticalArrangement == Arrangement.Top && horizontalAlignment == Alignment.Start) {
         DefaultColumnMeasurePolicy
     } else {
-        rowColumnMeasurePolicy(
-            orientation = LayoutOrientation.Vertical,
-            arrangement = { totalSize, size, _, density, outPosition ->
-                with(verticalArrangement) { density.arrange(totalSize, size, outPosition) }
-            },
-            arrangementSpacing = verticalArrangement.spacing,
-            crossAxisAlignment = CrossAxisAlignment.horizontal(horizontalAlignment),
-            crossAxisSize = SizeMode.Wrap
-        )
+        remember(verticalArrangement, horizontalAlignment) {
+            rowColumnMeasurePolicy(
+                orientation = LayoutOrientation.Vertical,
+                arrangement = { totalSize, size, _, density, outPosition ->
+                    with(verticalArrangement) { density.arrange(totalSize, size, outPosition) }
+                },
+                arrangementSpacing = verticalArrangement.spacing,
+                crossAxisAlignment = CrossAxisAlignment.horizontal(horizontalAlignment),
+                crossAxisSize = SizeMode.Wrap
+            )
+        }
     }
-}
 
 /**
  * Scope for the children of [Column].
@@ -129,6 +127,9 @@ interface ColumnScope {
      * When [fill] is true, the element will be forced to occupy the whole height allocated to it.
      * Otherwise, the element is allowed to be smaller - this will result in [Column] being smaller,
      * as the unused allocated height will not be redistributed to other siblings.
+     *
+     * In a [FlowColumn], when a weight is applied to an item, the item is scaled based on
+     * the number of weighted items that fall on the column it was placed in.
      *
      * @param weight The proportional height to give to this element, as related to the total of
      * all weighted siblings. Must be positive.
@@ -190,7 +191,10 @@ interface ColumnScope {
      * @sample androidx.compose.foundation.layout.samples.SimpleRelativeToSiblings
      */
     @Stable
-    fun Modifier.alignBy(alignmentLineBlock: (Measured) -> Int): Modifier
+    fun Modifier.alignBy(
+        @Suppress("PrimitiveInLambda")
+        alignmentLineBlock: (Measured) -> Int
+    ): Modifier
 }
 
 internal object ColumnScopeInstance : ColumnScope {
@@ -198,49 +202,35 @@ internal object ColumnScopeInstance : ColumnScope {
     override fun Modifier.weight(weight: Float, fill: Boolean): Modifier {
         require(weight > 0.0) { "invalid weight $weight; must be greater than zero" }
         return this.then(
-            LayoutWeightImpl(
-                weight = weight,
-                fill = fill,
-                inspectorInfo = debugInspectorInfo {
-                    name = "weight"
-                    value = weight
-                    properties["weight"] = weight
-                    properties["fill"] = fill
-                }
+            LayoutWeightElement(
+                // Coerce Float.POSITIVE_INFINITY to Float.MAX_VALUE to avoid errors
+                weight = weight.coerceAtMost(Float.MAX_VALUE),
+                fill = fill
             )
         )
     }
 
     @Stable
     override fun Modifier.align(alignment: Alignment.Horizontal) = this.then(
-        HorizontalAlignModifier(
-            horizontal = alignment,
-            inspectorInfo = debugInspectorInfo {
-                name = "align"
-                value = alignment
-            }
+        HorizontalAlignElement(
+            horizontal = alignment
         )
     )
 
     @Stable
     override fun Modifier.alignBy(alignmentLine: VerticalAlignmentLine) = this.then(
-        SiblingsAlignedModifier.WithAlignmentLine(
-            alignmentLine = alignmentLine,
-            inspectorInfo = debugInspectorInfo {
-                name = "alignBy"
-                value = alignmentLine
-            }
+        WithAlignmentLineElement(
+            alignmentLine = alignmentLine
         )
     )
 
     @Stable
-    override fun Modifier.alignBy(alignmentLineBlock: (Measured) -> Int) = this.then(
-        SiblingsAlignedModifier.WithAlignmentLineBlock(
-            block = alignmentLineBlock,
-            inspectorInfo = debugInspectorInfo {
-                name = "alignBy"
-                value = alignmentLineBlock
-            }
+    override fun Modifier.alignBy(
+        @Suppress("PrimitiveInLambda")
+        alignmentLineBlock: (Measured) -> Int
+    ) = this.then(
+        WithAlignmentLineBlockElement(
+            block = alignmentLineBlock
         )
     )
 }

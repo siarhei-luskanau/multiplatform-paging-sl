@@ -27,9 +27,7 @@ plugins {
 def enableNative = KmpPlatformsKt.enableNative(project)
 
 androidXMultiplatform {
-    jvm {
-        withJava()
-    }
+    jvm()
     mac()
     linux()
     ios()
@@ -99,9 +97,8 @@ androidXMultiplatform {
 }
 
 androidx {
-    name = "Android DataStore Core Okio"
-    type = LibraryType.KMP_LIBRARY
-    mavenGroup = LibraryGroups.DATASTORE
+    name = "DataStore Core Okio"
+    type = LibraryType.PUBLISHED_LIBRARY
     inceptionYear = "2020"
     description = "Android DataStore Core Okio- contains APIs to use datastore-core in multiplatform via okio"
 }

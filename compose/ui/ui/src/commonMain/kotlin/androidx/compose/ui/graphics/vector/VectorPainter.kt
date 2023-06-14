@@ -34,10 +34,10 @@ import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.internal.JvmDefaultWithCompatibility
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
-import androidx.compose.ui.internal.JvmDefaultWithCompatibility
 
 /**
  * Default identifier for the root group if a Vector graphic
@@ -79,6 +79,7 @@ fun rememberVectorPainter(
     name: String = RootGroupName,
     tintColor: Color = Color.Unspecified,
     tintBlendMode: BlendMode = BlendMode.SrcIn,
+    @Suppress("PrimitiveInLambda")
     content: @Composable @VectorComposable (viewportWidth: Float, viewportHeight: Float) -> Unit
 ): VectorPainter =
     rememberVectorPainter(
@@ -94,8 +95,9 @@ fun rememberVectorPainter(
     )
 
 /**
- * Create a [VectorPainter] with the Vector defined by the provided
- * sub-composition
+ * Create a [VectorPainter] with the Vector defined by the provided sub-composition.
+ *
+ * Inside [content] use the [Group] and [Path] composables to define the vector.
  *
  * @param [defaultWidth] Intrinsic width of the Vector in [Dp]
  * @param [defaultHeight] Intrinsic height of the Vector in [Dp]
@@ -121,6 +123,7 @@ fun rememberVectorPainter(
     tintColor: Color = Color.Unspecified,
     tintBlendMode: BlendMode = BlendMode.SrcIn,
     autoMirror: Boolean = false,
+    @Suppress("PrimitiveInLambda")
     content: @Composable @VectorComposable (viewportWidth: Float, viewportHeight: Float) -> Unit
 ): VectorPainter {
     val density = LocalDensity.current
@@ -197,6 +200,7 @@ class VectorPainter internal constructor() : Painter() {
 
     private fun composeVector(
         parent: CompositionContext,
+        @Suppress("PrimitiveInLambda")
         composable: @Composable (viewportWidth: Float, viewportHeight: Float) -> Unit
     ): Composition {
         val existing = composition
@@ -222,6 +226,7 @@ class VectorPainter internal constructor() : Painter() {
         name: String,
         viewportWidth: Float,
         viewportHeight: Float,
+        @Suppress("PrimitiveInLambda")
         content: @Composable (viewportWidth: Float, viewportHeight: Float) -> Unit
     ) {
         vector.apply {

@@ -21,6 +21,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Offset
@@ -64,6 +65,7 @@ fun animateFloatAsState(
     animationSpec: AnimationSpec<Float> = defaultAnimation,
     visibilityThreshold: Float = 0.01f,
     label: String = "FloatAnimation",
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Float) -> Unit)? = null
 ): State<Float> {
     val resolvedAnimSpec =
@@ -109,6 +111,7 @@ fun animateDpAsState(
     targetValue: Dp,
     animationSpec: AnimationSpec<Dp> = dpDefaultSpring,
     label: String = "DpAnimation",
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Dp) -> Unit)? = null
 ): State<Dp> {
     return animateValueAsState(
@@ -150,6 +153,7 @@ fun animateSizeAsState(
     targetValue: Size,
     animationSpec: AnimationSpec<Size> = sizeDefaultSpring,
     label: String = "SizeAnimation",
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Size) -> Unit)? = null
 ): State<Size> {
     return animateValueAsState(
@@ -190,6 +194,7 @@ fun animateOffsetAsState(
     targetValue: Offset,
     animationSpec: AnimationSpec<Offset> = offsetDefaultSpring,
     label: String = "OffsetAnimation",
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Offset) -> Unit)? = null
 ): State<Offset> {
     return animateValueAsState(
@@ -269,6 +274,7 @@ fun animateIntAsState(
     targetValue: Int,
     animationSpec: AnimationSpec<Int> = intDefaultSpring,
     label: String = "IntAnimation",
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Int) -> Unit)? = null
 ): State<Int> {
     return animateValueAsState(
@@ -309,6 +315,7 @@ fun animateIntOffsetAsState(
     targetValue: IntOffset,
     animationSpec: AnimationSpec<IntOffset> = intOffsetDefaultSpring,
     label: String = "IntOffsetAnimation",
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((IntOffset) -> Unit)? = null
 ): State<IntOffset> {
     return animateValueAsState(
@@ -347,6 +354,7 @@ fun animateIntSizeAsState(
     targetValue: IntSize,
     animationSpec: AnimationSpec<IntSize> = intSizeDefaultSpring,
     label: String = "IntSizeAnimation",
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((IntSize) -> Unit)? = null
 ): State<IntSize> {
     return animateValueAsState(
@@ -396,6 +404,7 @@ fun <T, V : AnimationVector> animateValueAsState(
     finishedListener: ((T) -> Unit)? = null
 ): State<T> {
 
+    val toolingOverride = remember { mutableStateOf<State<T>?>(null) }
     val animatable = remember { Animatable(targetValue, typeConverter, visibilityThreshold, label) }
     val listener by rememberUpdatedState(finishedListener)
     val animSpec: AnimationSpec<T> by rememberUpdatedState(
@@ -429,7 +438,7 @@ fun <T, V : AnimationVector> animateValueAsState(
             }
         }
     }
-    return animatable.asState()
+    return toolingOverride.value ?: animatable.asState()
 }
 
 @Deprecated(
@@ -441,6 +450,7 @@ fun animateFloatAsState(
     targetValue: Float,
     animationSpec: AnimationSpec<Float> = defaultAnimation,
     visibilityThreshold: Float = 0.01f,
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Float) -> Unit)? = null
 ): State<Float> = animateFloatAsState(
         targetValue,
@@ -457,6 +467,7 @@ fun animateFloatAsState(
 fun animateDpAsState(
     targetValue: Dp,
     animationSpec: AnimationSpec<Dp> = dpDefaultSpring,
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Dp) -> Unit)? = null
 ): State<Dp> {
     return animateValueAsState(
@@ -475,6 +486,7 @@ fun animateDpAsState(
 fun animateSizeAsState(
     targetValue: Size,
     animationSpec: AnimationSpec<Size> = sizeDefaultSpring,
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Size) -> Unit)? = null
 ): State<Size> {
     return animateValueAsState(
@@ -493,6 +505,7 @@ fun animateSizeAsState(
 fun animateOffsetAsState(
     targetValue: Offset,
     animationSpec: AnimationSpec<Offset> = offsetDefaultSpring,
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Offset) -> Unit)? = null
 ): State<Offset> {
     return animateValueAsState(
@@ -523,6 +536,7 @@ fun animateRectAsState(
 fun animateIntAsState(
     targetValue: Int,
     animationSpec: AnimationSpec<Int> = intDefaultSpring,
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((Int) -> Unit)? = null
 ): State<Int> {
     return animateValueAsState(
@@ -538,6 +552,7 @@ fun animateIntAsState(
 fun animateIntOffsetAsState(
     targetValue: IntOffset,
     animationSpec: AnimationSpec<IntOffset> = intOffsetDefaultSpring,
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((IntOffset) -> Unit)? = null
 ): State<IntOffset> {
     return animateValueAsState(
@@ -553,6 +568,7 @@ fun animateIntOffsetAsState(
 fun animateIntSizeAsState(
     targetValue: IntSize,
     animationSpec: AnimationSpec<IntSize> = intSizeDefaultSpring,
+    @Suppress("PrimitiveInLambda")
     finishedListener: ((IntSize) -> Unit)? = null
 ): State<IntSize> {
     return animateValueAsState(

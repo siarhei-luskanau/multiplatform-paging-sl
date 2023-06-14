@@ -106,7 +106,6 @@ class MLKitBarcodeTest(
     fun tearDown(): Unit = runBlocking {
         if (::cameraProvider.isInitialized) {
             withContext(Dispatchers.Main) {
-                cameraProvider.unbindAll()
                 cameraProvider.shutdown()[10, TimeUnit.SECONDS]
             }
         }
@@ -171,6 +170,7 @@ class MLKitBarcodeTest(
         ).that(latchForBarcodeDetect.await(DETECT_TIMEOUT, TimeUnit.MILLISECONDS)).isTrue()
     }
 
+    @Suppress("DEPRECATION") // legacy resolution API
     private fun initImageAnalysis(lensFacing: Int): ImageAnalysis {
         val sensorOrientation = CameraUtil.getSensorOrientation(lensFacing)
         val isRotateNeeded = sensorOrientation!! % 180 != 0

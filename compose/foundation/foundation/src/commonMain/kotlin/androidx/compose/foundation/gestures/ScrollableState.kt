@@ -18,12 +18,12 @@ package androidx.compose.foundation.gestures
 
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.MutatorMutex
+import androidx.compose.foundation.internal.JvmDefaultWithCompatibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import kotlinx.coroutines.coroutineScope
-import androidx.compose.foundation.internal.JvmDefaultWithCompatibility
 
 /**
  * An object representing something that can be scrolled. This interface is implemented by states
@@ -78,6 +78,34 @@ interface ScrollableState {
      * not.
      */
     val isScrollInProgress: Boolean
+
+    /**
+     * Whether this [ScrollableState] can scroll forward (consume a positive delta). This is
+     * typically false if the scroll position is equal to its maximum value, and true otherwise.
+     *
+     * Note that `true` here does not imply that delta *will* be consumed - the ScrollableState may
+     * decide not to handle the incoming delta (such as if it is already being scrolled separately).
+     * Additionally, for backwards compatibility with previous versions of ScrollableState this
+     * value defaults to `true`.
+     *
+     * @sample androidx.compose.foundation.samples.CanScrollSample
+     */
+    val canScrollForward: Boolean
+        get() = true
+
+    /**
+     * Whether this [ScrollableState] can scroll backward (consume a negative delta). This is
+     * typically false if the scroll position is equal to its minimum value, and true otherwise.
+     *
+     * Note that `true` here does not imply that delta *will* be consumed - the ScrollableState may
+     * decide not to handle the incoming delta (such as if it is already being scrolled separately).
+     * Additionally, for backwards compatibility with previous versions of ScrollableState this
+     * value defaults to `true`.
+     *
+     * @sample androidx.compose.foundation.samples.CanScrollSample
+     */
+    val canScrollBackward: Boolean
+        get() = true
 }
 
 /**
@@ -94,7 +122,10 @@ interface ScrollableState {
  * callback receives the delta in pixels. Callers should update their state in this lambda and
  * return the amount of delta consumed
  */
-fun ScrollableState(consumeScrollDelta: (Float) -> Float): ScrollableState {
+fun ScrollableState(
+    @Suppress("PrimitiveInLambda")
+    consumeScrollDelta: (Float) -> Float
+): ScrollableState {
     return DefaultScrollableState(consumeScrollDelta)
 }
 
@@ -113,7 +144,10 @@ fun ScrollableState(consumeScrollDelta: (Float) -> Float): ScrollableState {
  * return the amount of delta consumed
  */
 @Composable
-fun rememberScrollableState(consumeScrollDelta: (Float) -> Float): ScrollableState {
+fun rememberScrollableState(
+    @Suppress("PrimitiveInLambda")
+    consumeScrollDelta: (Float) -> Float
+): ScrollableState {
     val lambdaState = rememberUpdatedState(consumeScrollDelta)
     return remember { ScrollableState { lambdaState.value.invoke(it) } }
 }
@@ -130,10 +164,16 @@ interface ScrollScope {
     fun scrollBy(pixels: Float): Float
 }
 
-private class DefaultScrollableState(val onDelta: (Float) -> Float) : ScrollableState {
+private class DefaultScrollableState(
+    @Suppress("PrimitiveInLambda")
+    val onDelta: (Float) -> Float
+) : ScrollableState {
 
     private val scrollScope: ScrollScope = object : ScrollScope {
-        override fun scrollBy(pixels: Float): Float = onDelta(pixels)
+        override fun scrollBy(pixels: Float): Float {
+            if (pixels.isNaN()) return 0f
+            return onDelta(pixels)
+        }
     }
 
     private val scrollMutex = MutatorMutex()

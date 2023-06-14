@@ -24,13 +24,13 @@ import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateTo
 import androidx.compose.foundation.MutatePriority
 import androidx.compose.foundation.MutatorMutex
+import androidx.compose.foundation.internal.JvmDefaultWithCompatibility
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.geometry.Offset
 import kotlinx.coroutines.coroutineScope
-import androidx.compose.foundation.internal.JvmDefaultWithCompatibility
 
 /**
  * State of [transformable]. Allows for a granular control of how different gesture
@@ -94,6 +94,7 @@ interface TransformScope {
  * for pan and degrees for rotation. Callers should update their state in this lambda.
  */
 fun TransformableState(
+    @Suppress("PrimitiveInLambda")
     onTransformation: (zoomChange: Float, panChange: Offset, rotationChange: Float) -> Unit
 ): TransformableState = DefaultTransformableState(onTransformation)
 
@@ -113,6 +114,7 @@ fun TransformableState(
  */
 @Composable
 fun rememberTransformableState(
+    @Suppress("PrimitiveInLambda")
     onTransformation: (zoomChange: Float, panChange: Offset, rotationChange: Float) -> Unit
 ): TransformableState {
     val lambdaState = rememberUpdatedState(onTransformation)
@@ -230,6 +232,7 @@ suspend fun TransformableState.stopTransformation(
 }
 
 private class DefaultTransformableState(
+    @Suppress("PrimitiveInLambda")
     val onTransformation: (zoomChange: Float, panChange: Offset, rotationChange: Float) -> Unit
 ) : TransformableState {
 

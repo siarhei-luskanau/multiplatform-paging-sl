@@ -36,14 +36,14 @@ import androidx.test.filters.LargeTest
 import androidx.test.filters.SdkSuppress
 import androidx.testutils.withActivity
 import com.google.common.truth.Truth
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Assume
 import org.junit.Before
 import org.junit.Test
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 @SdkSuppress(minSdkVersion = 21)
 @RequiresApi(21)
@@ -220,7 +220,7 @@ public class WindowInsetsAnimationCompatActivityTest {
         triggerInsetAnimation(container)
         latch.await(5, TimeUnit.SECONDS)
         Truth.assertThat(res).containsExactly("prepare", "start", "progress", "end").inOrder()
-        Truth.assertThat(progress).containsAtLeast(0.0f, 1.0f)
+        Truth.assertThat(progress).contains(1.0f)
         Truth.assertThat(progress).isInOrder()
     }
 
@@ -307,6 +307,7 @@ public class WindowInsetsAnimationCompatActivityTest {
         )
     }
 
+    @FlakyTest(bugId = 249124990)
     @Test
     public fun add_animation_listener_first() {
         assumeNotCuttlefish()

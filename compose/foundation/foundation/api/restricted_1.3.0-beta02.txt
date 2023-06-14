@@ -694,7 +694,13 @@ package androidx.compose.foundation.lazy.layout {
   public final class LazyLayoutPrefetcher_androidKt {
   }
 
+  public final class LazyLayoutSemanticsKt {
+  }
+
   public final class LazyNearestItemsRangeKt {
+  }
+
+  public final class LazySaveableStateHolderKt {
   }
 
   public final class Lazy_androidKt {
@@ -706,6 +712,9 @@ package androidx.compose.foundation.lazy.layout {
 }
 
 package androidx.compose.foundation.lazy.staggeredgrid {
+
+  public final class LazyStaggeredGridCellsKt {
+  }
 
   public final class LazyStaggeredGridDslKt {
   }
@@ -723,6 +732,9 @@ package androidx.compose.foundation.lazy.staggeredgrid {
   }
 
   public final class LazyStaggeredGridMeasureResultKt {
+  }
+
+  public final class LazyStaggeredGridSemanticsKt {
   }
 
   public final class LazyStaggeredGridStateKt {

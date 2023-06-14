@@ -40,6 +40,8 @@ import androidx.compose.material.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -88,6 +90,7 @@ fun LazyColumnDragAndDropDemo() {
 @Composable
 fun rememberDragDropState(
     lazyListState: LazyListState,
+    @Suppress("PrimitiveInLambda")
     onMove: (Int, Int) -> Unit
 ): DragDropState {
     val scope = rememberCoroutineScope()
@@ -110,6 +113,7 @@ fun rememberDragDropState(
 class DragDropState internal constructor(
     private val state: LazyListState,
     private val scope: CoroutineScope,
+    @Suppress("PrimitiveInLambda")
     private val onMove: (Int, Int) -> Unit
 ) {
     var draggingItemIndex by mutableStateOf<Int?>(null)
@@ -117,8 +121,8 @@ class DragDropState internal constructor(
 
     internal val scrollChannel = Channel<Float>()
 
-    private var draggingItemDraggedDelta by mutableStateOf(0f)
-    private var draggingItemInitialOffset by mutableStateOf(0)
+    private var draggingItemDraggedDelta by mutableFloatStateOf(0f)
+    private var draggingItemInitialOffset by mutableIntStateOf(0)
     internal val draggingItemOffset: Float
         get() = draggingItemLayoutInfo?.let { item ->
             draggingItemInitialOffset + draggingItemDraggedDelta - item.offset

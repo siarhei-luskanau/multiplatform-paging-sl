@@ -19,13 +19,10 @@ package androidx.compose.foundation.lazy
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.FlingBehavior
 import androidx.compose.foundation.gestures.ScrollableDefaults
-import androidx.compose.foundation.gestures.snapping.SnapLayoutInfoProvider
-import androidx.compose.foundation.gestures.snapping.rememberSnapFlingBehavior
 import androidx.compose.foundation.internal.JvmDefaultWithCompatibility
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -80,8 +77,11 @@ interface LazyListScope {
      */
     fun items(
         count: Int,
+        @Suppress("PrimitiveInLambda")
         key: ((index: Int) -> Any)? = null,
+        @Suppress("PrimitiveInLambda")
         contentType: (index: Int) -> Any? = { null },
+        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyItemScope.(index: Int) -> Unit
     ) {
         error("The method is not implemented")
@@ -90,7 +90,9 @@ interface LazyListScope {
     @Deprecated("Use the non deprecated overload", level = DeprecationLevel.HIDDEN)
     fun items(
         count: Int,
+        @Suppress("PrimitiveInLambda")
         key: ((index: Int) -> Any)? = null,
+        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyItemScope.(index: Int) -> Unit
     ) {
         items(count, key, { null }, itemContent)
@@ -173,6 +175,7 @@ inline fun <T> LazyListScope.items(
  */
 inline fun <T> LazyListScope.itemsIndexed(
     items: List<T>,
+    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
@@ -187,6 +190,7 @@ inline fun <T> LazyListScope.itemsIndexed(
 @Deprecated("Use the non deprecated overload", level = DeprecationLevel.HIDDEN)
 inline fun <T> LazyListScope.itemsIndexed(
     items: List<T>,
+    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
 ) = itemsIndexed(items, key, itemContent = itemContent)
@@ -243,6 +247,7 @@ inline fun <T> LazyListScope.items(
  */
 inline fun <T> LazyListScope.itemsIndexed(
     items: Array<T>,
+    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
@@ -257,6 +262,7 @@ inline fun <T> LazyListScope.itemsIndexed(
 @Deprecated("Use the non deprecated overload", level = DeprecationLevel.HIDDEN)
 inline fun <T> LazyListScope.itemsIndexed(
     items: Array<T>,
+    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
 ) = itemsIndexed(items, key, itemContent = itemContent)
@@ -341,7 +347,7 @@ fun LazyRow(
  * @param horizontalAlignment the horizontal alignment applied to the items.
  * @param flingBehavior logic describing fling behavior.
  * @param userScrollEnabled whether the scrolling via the user gestures or accessibility actions
- * is allowed. You can still scroll programmatically using the state even when it is disabled.
+ * is allowed. You can still scroll programmatically using the state even when it is disabled
  * @param content a block which describes the content. Inside this block you can use methods like
  * [LazyListScope.item] to add a single item or [LazyListScope.items] to add a list of items.
  */
@@ -422,25 +428,4 @@ fun LazyRow(
         userScrollEnabled = true,
         content = content
     )
-}
-
-/**
- * Important default implementations to be used with LazyLists
- */
-@ExperimentalFoundationApi
-object LazyListDefaults {
-
-    /**
-     * Creates and remembers a FlingBehavior for 1 page snapping in Lazy Lists. This will snap
-     * the item's center to the center of the viewport.
-     *
-     * @param lazyListState The [LazyListState] from the LazyList where this [FlingBehavior] will
-     * be used.
-     */
-    @ExperimentalFoundationApi
-    @Composable
-    fun snapFlingBehavior(lazyListState: LazyListState): FlingBehavior {
-        val snappingLayout = remember(lazyListState) { SnapLayoutInfoProvider(lazyListState) }
-        return rememberSnapFlingBehavior(snappingLayout)
-    }
 }

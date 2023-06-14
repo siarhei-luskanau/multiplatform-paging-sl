@@ -19,9 +19,9 @@ import android.os.Build
 import android.view.ViewGroup
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.drag
-import androidx.compose.foundation.gestures.forEachGesture
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.requiredSize
@@ -52,13 +52,13 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import androidx.test.filters.SdkSuppress
 import com.google.common.truth.Truth.assertThat
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
 
 @MediumTest
 @RunWith(AndroidJUnit4::class)
@@ -246,15 +246,13 @@ class PositionInWindowTest {
                             .background(Color.Black)
                             .testTag(smallBoxTag)
                             .pointerInput(Unit) {
-                                forEachGesture {
-                                    awaitPointerEventScope {
-                                        val down = awaitFirstDown()
-                                        var previous = down.position
-                                        drag(down.id) {
-                                            it.consume()
-                                            offset += it.position - previous
-                                            previous = it.position
-                                        }
+                                awaitEachGesture {
+                                    val down = awaitFirstDown()
+                                    var previous = down.position
+                                    drag(down.id) {
+                                        it.consume()
+                                        offset += it.position - previous
+                                        previous = it.position
                                     }
                                 }
                             }

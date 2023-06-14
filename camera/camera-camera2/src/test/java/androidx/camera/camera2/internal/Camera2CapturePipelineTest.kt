@@ -30,6 +30,7 @@ import android.media.Image
 import android.media.ImageWriter
 import android.os.Build
 import android.view.Surface
+import androidx.annotation.RequiresApi
 import androidx.camera.camera2.impl.Camera2ImplConfig
 import androidx.camera.camera2.internal.compat.CameraCharacteristicsCompat
 import androidx.camera.camera2.internal.compat.quirk.AutoFlashUnderExposedQuirk
@@ -561,6 +562,7 @@ class Camera2CapturePipelineTest {
         }
     }
 
+    @Config(minSdk = 23)
     @Test
     fun submitZslCaptureRequests_withZslTemplate_templateZeroShutterLagSent(): Unit = runBlocking {
         // Arrange.
@@ -595,6 +597,7 @@ class Camera2CapturePipelineTest {
         }
     }
 
+    @Config(minSdk = 23)
     @Test
     fun submitZslCaptureRequests_withZslDisabledByFlashMode_templateStillPictureSent():
         Unit = runBlocking {
@@ -626,6 +629,7 @@ class Camera2CapturePipelineTest {
         }
     }
 
+    @Config(minSdk = 23)
     @Test
     fun submitZslCaptureRequests_withZslDisabledByUseCaseConfig_templateStillPictureSent():
         Unit = runBlocking {
@@ -657,6 +661,7 @@ class Camera2CapturePipelineTest {
         }
     }
 
+    @Config(minSdk = 23)
     @Test
     fun submitZslCaptureRequests_withNoTemplate_templateStillPictureSent(): Unit = runBlocking {
         // Arrange.
@@ -1068,7 +1073,7 @@ class Camera2CapturePipelineTest {
         val cameraManager = context.getSystemService(Context.CAMERA_SERVICE) as CameraManager
         val characteristics = cameraManager.getCameraCharacteristics(cameraId)
         val characteristicsCompat = CameraCharacteristicsCompat
-            .toCameraCharacteristicsCompat(characteristics)
+            .toCameraCharacteristicsCompat(characteristics, cameraId)
         val cameraQuirk = quirks ?: CameraQuirks.get(cameraId, characteristicsCompat)
 
         return Camera2CameraControlImpl(
@@ -1224,9 +1229,13 @@ class Camera2CapturePipelineTest {
             )
         }
 
-        return CameraCharacteristicsCompat.toCameraCharacteristicsCompat(characteristics)
+        return CameraCharacteristicsCompat.toCameraCharacteristicsCompat(
+            characteristics,
+            CAMERA_ID_0
+        )
     }
 
+    @RequiresApi(23)
     private fun initCameraControlWithZsl(
         isZslDisabledByFlashMode: Boolean,
         isZslDisabledByUserCaseConfig: Boolean

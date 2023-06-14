@@ -18,6 +18,8 @@ package androidx.compose.compiler.plugins.kotlin
 
 import androidx.compose.compiler.plugins.kotlin.AbstractIrTransformTest.TruncateTracingInfoMode
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.JUnit4
 
 /**
  * Verifies trace data passed to tracing. Relies on [TruncateTracingInfoMode.KEEP_INFO_STRING] to
@@ -26,7 +28,8 @@ import org.junit.Test
  * More complex cases tested in other IrTransform tests that use
  * the [TruncateTracingInfoMode.KEEP_INFO_STRING].
  */
-class TraceInformationTest : ComposeIrTransformTest() {
+@RunWith(JUnit4::class)
+class TraceInformationTest : AbstractIrTransformTest(useFir = false) {
     @Test
     fun testBasicComposableFunctions() = verifyComposeIrTransform(
         """
@@ -58,7 +61,7 @@ class TraceInformationTest : ComposeIrTransformTest() {
                 }
                 val tmp0_rcvr = <this>
                 %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                  tmp0_rcvr.B(x, %composer, %changed or 0b0001)
+                  tmp0_rcvr.B(x, %composer, updateChangedFlags(%changed or 0b0001))
                 }
               }
               static val %stable: Int = 0
@@ -79,7 +82,7 @@ class TraceInformationTest : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                C(%composer, %changed or 0b0001)
+                C(%composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """,
@@ -110,7 +113,7 @@ class TraceInformationTest : ComposeIrTransformTest() {
             @ComposableInferredTarget(scheme = "[0[0]]")
             fun Wrapper(content: Function2<Composer, Int, Unit>, %composer: Composer?, %changed: Int) {
               %composer.startReplaceableGroup(<>)
-              sourceInformation(%composer, "C(Wrapper)<conten...>:Test.kt")
+              sourceInformation(%composer, "CC(Wrapper)<conten...>:Test.kt")
               content(%composer, 0b1110 and %changed)
               %composer.endReplaceableGroup()
             }
@@ -118,6 +121,7 @@ class TraceInformationTest : ComposeIrTransformTest() {
             fun Test(condition: Boolean, %composer: Composer?, %changed: Int) {
               %composer = %composer.startRestartGroup(<>)
               sourceInformation(%composer, "C(Test)<A()>,<Wrappe...>,<A()>:Test.kt")
+              val tmp0_marker = %composer.currentMarker
               val %dirty = %changed
               if (%changed and 0b1110 === 0) {
                 %dirty = %dirty or if (%composer.changed(condition)) 0b0100 else 0b0010
@@ -128,24 +132,20 @@ class TraceInformationTest : ComposeIrTransformTest() {
                 }
                 A(%composer, 0)
                 Wrapper({ %composer: Composer?, %changed: Int ->
-                  %composer.startReplaceableGroup(<>)
-                  sourceInformation(%composer, "C<A()>,<A()>:Test.kt")
-                  if (%changed and 0b1011 !== 0b0010 || !%composer.skipping) {
-                    A(%composer, 0)
-                    if (!condition) {
-                      if (isTraceInProgress()) {
-                        traceEventEnd()
-                      }
-                      %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                        Test(condition, %composer, %changed or 0b0001)
-                      }
-                      return
+                  sourceInformationMarkerStart(%composer, <>, "C<A()>,<A()>:Test.kt")
+                  A(%composer, 0)
+                  if (!condition) {
+                    %composer.endToMarker(tmp0_marker)
+                    if (isTraceInProgress()) {
+                      traceEventEnd()
                     }
-                    A(%composer, 0)
-                  } else {
-                    %composer.skipToGroupEnd()
+                    %composer@Test.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
+                      Test(condition, %composer, updateChangedFlags(%changed or 0b0001))
+                    }
+                    return
                   }
-                  %composer.endReplaceableGroup()
+                  A(%composer, 0)
+                  sourceInformationMarkerEnd(%composer)
                 }, %composer, 0)
                 A(%composer, 0)
                 if (isTraceInProgress()) {
@@ -155,7 +155,7 @@ class TraceInformationTest : ComposeIrTransformTest() {
                 %composer.skipToGroupEnd()
               }
               %composer.endRestartGroup()?.updateScope { %composer: Composer?, %force: Int ->
-                Test(condition, %composer, %changed or 0b0001)
+                Test(condition, %composer, updateChangedFlags(%changed or 0b0001))
               }
             }
         """,

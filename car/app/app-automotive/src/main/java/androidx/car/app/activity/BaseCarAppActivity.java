@@ -56,6 +56,7 @@ import androidx.car.app.activity.renderer.surface.SurfaceWrapperProvider;
 import androidx.car.app.activity.renderer.surface.TemplateSurfaceView;
 import androidx.car.app.activity.ui.ErrorMessageView;
 import androidx.car.app.activity.ui.LoadingView;
+import androidx.car.app.annotations.ExperimentalCarApi;
 import androidx.car.app.automotive.R;
 import androidx.car.app.serialization.Bundleable;
 import androidx.car.app.serialization.BundlerException;
@@ -233,6 +234,11 @@ public abstract class BaseCarAppActivity extends FragmentActivity {
                     ThreadUtils.runOnMain(() -> mSurfaceView.onUpdateSelection(oldSelStart,
                             oldSelEnd, newSelStart, newSelEnd));
                 }
+
+                @Override
+                public void showAssist(Bundle args) {
+                    BaseCarAppActivity.this.showAssist(args);
+                }
             };
 
     @RequiresApi(Build.VERSION_CODES.R)
@@ -265,7 +271,7 @@ public abstract class BaseCarAppActivity extends FragmentActivity {
      * Binds the {@link BaseCarAppActivity} and it's view against the view model.
      */
     public void bindToViewModel(@NonNull SessionInfo sessionInfo) {
-        ComponentName serviceComponentName = retrieveServiceComponentName();
+        ComponentName serviceComponentName = getServiceComponentName();
         if (serviceComponentName == null) {
             Log.e(LogTags.TAG, "Unspecified service class name");
             finish();
@@ -448,12 +454,21 @@ public abstract class BaseCarAppActivity extends FragmentActivity {
     }
 
     /**
+     * @see #getServiceComponentName()
+     */
+    @Nullable
+    @ExperimentalCarApi
+    public ComponentName retrieveServiceComponentName() {
+        return getServiceComponentName();
+    }
+
+    /**
      * Retrieves the {@link  ComponentName} to which the view model will talk
      * in order to render.
      */
     @Nullable
     @SuppressWarnings("deprecation")
-    public ComponentName retrieveServiceComponentName() {
+    public ComponentName getServiceComponentName() {
         Intent intent = new Intent(SERVICE_INTERFACE);
         intent.setPackage(getPackageName());
         List<ResolveInfo> infos = getPackageManager().queryIntentServices(intent, 0);

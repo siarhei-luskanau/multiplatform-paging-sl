@@ -38,13 +38,29 @@ object ComposableInvoker {
         actualTypes: Array<Class<*>>
     ): Boolean =
         methodTypes.size == actualTypes.size &&
-            methodTypes.mapIndexed { index, clazz -> clazz.isAssignableFrom(actualTypes[index]) }
+            methodTypes.mapIndexed { index, clazz ->
+                val actualType = actualTypes[index]
+                if (clazz.isPrimitive || actualType.isPrimitive) {
+                    // We can't use [isAssignableFrom] if we have java primitives.
+                    // Java primitives aren't equal to Java classes:
+                    // comparing int with kotlin.Int or java.lang.Integer will return false.
+                    // However, if we convert them both to a KClass they can be compared:
+                    // int and java.lang.Integer will be both converted to Int
+                    // see more: https://docs.oracle.com/javase/6/docs/api/java/lang/Class.html#isAssignableFrom(java.lang.Class)
+                    clazz.kotlin == actualType.kotlin
+                } else {
+                    clazz.isAssignableFrom(actualType)
+                }
+            }
                 .all { it }
 
     /**
      * Same as [Class#getDeclaredMethod] but it accounts for compatible types so the signature does
      * not need to exactly match. This allows finding method calls that use subclasses as parameters
      * instead of the exact types.
+     *
+     * @return the compatible [Method] with the name [methodName]
+     * @throws NoSuchMethodException if the method is not found
      */
     private fun Class<*>.getDeclaredCompatibleMethod(
         methodName: String,
@@ -52,7 +68,10 @@ object ComposableInvoker {
     ): Method {
         val actualTypes: Array<Class<*>> = arrayOf(*args)
         return declaredMethods.firstOrNull {
-            methodName == it.name && compatibleTypes(it.parameterTypes, actualTypes)
+            // Methods with inlined classes as parameter will have the name mangled
+            // so we need to check for methodName-xxxx as well
+            (methodName == it.name || it.name.startsWith("$methodName-")) &&
+                compatibleTypes(it.parameterTypes, actualTypes)
         } ?: throw NoSuchMethodException("$methodName not found")
     }
 
@@ -63,26 +82,31 @@ object ComposableInvoker {
     /**
      * Find the given method by name. If the method has parameters, this function will try to find
      * the version that accepts default parameters.
+     *
+     * @return null if the composable method is not found. Returns the [Method] otherwise.
      */
-    private fun Class<*>.findComposableMethod(methodName: String, vararg args: Any?): Method {
-        val method = try {
+    private fun Class<*>.findComposableMethod(methodName: String, vararg args: Any?): Method? {
+        return try {
             // without defaults
             val changedParams = changedParamCount(args.size, 0)
             getDeclaredCompatibleMethod(
                 methodName,
                 *args.mapNotNull { it?.javaClass }.toTypedArray(),
                 Composer::class.java, // composer param
-                *kotlin.Int::class.java.dup(changedParams) // changed params
+                *kotlin.Int::class.java.dup(changedParams) // changed param
             )
         } catch (e: ReflectiveOperationException) {
             try {
-                declaredMethods.find { it.name == methodName }
+                declaredMethods.find {
+                    it.name == methodName ||
+                        // Methods with inlined classes as parameter will have the name mangled
+                        // so we need to check for methodName-xxxx as well
+                        it.name.startsWith("$methodName-")
+                }
             } catch (e: ReflectiveOperationException) {
                 null
             }
-        } ?: throw NoSuchMethodException("$name.$methodName")
-
-        return method
+        }
     }
 
     /**
@@ -188,6 +212,7 @@ object ComposableInvoker {
             val composableClass = Class.forName(className)
 
             val method = composableClass.findComposableMethod(methodName, *args)
+                ?: throw NoSuchMethodException("Composable $className.$methodName not found")
             method.isAccessible = true
 
             if (Modifier.isStatic(method.modifiers)) {
@@ -199,8 +224,9 @@ object ComposableInvoker {
                 val instance = composableClass.getConstructor().newInstance()
                 method.invokeComposableMethod(instance, composer, *args)
             }
-        } catch (e: ReflectiveOperationException) {
-            throw ClassNotFoundException("Composable Method '$className.$methodName' not found", e)
+        } catch (e: Exception) {
+            PreviewLogger.logWarning("Failed to invoke Composable Method '$className.$methodName'")
+            throw e
         }
     }
 }

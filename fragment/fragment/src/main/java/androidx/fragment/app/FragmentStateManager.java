@@ -18,6 +18,7 @@ package androidx.fragment.app;
 
 import android.app.Activity;
 import android.content.res.Resources;
+import android.os.BadParcelableException;
 import android.os.Bundle;
 import android.os.Parcelable;
 import android.util.Log;
@@ -431,8 +432,14 @@ class FragmentStateManager {
                     new Bundle());
         }
 
-        mFragment.mSavedViewState = mFragment.mSavedFragmentState.getSparseParcelableArray(
-                VIEW_STATE_KEY);
+        try {
+            mFragment.mSavedViewState = mFragment.mSavedFragmentState.getSparseParcelableArray(
+                    VIEW_STATE_KEY);
+        } catch (BadParcelableException e) {
+            throw new IllegalStateException(
+                    "Failed to restore view hierarchy state for fragment " + getFragment(), e
+            );
+        }
         mFragment.mSavedViewRegistryState = mFragment.mSavedFragmentState.getBundle(
                 VIEW_REGISTRY_STATE_KEY);
 
@@ -556,6 +563,9 @@ class FragmentStateManager {
         mFragment.mContainer = container;
         mFragment.performCreateView(layoutInflater, container, savedInstanceState);
         if (mFragment.mView != null) {
+            if (FragmentManager.isLoggingEnabled(Log.DEBUG)) {
+                Log.d(TAG, "moveto VIEW_CREATED: " + mFragment);
+            }
             mFragment.mView.setSaveFromParentEnabled(false);
             mFragment.mView.setTag(R.id.fragment_container_view_tag, mFragment);
             if (container != null) {
@@ -642,6 +652,7 @@ class FragmentStateManager {
         mFragment.setFocusedView(null);
         mFragment.performResume();
         mDispatcher.dispatchOnFragmentResumed(mFragment, false);
+        mFragmentStore.setSavedState(mFragment.mWho, null);
         mFragment.mSavedFragmentState = null;
         mFragment.mSavedViewState = null;
         mFragment.mSavedViewRegistryState = null;
@@ -860,6 +871,16 @@ class FragmentStateManager {
     }
 
     void addViewToContainer() {
+        Fragment expectedParent = FragmentManager.findViewFragment(mFragment.mContainer);
+        Fragment actualParent = mFragment.getParentFragment();
+        // onFindViewById prevents any wrong nested hierarchies when expectedParent is null already
+        if (expectedParent != null) {
+            if (!expectedParent.equals(actualParent)) {
+                FragmentStrictMode.onWrongNestedHierarchy(mFragment, expectedParent,
+                        mFragment.mContainerId);
+            }
+        }
+
         // Ensure that our new Fragment is placed in the right index
         // based on its relative position to Fragments already in the
         // same container

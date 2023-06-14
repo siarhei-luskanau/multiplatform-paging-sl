@@ -314,7 +314,6 @@ public final class MediaRouter {
      *     <li>{@link androidx.mediarouter.app.MediaRouteDiscoveryFragment}
      * </ul>
      *
-     * @hide
      */
     @RestrictTo(LIBRARY_GROUP)
     public static void resetGlobalRouter() {
@@ -548,7 +547,6 @@ public final class MediaRouter {
 
     /**
      * Adds the specified route as a member to the current dynamic group.
-     * @hide
      */
     @RestrictTo(LIBRARY)
     @MainThread
@@ -562,7 +560,6 @@ public final class MediaRouter {
 
     /**
      * Removes the specified route from the current dynamic group.
-     * @hide
      */
     @RestrictTo(LIBRARY)
     @MainThread
@@ -576,7 +573,6 @@ public final class MediaRouter {
 
     /**
      * Transfers the current dynamic group to the specified route.
-     * @hide
      */
     @RestrictTo(LIBRARY)
     @MainThread
@@ -1035,7 +1031,6 @@ public final class MediaRouter {
      * Returns whether the media transfer feature is enabled.
      *
      * @see MediaRouter
-     * @hide
      */
     @RestrictTo(LIBRARY)
     public static boolean isMediaTransferEnabled() {
@@ -1046,7 +1041,6 @@ public final class MediaRouter {
     }
 
     /**
-     * @hide
      */
     @RestrictTo(LIBRARY)
     public static boolean isGroupVolumeUxEnabled() {
@@ -1157,15 +1151,28 @@ public final class MediaRouter {
          */
         public static final int PLAYBACK_TYPE_REMOTE = 1;
 
-        @IntDef({DEVICE_TYPE_UNKNOWN, DEVICE_TYPE_TV, DEVICE_TYPE_SPEAKER, DEVICE_TYPE_BLUETOOTH})
+        @RestrictTo(LIBRARY)
+        @IntDef({
+            DEVICE_TYPE_UNKNOWN,
+            DEVICE_TYPE_TV,
+            DEVICE_TYPE_SPEAKER,
+            DEVICE_TYPE_BLUETOOTH,
+            DEVICE_TYPE_AUDIO_VIDEO_RECEIVER,
+            DEVICE_TYPE_TABLET,
+            DEVICE_TYPE_TABLET_DOCKED,
+            DEVICE_TYPE_COMPUTER,
+            DEVICE_TYPE_GAME_CONSOLE,
+            DEVICE_TYPE_CAR,
+            DEVICE_TYPE_SMARTWATCH,
+            DEVICE_TYPE_GROUP
+        })
         @Retention(RetentionPolicy.SOURCE)
-        private @interface DeviceType {}
+        public @interface DeviceType {}
 
         /**
          * The default receiver device type of the route indicating the type is unknown.
          *
          * @see #getDeviceType
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public static final int DEVICE_TYPE_UNKNOWN = 0;
@@ -1191,10 +1198,66 @@ public final class MediaRouter {
          * on a bluetooth device such as a bluetooth speaker.
          *
          * @see #getDeviceType
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public static final int DEVICE_TYPE_BLUETOOTH = 3;
+
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on an
+         * Audio/Video receiver (AVR).
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_AUDIO_VIDEO_RECEIVER = 4;
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on a
+         * tablet.
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_TABLET = 5;
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on a
+         * docked tablet.
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_TABLET_DOCKED = 6;
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on a
+         * computer.
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_COMPUTER = 7;
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on a
+         * gaming console.
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_GAME_CONSOLE = 8;
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on a
+         * car.
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_CAR = 9;
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on a
+         * smartwatch.
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_SMARTWATCH = 10;
+        /**
+         * A receiver device type indicating that the presentation of the media is happening on a
+         * group of devices.
+         *
+         * @see #getDeviceType
+         */
+        public static final int DEVICE_TYPE_GROUP = 1000;
 
         @IntDef({PLAYBACK_VOLUME_FIXED,PLAYBACK_VOLUME_VARIABLE})
         @Retention(RetentionPolicy.SOURCE)
@@ -1221,7 +1284,6 @@ public final class MediaRouter {
         /**
          * The default presentation display id indicating no presentation display is associated
          * with the route.
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public static final int PRESENTATION_DISPLAY_ID_NONE = -1;
@@ -1598,15 +1660,14 @@ public final class MediaRouter {
         /**
          * Gets the type of the receiver device associated with this route.
          *
-         * @return The type of the receiver device associated with this route:
-         * {@link #DEVICE_TYPE_TV} or {@link #DEVICE_TYPE_SPEAKER}.
+         * @return The type of the receiver device associated with this route.
          */
+        @DeviceType
         public int getDeviceType() {
             return mDeviceType;
         }
 
         /**
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public boolean isDefaultOrBluetooth() {
@@ -1758,7 +1819,6 @@ public final class MediaRouter {
 
         /**
          * Gets the route's presentation display id, or -1 if none.
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public int getPresentationDisplayId() {
@@ -1796,7 +1856,6 @@ public final class MediaRouter {
 
         /**
          * Returns true if the route has one or more members
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public boolean isGroup() {
@@ -1805,7 +1864,6 @@ public final class MediaRouter {
 
         /**
          * Gets the dynamic group state of the given route.
-         * @hide
          */
         @RestrictTo(LIBRARY)
         @Nullable
@@ -1823,7 +1881,6 @@ public final class MediaRouter {
         /**
          * Returns the routes in this group
          *
-         * @hide
          * @return The list of the routes in this group
          */
         @RestrictTo(LIBRARY)
@@ -1834,7 +1891,6 @@ public final class MediaRouter {
 
         /**
          *
-         * @hide
          */
         @MainThread
         @RestrictTo(LIBRARY)
@@ -2048,7 +2104,6 @@ public final class MediaRouter {
             return mDescriptorId;
         }
 
-        /** @hide */
         @RestrictTo(LIBRARY)
         @NonNull
         public MediaRouteProvider getProviderInstance() {
@@ -2086,7 +2141,6 @@ public final class MediaRouter {
 
         /**
          * Represents the dynamic group state of the {@link RouteInfo}.
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public static final class DynamicGroupState {
@@ -2102,7 +2156,6 @@ public final class MediaRouter {
              *
              * @return The selection state of the route: {@link DynamicRouteDescriptor#UNSELECTED},
              * {@link DynamicRouteDescriptor#SELECTING}, or {@link DynamicRouteDescriptor#SELECTED}.
-             * @hide
              */
             @RestrictTo(LIBRARY)
             public int getSelectionState() {
@@ -2111,7 +2164,6 @@ public final class MediaRouter {
             }
 
             /**
-             * @hide
              */
             @RestrictTo(LIBRARY)
             public boolean isUnselectable() {
@@ -2119,7 +2171,6 @@ public final class MediaRouter {
             }
 
             /**
-             * @hide
              */
             @RestrictTo(LIBRARY)
             public boolean isGroupable() {
@@ -2127,7 +2178,6 @@ public final class MediaRouter {
             }
 
             /**
-             * @hide
              */
             @RestrictTo(LIBRARY)
             public boolean isTransferable() {
@@ -2413,7 +2463,6 @@ public final class MediaRouter {
         }
 
         /**
-         * @hide
          */
         @RestrictTo(LIBRARY)
         public void onRouterParamsChanged(@NonNull MediaRouter router,
@@ -3063,7 +3112,6 @@ public final class MediaRouter {
         }
 
         /**
-         * @hide
          */
         @RestrictTo(RestrictTo.Scope.LIBRARY)
         public boolean isGroupVolumeUxEnabled() {

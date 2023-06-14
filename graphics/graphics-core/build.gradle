@@ -32,6 +32,7 @@ dependencies {
     androidTestImplementation(libs.testRules)
     androidTestImplementation("androidx.lifecycle:lifecycle-common:2.5.0-alpha01")
     androidTestImplementation("androidx.test:core:1.4.0@aar")
+    androidTestImplementation(project(":core:core"))
 }
 
 android {
@@ -40,8 +41,14 @@ android {
     defaultConfig {
         minSdkVersion 17
         externalNativeBuild {
+            def versionScript = file("src/main/cpp/jni.lds").getAbsolutePath()
+
             cmake {
-                cppFlags ''
+                cppFlags "-O3", "-flto", "-fPIC", "-fno-exceptions", "-fno-rtti",
+                        "-fomit-frame-pointer", "-fdata-sections", "-ffunction-sections", "-fvisibility=hidden"
+                arguments "-DCMAKE_VERBOSE_MAKEFILE=ON",
+                        "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--gc-sections " +
+                                "-Wl,--version-script=${versionScript}"
             }
         }
     }
@@ -54,9 +61,9 @@ android {
 }
 
 androidx {
-    name = "Android Graphics Core"
+    name = "Graphics Core"
     type = LibraryType.PUBLISHED_LIBRARY
-    mavenGroup = LibraryGroups.GRAPHICS
+    mavenVersion = LibraryVersions.GRAPHICS_CORE
     inceptionYear = "2021"
     description = "Leverage graphics facilities across multiple Android platform releases"
 }

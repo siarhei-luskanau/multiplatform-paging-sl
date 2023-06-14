@@ -93,7 +93,6 @@ public final class MediaRouteDescriptor {
      * A route descriptor that has one or more group member route ids
      * represents a route group. A member route may belong to another group.
      * </p>
-     * @hide
      */
     @RestrictTo(LIBRARY)
     @NonNull
@@ -264,10 +263,9 @@ public final class MediaRouteDescriptor {
     /**
      * Gets the type of the receiver device associated with this route.
      *
-     * @return The type of the receiver device associated with this route:
-     * {@link MediaRouter.RouteInfo#DEVICE_TYPE_TV} or
-     * {@link MediaRouter.RouteInfo#DEVICE_TYPE_SPEAKER}.
+     * @return The type of the receiver device associated with this route.
      */
+    @MediaRouter.RouteInfo.DeviceType
     public int getDeviceType() {
         return mBundle.getInt(KEY_DEVICE_TYPE);
     }
@@ -318,7 +316,6 @@ public final class MediaRouteDescriptor {
 
     /**
      * Gets the minimum client version required for this route.
-     * @hide
      */
     @RestrictTo(LIBRARY)
     public int getMinClientVersion() {
@@ -328,7 +325,6 @@ public final class MediaRouteDescriptor {
 
     /**
      * Gets the maximum client version required for this route.
-     * @hide
      */
     @RestrictTo(LIBRARY)
     public int getMaxClientVersion() {
@@ -454,7 +450,6 @@ public final class MediaRouteDescriptor {
 
         /**
          * Clears the group member IDs of the route.
-         * @hide
          */
         @RestrictTo(LIBRARY)
         @NonNull
@@ -471,7 +466,6 @@ public final class MediaRouteDescriptor {
          * A route descriptor that has one or more group member route ids
          * represents a route group. A member route may belong to another group.
          * </p>
-         * @hide
          */
         @RestrictTo(LIBRARY)
         @NonNull
@@ -495,7 +489,6 @@ public final class MediaRouteDescriptor {
          * A route descriptor that has one or more group member route ids
          * represents a route group. A member route may belong to another group.
          * </p>
-         * @hide
          */
         @RestrictTo(LIBRARY)
         @NonNull
@@ -518,7 +511,6 @@ public final class MediaRouteDescriptor {
          * A route descriptor that has one or more group member route ids
          * represents a route group. A member route may belong to another group.
          * </p>
-         * @hide
          */
         @RestrictTo(LIBRARY)
         @NonNull
@@ -725,12 +717,10 @@ public final class MediaRouteDescriptor {
         /**
          * Sets the route's receiver device type.
          *
-         * @param deviceType The receive device type of the route:
-         * {@link MediaRouter.RouteInfo#DEVICE_TYPE_TV} or
-         * {@link MediaRouter.RouteInfo#DEVICE_TYPE_SPEAKER}.
+         * @param deviceType The type of the receiver device.
          */
         @NonNull
-        public Builder setDeviceType(int deviceType) {
+        public Builder setDeviceType(@MediaRouter.RouteInfo.DeviceType int deviceType) {
             mBundle.putInt(KEY_DEVICE_TYPE, deviceType);
             return this;
         }
@@ -793,7 +783,6 @@ public final class MediaRouteDescriptor {
         /**
          * Sets the route's minimum client version.
          * A router whose version is lower than this will not be able to connect to this route.
-         * @hide
          */
         @RestrictTo(LIBRARY)
         @NonNull
@@ -805,7 +794,6 @@ public final class MediaRouteDescriptor {
         /**
          * Sets the route's maximum client version.
          * A router whose version is higher than this will not be able to connect to this route.
-         * @hide
          */
         @RestrictTo(LIBRARY)
         @NonNull

@@ -17,21 +17,23 @@
 package androidx.camera.testing.fakes
 
 import android.hardware.camera2.CameraDevice
-import android.media.ImageReader
+import android.hardware.camera2.CaptureRequest
 import android.media.ImageWriter
-import android.os.Handler
-import android.os.Looper
 import android.os.SystemClock
 import android.view.Surface
 import androidx.annotation.RequiresApi
 import androidx.camera.core.CameraInfo
+import androidx.camera.core.ImageProcessingUtil
+import androidx.camera.core.ImageReaderProxys
 import androidx.camera.core.impl.CameraCaptureFailure
 import androidx.camera.core.impl.CameraCaptureResult
 import androidx.camera.core.impl.Config
 import androidx.camera.core.impl.DeferrableSurface
+import androidx.camera.core.impl.ImageReaderProxy
 import androidx.camera.core.impl.OptionsBundle
 import androidx.camera.core.impl.OutputSurface
 import androidx.camera.core.impl.RequestProcessor
+import androidx.camera.core.impl.RestrictedCameraControl
 import androidx.camera.core.impl.SessionConfig
 import androidx.camera.core.impl.SessionProcessor
 import androidx.camera.core.impl.SessionProcessorSurface
@@ -43,20 +45,21 @@ import kotlinx.coroutines.withTimeoutOrNull
 
 const val FAKE_CAPTURE_SEQUENCE_ID = 1
 
-@RequiresApi(23)
+@RequiresApi(23) // ImageWriter requires API 23+
 class FakeSessionProcessor(
-    val inputFormatPreview: Int?,
-    val inputFormatCapture: Int?
+    val inputFormatPreview: Int? = null,
+    val inputFormatCapture: Int? = null
 ) : SessionProcessor {
     private lateinit var previewProcessorSurface: DeferrableSurface
     private lateinit var captureProcessorSurface: DeferrableSurface
-    private var intermediaPreviewImageReader: ImageReader? = null
-    private var intermediaCaptureImageReader: ImageReader? = null
+    private var imageAnalysisProcessorSurface: DeferrableSurface? = null
+    private var intermediaPreviewImageReader: ImageReaderProxy? = null
+    private var intermediaCaptureImageReader: ImageReaderProxy? = null
     private var intermediaPreviewImageWriter: ImageWriter? = null
-    private var intermediaCaptureImageWriter: ImageWriter? = null
 
     private val previewOutputConfigId = 1
     private val captureOutputConfigId = 2
+    private val analysisOutputConfigId = 3
 
     private var requestProcessor: RequestProcessor? = null
 
@@ -68,8 +71,16 @@ class FakeSessionProcessor(
     private val startRepeatingCalled = CompletableDeferred<Long>()
     private val startCaptureCalled = CompletableDeferred<Long>()
     private val setParametersCalled = CompletableDeferred<Config>()
+    private val startTriggerCalled = CompletableDeferred<Config>()
+    private val stopRepeatingCalled = CompletableDeferred<Long>()
     private var latestParameters: Config = OptionsBundle.emptyBundle()
     private var blockRunAfterInitSession: () -> Unit = {}
+
+    private var rotationDegrees = 0
+    private var jpegQuality = 100
+
+    @RestrictedCameraControl.CameraOperation
+    var restrictedCameraOperations: Set<Int> = emptySet()
 
     fun releaseSurfaces() {
         intermediaPreviewImageReader?.close()
@@ -87,20 +98,18 @@ class FakeSessionProcessor(
         imageAnalysisSurfaceConfig: OutputSurface?
     ): SessionConfig {
         initSessionCalled.complete(SystemClock.elapsedRealtimeNanos())
-        val handler = Handler(Looper.getMainLooper())
-
-        var sessionBuilder = SessionConfig.Builder()
+        val sessionBuilder = SessionConfig.Builder()
 
         // Preview
         lateinit var previewTransformedSurface: Surface
         if (inputFormatPreview == null) { // no conversion, use origin surface.
             previewTransformedSurface = previewSurfaceConfig.surface
         } else {
-            intermediaPreviewImageReader = ImageReader.newInstance(
-                640, 480,
+            intermediaPreviewImageReader = ImageReaderProxys.createIsolatedReader(
+                previewSurfaceConfig.size.width, previewSurfaceConfig.size.height,
                 inputFormatPreview, 2
             )
-            previewTransformedSurface = intermediaPreviewImageReader!!.surface
+            previewTransformedSurface = intermediaPreviewImageReader!!.surface!!
 
             intermediaPreviewImageWriter = ImageWriter.newInstance(
                 previewSurfaceConfig.surface, 2
@@ -113,7 +122,7 @@ class FakeSessionProcessor(
                         intermediaPreviewImageWriter!!.queueInputImage(imageDequeued)
                     }
                 },
-                handler
+                CameraXExecutors.ioExecutor()
             )
         }
         previewProcessorSurface =
@@ -132,24 +141,22 @@ class FakeSessionProcessor(
         if (inputFormatCapture == null) { // no conversion, use origin surface.
             captureTransformedSurface = imageCaptureSurfaceConfig.surface
         } else {
-            intermediaCaptureImageReader = ImageReader.newInstance(
-                640, 480,
+            intermediaCaptureImageReader = ImageReaderProxys.createIsolatedReader(
+                imageCaptureSurfaceConfig.size.width, imageCaptureSurfaceConfig.size.height,
                 inputFormatCapture, 2
             )
-            captureTransformedSurface = intermediaCaptureImageReader!!.surface
-
-            intermediaCaptureImageWriter = ImageWriter.newInstance(
-                imageCaptureSurfaceConfig.surface, 2
-            )
+            captureTransformedSurface = intermediaCaptureImageReader!!.surface!!
 
             intermediaCaptureImageReader!!.setOnImageAvailableListener(
                 {
-                    it.acquireNextImage().use {
-                        val imageDequeued = intermediaCaptureImageWriter!!.dequeueInputImage()
-                        intermediaCaptureImageWriter!!.queueInputImage(imageDequeued)
+                    it.acquireNextImage().use { imageProxy ->
+                        ImageProcessingUtil.convertYuvToJpegBytesIntoSurface(
+                            imageProxy!!, jpegQuality, rotationDegrees,
+                            imageCaptureSurfaceConfig.surface
+                        )
                     }
                 },
-                handler
+                CameraXExecutors.ioExecutor()
             )
         }
         captureProcessorSurface =
@@ -158,12 +165,17 @@ class FakeSessionProcessor(
         captureProcessorSurface.terminationFuture.addListener(
             {
                 intermediaCaptureImageReader?.close()
-                intermediaCaptureImageWriter?.close()
             },
             CameraXExecutors.directExecutor()
         )
         sessionBuilder.addSurface(captureProcessorSurface)
 
+        imageAnalysisSurfaceConfig?.let {
+            imageAnalysisProcessorSurface = SessionProcessorSurface(
+                it.surface, analysisOutputConfigId
+            )
+            sessionBuilder.addSurface(imageAnalysisProcessorSurface!!)
+        }
         sessionBuilder.setTemplateType(CameraDevice.TEMPLATE_PREVIEW)
         val sessionConfig = sessionBuilder.build()
         blockRunAfterInitSession()
@@ -174,11 +186,25 @@ class FakeSessionProcessor(
         deInitSessionCalled.complete(SystemClock.elapsedRealtimeNanos())
         previewProcessorSurface.close()
         captureProcessorSurface.close()
+        imageAnalysisProcessorSurface?.close()
     }
 
     override fun setParameters(config: Config) {
         setParametersCalled.complete(config)
         latestParameters = config
+        config.listOptions().filter {
+            it.token is CaptureRequest.Key<*>
+        }.forEach {
+            @Suppress("UNCHECKED_CAST")
+            val key = it.token as CaptureRequest.Key<Any>?
+            if (key == CaptureRequest.JPEG_ORIENTATION) {
+                rotationDegrees = config.retrieveOption(it) as Int
+            }
+
+            if (key == CaptureRequest.JPEG_QUALITY) {
+                jpegQuality = (config.retrieveOption(it) as Byte).toInt()
+            }
+        }
     }
 
     override fun onCaptureSessionStart(_requestProcessor: RequestProcessor) {
@@ -192,6 +218,11 @@ class FakeSessionProcessor(
 
     fun getLatestParameters(): Config {
         return latestParameters
+    }
+
+    @RestrictedCameraControl.CameraOperation
+    override fun getSupportedCameraOperations(): Set<Int> {
+        return restrictedCameraOperations
     }
 
     override fun startRepeating(callback: SessionProcessor.CaptureCallback): Int {
@@ -247,6 +278,8 @@ class FakeSessionProcessor(
     }
 
     override fun stopRepeating() {
+        requestProcessor!!.stopRepeating()
+        stopRepeatingCalled.complete(SystemClock.elapsedRealtimeNanos())
     }
 
     override fun startCapture(callback: SessionProcessor.CaptureCallback): Int {
@@ -299,6 +332,12 @@ class FakeSessionProcessor(
         return FAKE_CAPTURE_SEQUENCE_ID
     }
 
+    override fun startTrigger(config: Config, callback: SessionProcessor.CaptureCallback): Int {
+        startTriggerCalled.complete(config)
+        callback.onCaptureSequenceCompleted(FAKE_CAPTURE_SEQUENCE_ID)
+        return FAKE_CAPTURE_SEQUENCE_ID
+    }
+
     override fun abortCapture(captureSequenceId: Int) {
     }
 
@@ -338,6 +377,14 @@ class FakeSessionProcessor(
 
     suspend fun assertSetParametersInvoked(): Config {
         return setParametersCalled.awaitWithTimeout(3000)
+    }
+
+    suspend fun assertStartTriggerInvoked(): Config {
+        return startTriggerCalled.awaitWithTimeout(3000)
+    }
+
+    suspend fun assertStopRepeatingInvoked(): Long {
+        return stopRepeatingCalled.awaitWithTimeout(3000)
     }
 
     private suspend fun <T> Deferred<T>.awaitWithTimeout(timeMillis: Long): T {

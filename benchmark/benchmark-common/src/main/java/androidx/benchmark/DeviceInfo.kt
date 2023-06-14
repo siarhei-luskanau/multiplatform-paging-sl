@@ -30,8 +30,9 @@ object DeviceInfo {
         Build.FINGERPRINT.startsWith("unknown") ||
         Build.FINGERPRINT.contains("emulator") ||
         Build.MODEL.contains("google_sdk") ||
+        Build.MODEL.contains("sdk_gphone64") ||
         Build.MODEL.contains("Emulator") ||
-        Build.MODEL.contains("Android SDK built for x86") ||
+        Build.MODEL.contains("Android SDK built for") ||
         Build.MANUFACTURER.contains("Genymotion") ||
         Build.BRAND.startsWith("generic") && Build.DEVICE.startsWith("generic") ||
         "google_sdk" == Build.PRODUCT
@@ -82,7 +83,12 @@ object DeviceInfo {
 
         val filter = IntentFilter(Intent.ACTION_BATTERY_CHANGED)
         initialBatteryPercent = context.registerReceiver(null, filter)?.run {
-            val level = getIntExtra(BatteryManager.EXTRA_LEVEL, 100)
+            val level = if (getBooleanExtra(BatteryManager.EXTRA_PRESENT, true)) {
+                getIntExtra(BatteryManager.EXTRA_LEVEL, 100)
+            } else {
+                // If the device has no battery consider it full for this check.
+                100
+            }
             val scale = getIntExtra(BatteryManager.EXTRA_SCALE, 100)
             level * 100 / scale
         } ?: 100

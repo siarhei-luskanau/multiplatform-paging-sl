@@ -47,6 +47,9 @@ import androidx.camera.extensions.impl.advanced.ImageReferenceImpl;
 import androidx.camera.extensions.impl.advanced.OutputSurfaceImpl;
 import androidx.camera.extensions.impl.advanced.RequestProcessorImpl;
 import androidx.camera.extensions.impl.advanced.SessionProcessorImpl;
+import androidx.camera.extensions.internal.ClientVersion;
+import androidx.camera.extensions.internal.ExtensionVersion;
+import androidx.camera.extensions.internal.Version;
 import androidx.core.util.Preconditions;
 
 import java.util.ArrayList;
@@ -62,7 +65,10 @@ public class AdvancedSessionProcessor extends SessionProcessorBase {
     private final SessionProcessorImpl mImpl;
     private final Context mContext;
 
-    public AdvancedSessionProcessor(@NonNull SessionProcessorImpl impl, @NonNull Context context) {
+    public AdvancedSessionProcessor(@NonNull SessionProcessorImpl impl,
+            @NonNull List<CaptureRequest.Key> supportedKeys,
+            @NonNull Context context) {
+        super(supportedKeys);
         mImpl = impl;
         mContext = context;
     }
@@ -114,9 +120,16 @@ public class AdvancedSessionProcessor extends SessionProcessorBase {
         mImpl.deInitSession();
     }
 
-    @OptIn(markerClass = ExperimentalCamera2Interop.class)
     @Override
     public void setParameters(
+            @NonNull Config parameters) {
+        HashMap<CaptureRequest.Key<?>, Object> map = convertConfigToMap(parameters);
+        mImpl.setParameters(map);
+    }
+
+    @OptIn(markerClass = ExperimentalCamera2Interop.class)
+    @NonNull
+    private static HashMap<CaptureRequest.Key<?>, Object> convertConfigToMap(
             @NonNull Config parameters) {
         HashMap<CaptureRequest.Key<?>, Object> map = new HashMap<>();
 
@@ -128,7 +141,7 @@ public class AdvancedSessionProcessor extends SessionProcessorBase {
             CaptureRequest.Key<Object> key = (CaptureRequest.Key<Object>) option.getToken();
             map.put(key, options.retrieveOption(option));
         }
-        mImpl.setParameters(map);
+        return map;
     }
 
     @Override
@@ -151,6 +164,17 @@ public class AdvancedSessionProcessor extends SessionProcessorBase {
     @Override
     public int startRepeating(@NonNull SessionProcessor.CaptureCallback callback) {
         return mImpl.startRepeating(new SessionProcessorImplCaptureCallbackAdapter(callback));
+    }
+
+    @Override
+    public int startTrigger(@NonNull Config config, @NonNull CaptureCallback callback) {
+        HashMap<CaptureRequest.Key<?>, Object> map = convertConfigToMap(config);
+        if (ClientVersion.isMinimumCompatibleVersion(Version.VERSION_1_3)
+                && ExtensionVersion.isMinimumCompatibleVersion(Version.VERSION_1_3)) {
+            return mImpl.startTrigger(map,
+                    new SessionProcessorImplCaptureCallbackAdapter(callback));
+        }
+        return -1;
     }
 
     @Override
@@ -475,6 +499,10 @@ public class AdvancedSessionProcessor extends SessionProcessorBase {
         public void onCaptureCompleted(long timestamp, int captureSequenceId,
                 Map<CaptureResult.Key, Object> result) {
             mCaptureCallback.onCaptureCompleted(timestamp, captureSequenceId, result);
+        }
+
+        @Override
+        public void onCaptureProcessProgressed(int progress) {
         }
     }
 }

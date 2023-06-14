@@ -16,6 +16,8 @@
 
 package androidx.camera.core;
 
+import static androidx.camera.core.impl.ImageFormatConstants.INTERNAL_DEFINED_IMAGE_FORMAT_PRIVATE;
+
 import android.graphics.SurfaceTexture;
 import android.util.Size;
 import android.view.Surface;
@@ -27,6 +29,7 @@ import androidx.core.util.Consumer;
 
 import com.google.auto.value.AutoValue;
 
+import java.io.Closeable;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.concurrent.Executor;
@@ -37,11 +40,9 @@ import java.util.concurrent.Executor;
  * <p>Contains a {@link Surface} and its characteristics along with methods to manage the
  * lifecycle of the {@link Surface}.
  *
- * @hide
- * @see SurfaceEffect#onOutputSurface(SurfaceOutput)
+ * @see SurfaceProcessor#onOutputSurface(SurfaceOutput)
  */
-@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-public interface SurfaceOutput {
+public interface SurfaceOutput extends Closeable {
 
     /**
      * Gets the {@link Surface} for drawing processed frames.
@@ -62,16 +63,19 @@ public interface SurfaceOutput {
     /**
      * This field indicates that what purpose the {@link Surface} will be used for.
      *
-     * <ul>
-     * <li>{@link SurfaceEffect#PREVIEW} if the {@link Surface} will be used for {@link Preview}.
-     * <li>{@link SurfaceEffect#VIDEO_CAPTURE} if the {@link Surface} will be used for video
-     * capture.
-     * <li>{@link SurfaceEffect#PREVIEW} | {@link SurfaceEffect#VIDEO_CAPTURE} if the output
-     * {@link Surface} will be used for sharing a single stream for both preview and video capture.
-     * </ul>
+     * <p>{@link CameraEffect#PREVIEW} if the {@link Surface} will be used for {@link Preview}.
      */
     @CameraEffect.Targets
     int getTargets();
+
+    /**
+     * This field indicates the format of the {@link Surface}.
+     */
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    @CameraEffect.Formats
+    default int getFormat() {
+        return INTERNAL_DEFINED_IMAGE_FORMAT_PRIVATE;
+    }
 
     /**
      * Gets the size of the {@link Surface}.
@@ -80,44 +84,67 @@ public interface SurfaceOutput {
     Size getSize();
 
     /**
-     * Gets the format of the {@link Surface}.
-     */
-    int getFormat();
-
-    /**
-     * Get the rotation degrees.
-     */
-    int getRotationDegrees();
-
-    /**
      * Call this method to mark the {@link Surface} as no longer in use.
      *
-     * <p>After this is called, the implementation should stop writing to the {@link Surface}
-     * provided via {@link #getSurface}
+     * <p>Once the {@link SurfaceProcessor} implementation receives a request to close the
+     * {@link Surface}, it should call this method to acknowledge after stop writing to the
+     * {@link Surface}. Writing to the {@link Surface} after calling this method might cause
+     * errors.
      */
+    @Override
     void close();
 
     /**
-     * Updates the 4 x 4 transformation matrix retrieved from {@link SurfaceTexture
-     * #getTransformMatrix}.
+     * Applies an additional 4x4 transformation on the original matrix.
      *
-     * <p>This method applies an additional transformation on top of the value of
-     * {@link SurfaceTexture#getTransformMatrix}. The result is matrix of the same format, which
-     * is a transform matrix maps 2D homogeneous texture coordinates of the form (s, t, 0, 1)
-     * with s and t in the inclusive range [0, 1] to the texture coordinate that should be used
-     * to sample that location from the texture. The matrix is stored in column-major order so that
-     * it may be passed directly to OpenGL ES via the {@code glLoadMatrixf} or {@code
-     * glUniformMatrix4fv} functions.
+     * <p>When the input {@link Surface} of {@link SurfaceProcessor} is backed by a
+     * {@link SurfaceTexture}, use this method to update the texture transform matrix.
+     *
+     * <p>Typically, after retrieving the transform matrix from
+     * {@link SurfaceTexture#getTransformMatrix}, the {@link SurfaceProcessor} implementation
+     * should always call this method to update the value. The result is a matrix of the same
+     * format, which is a transform matrix maps 2D homogeneous texture coordinates of the form
+     * (s, t, 0, 1) with s and t in the inclusive range [0, 1] to the texture coordinate that
+     * should be used to sample that location from the texture. The matrix is stored in
+     * column-major order so that it may be passed directly to OpenGL ES via the {@code
+     * glLoadMatrixf} or {@code glUniformMatrix4fv} functions.
      *
      * <p>The additional transformation is calculated based on the target rotation, target
      * resolution and the {@link ViewPort} associated with the target {@link UseCase}. The value
-     * could also include workarounds for device specific quirks.
+     * could also include workarounds for device specific bugs. For example, correcting a
+     * stretched camera output stream.
+     *
+     * <p>Code sample:
+     * <pre><code>
+     * float[] transform = new float[16];
+     * float[] updatedTransform = new float[16];
+     *
+     * surfaceTexture.setOnFrameAvailableListener(surfaceTexture -> {
+     *     surfaceTexture.getTransformMatrix(transform);
+     *     outputSurface.updateTransformMatrix(updatedTransform, transform);
+     *     // Use the value of updatedTransform for OpenGL rendering.
+     * });
+     * </code></pre>
+     *
+     * <p>To get the value of the additional transformation, pass in an identity matrix as the
+     * original value. This is useful when {@link SurfaceTexture#getTransformMatrix} is not
+     * applied by the implementation.
+     *
+     * <p>Code sample:
+     * <pre><code>
+     * float[] identity = new float[16];
+     * Matrix.setIdentityM(identity, 0);
+     * float[] updatedTransform = new float[16];
+     *
+     * surfaceTexture.setOnFrameAvailableListener(surfaceTexture -> {
+     *     outputSurface.updateTransformMatrix(updatedTransform, identity);
+     *     // Use the value of updatedTransform for OpenGL rendering.
+     * });
+     * </code></pre>
      *
      * @param updated  the array into which the 4x4 matrix will be stored. The array must
      *                 have exactly 16 elements.
-     * @param original the original value retrieved from
-     *                 {@link SurfaceTexture#getTransformMatrix}. The array must have exactly 16
-     *                 elements.
+     * @param original the original 4x4 matrix. The array must have exactly 16 elements.
      * @see SurfaceTexture#getTransformMatrix(float[])
      */
     void updateTransformMatrix(@NonNull float[] updated, @NonNull float[] original);
@@ -129,10 +156,11 @@ public interface SurfaceOutput {
     @AutoValue
     abstract class Event {
 
+        Event() {
+        }
+
         /**
          * Possible event codes.
-         *
-         * @hide
          */
         @IntDef({EVENT_REQUEST_CLOSE})
         @Retention(RetentionPolicy.SOURCE)
@@ -167,8 +195,6 @@ public interface SurfaceOutput {
 
         /**
          * Creates a {@link Event} for sending to the implementation.
-         *
-         * @hide
          */
         @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
         @NonNull
@@ -176,17 +202,5 @@ public interface SurfaceOutput {
                 @NonNull SurfaceOutput surfaceOutput) {
             return new AutoValue_SurfaceOutput_Event(code, surfaceOutput);
         }
-    }
-
-    /** OpenGL transformation options for SurfaceOutput. */
-    enum GlTransformOptions {
-        /** Apply only the value of {@link SurfaceTexture#getTransformMatrix(float[])}. */
-        USE_SURFACE_TEXTURE_TRANSFORM,
-
-        /**
-         * Discard the value of {@link SurfaceTexture#getTransformMatrix(float[])} and calculate
-         * the transform based on crop rect, rotation degrees and mirroring.
-         */
-        APPLY_CROP_ROTATE_AND_MIRRORING,
     }
 }

@@ -16,121 +16,62 @@
 
 package androidx.camera.testing.fakes;
 
-import android.graphics.SurfaceTexture;
+import static androidx.camera.core.impl.utils.executor.CameraXExecutors.mainThreadExecutor;
+
 import android.os.Build;
-import android.view.Surface;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
-import androidx.camera.core.SurfaceEffect;
-import androidx.camera.core.SurfaceOutput;
-import androidx.camera.core.SurfaceRequest;
-import androidx.camera.core.impl.DeferrableSurface;
+import androidx.camera.core.CameraEffect;
+import androidx.camera.core.SurfaceProcessor;
+import androidx.camera.core.processing.SurfaceProcessorInternal;
 
 import java.util.concurrent.Executor;
 
 /**
- * Fake {@link SurfaceEffect} used in tests.
+ * A fake {@link CameraEffect} with {@link SurfaceProcessor}.
  */
 @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-public class FakeSurfaceEffect implements SurfaceEffect {
+public class FakeSurfaceEffect extends CameraEffect {
 
-    final SurfaceTexture mSurfaceTexture;
-    final Surface mInputSurface;
-    private final Executor mExecutor;
-    private final boolean mAutoCloseSurfaceOutput;
+    private SurfaceProcessorInternal mSurfaceProcessorInternal;
 
-
-    @Nullable
-    private SurfaceRequest mSurfaceRequest;
-    @Nullable
-    private SurfaceOutput mSurfaceOutput;
-    boolean mIsInputSurfaceReleased;
-    boolean mIsOutputSurfaceRequestedToClose;
-
-    Surface mOutputSurface;
-
-    /**
-     * Creates a {@link SurfaceEffect} that closes the {@link SurfaceOutput} automatically.
-     */
-    public FakeSurfaceEffect(@NonNull Executor executor) {
-        this(executor, true);
-    }
-
-    /**
-     * @param autoCloseSurfaceOutput if true, automatically close the {@link SurfaceOutput} once
-     *                               the close request is received. Otherwise, the test needs to
-     *                               get {@link #getSurfaceOutput()} and call
-     *                               {@link SurfaceOutput#close()} to avoid the "Completer GCed"
-     *                               error in {@link DeferrableSurface}.
-     */
-    FakeSurfaceEffect(@NonNull Executor executor, boolean autoCloseSurfaceOutput) {
-        mSurfaceTexture = new SurfaceTexture(0);
-        mInputSurface = new Surface(mSurfaceTexture);
-        mExecutor = executor;
-        mIsInputSurfaceReleased = false;
-        mIsOutputSurfaceRequestedToClose = false;
-        mAutoCloseSurfaceOutput = autoCloseSurfaceOutput;
-    }
-
-    @Override
-    public void onInputSurface(@NonNull SurfaceRequest request) {
-        mSurfaceRequest = request;
-        request.provideSurface(mInputSurface, mExecutor, result -> {
-            mSurfaceTexture.release();
-            mInputSurface.release();
-            mIsInputSurfaceReleased = true;
+    public FakeSurfaceEffect(
+            @NonNull Executor processorExecutor,
+            @NonNull SurfaceProcessor surfaceProcessor) {
+        super(PREVIEW, processorExecutor, surfaceProcessor, throwable -> {
         });
     }
 
-    @Override
-    public void onOutputSurface(@NonNull SurfaceOutput surfaceOutput) {
-        mSurfaceOutput = surfaceOutput;
-        mOutputSurface = surfaceOutput.getSurface(mExecutor,
-                output -> {
-                    if (mAutoCloseSurfaceOutput) {
-                        surfaceOutput.close();
-                    }
-                    mIsOutputSurfaceRequestedToClose = true;
-                }
-        );
-    }
-
-    @Nullable
-    public SurfaceRequest getSurfaceRequest() {
-        return mSurfaceRequest;
-    }
-
-    @Nullable
-    public SurfaceOutput getSurfaceOutput() {
-        return mSurfaceOutput;
-    }
-
-    @NonNull
-    public Surface getInputSurface() {
-        return mInputSurface;
-    }
-
-    @NonNull
-    public Surface getOutputSurface() {
-        return mOutputSurface;
-    }
-
-    public boolean isInputSurfaceReleased() {
-        return mIsInputSurfaceReleased;
-    }
-
-    public boolean isOutputSurfaceRequestedToClose() {
-        return mIsOutputSurfaceRequestedToClose;
+    /**
+     * Create a fake {@link CameraEffect} the {@link #createSurfaceProcessorInternal} value
+     * overridden.
+     */
+    public FakeSurfaceEffect(@NonNull SurfaceProcessorInternal surfaceProcessorInternal) {
+        this(PREVIEW, surfaceProcessorInternal);
     }
 
     /**
-     * Clear up the instance to avoid the "{@link DeferrableSurface} garbage collected" error.
+     * Create a fake {@link CameraEffect} the {@link #createSurfaceProcessorInternal} value
+     * overridden.
+     *
+     * <p> This is helpful when we want to make sure the {@link SurfaceProcessorInternal} is
+     * released properly.
      */
-    public void cleanUp() {
-        if (mSurfaceOutput != null) {
-            mSurfaceOutput.close();
+    public FakeSurfaceEffect(@Targets int targets,
+            @NonNull SurfaceProcessorInternal surfaceProcessorInternal) {
+        super(targets, mainThreadExecutor(), surfaceProcessorInternal, throwable -> {
+        });
+        mSurfaceProcessorInternal = surfaceProcessorInternal;
+    }
+
+    @NonNull
+    @Override
+    public SurfaceProcessorInternal createSurfaceProcessorInternal() {
+        if (mSurfaceProcessorInternal != null) {
+            return mSurfaceProcessorInternal;
+        } else {
+            return super.createSurfaceProcessorInternal();
         }
     }
 }

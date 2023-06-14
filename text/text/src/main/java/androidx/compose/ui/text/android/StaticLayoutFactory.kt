@@ -15,6 +15,7 @@
  */
 package androidx.compose.ui.text.android
 
+import android.graphics.text.LineBreakConfig
 import android.os.Build
 import android.text.Layout.Alignment
 import android.text.StaticLayout
@@ -30,14 +31,20 @@ import androidx.annotation.RequiresApi
 import androidx.compose.ui.text.android.LayoutCompat.BreakStrategy
 import androidx.compose.ui.text.android.LayoutCompat.HyphenationFrequency
 import androidx.compose.ui.text.android.LayoutCompat.JustificationMode
+import androidx.compose.ui.text.android.LayoutCompat.LineBreakStyle
+import androidx.compose.ui.text.android.LayoutCompat.LineBreakWordStyle
 import androidx.core.os.BuildCompat
 import java.lang.reflect.Constructor
 import java.lang.reflect.InvocationTargetException
 
 private const val TAG = "StaticLayoutFactory"
 
+/**
+* @suppress
+*/
 @OptIn(InternalPlatformTextApi::class)
-internal object StaticLayoutFactory {
+@InternalPlatformTextApi
+object StaticLayoutFactory {
 
     private val delegate: StaticLayoutFactoryImpl = if (Build.VERSION.SDK_INT >= 23) {
         StaticLayoutFactory23()
@@ -70,6 +77,10 @@ internal object StaticLayoutFactory {
         useFallbackLineSpacing: Boolean = LayoutCompat.DEFAULT_FALLBACK_LINE_SPACING,
         @BreakStrategy
         breakStrategy: Int = LayoutCompat.DEFAULT_BREAK_STRATEGY,
+        @LineBreakStyle
+        lineBreakStyle: Int = LayoutCompat.DEFAULT_LINE_BREAK_STYLE,
+        @LineBreakWordStyle
+        lineBreakWordStyle: Int = LayoutCompat.DEFAULT_LINE_BREAK_WORD_STYLE,
         @HyphenationFrequency
         hyphenationFrequency: Int = LayoutCompat.DEFAULT_HYPHENATION_FREQUENCY,
         leftIndents: IntArray? = null,
@@ -93,6 +104,8 @@ internal object StaticLayoutFactory {
                 includePadding = includePadding,
                 useFallbackLineSpacing = useFallbackLineSpacing,
                 breakStrategy = breakStrategy,
+                lineBreakStyle = lineBreakStyle,
+                lineBreakWordStyle = lineBreakWordStyle,
                 hyphenationFrequency = hyphenationFrequency,
                 leftIndents = leftIndents,
                 rightIndents = rightIndents
@@ -133,6 +146,8 @@ private class StaticLayoutParams constructor(
     val includePadding: Boolean,
     val useFallbackLineSpacing: Boolean,
     val breakStrategy: Int,
+    val lineBreakStyle: Int,
+    val lineBreakWordStyle: Int,
     val hyphenationFrequency: Int,
     val leftIndents: IntArray?,
     val rightIndents: IntArray?
@@ -181,6 +196,13 @@ private class StaticLayoutFactory23 : StaticLayoutFactoryImpl {
                         params.useFallbackLineSpacing
                     )
                 }
+                if (Build.VERSION.SDK_INT >= 33) {
+                    StaticLayoutFactory33.setLineBreakConfig(
+                        this,
+                        params.lineBreakStyle,
+                        params.lineBreakWordStyle
+                    )
+                }
             }.build()
     }
 
@@ -189,7 +211,7 @@ private class StaticLayoutFactory23 : StaticLayoutFactoryImpl {
         layout: StaticLayout,
         useFallbackLineSpacing: Boolean
     ): Boolean {
-        return if (BuildCompat.isAtLeastT()) {
+        return if (Build.VERSION.SDK_INT >= 33) {
             StaticLayoutFactory33.isFallbackLineSpacingEnabled(layout)
         } else if (Build.VERSION.SDK_INT >= 28) {
             useFallbackLineSpacing
@@ -223,6 +245,17 @@ private object StaticLayoutFactory33 {
     @DoNotInline
     fun isFallbackLineSpacingEnabled(layout: StaticLayout): Boolean {
         return layout.isFallbackLineSpacingEnabled
+    }
+
+    @JvmStatic
+    @DoNotInline
+    fun setLineBreakConfig(builder: Builder, lineBreakStyle: Int, lineBreakWordStyle: Int) {
+        val lineBreakConfig =
+            LineBreakConfig.Builder()
+                .setLineBreakStyle(lineBreakStyle)
+                .setLineBreakWordStyle(lineBreakWordStyle)
+                .build()
+        builder.setLineBreakConfig(lineBreakConfig)
     }
 }
 

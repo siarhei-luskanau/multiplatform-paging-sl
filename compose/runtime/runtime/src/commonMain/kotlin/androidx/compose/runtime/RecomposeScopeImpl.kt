@@ -19,6 +19,8 @@ package androidx.compose.runtime
 import androidx.compose.runtime.collection.IdentityArrayIntMap
 import androidx.compose.runtime.collection.IdentityArrayMap
 import androidx.compose.runtime.collection.IdentityArraySet
+import androidx.compose.runtime.snapshots.fastAny
+import androidx.compose.runtime.snapshots.fastForEach
 
 /**
  * Represents a recomposable scope or section of the composition hierarchy. Can be used to
@@ -33,12 +35,35 @@ interface RecomposeScope {
     fun invalidate()
 }
 
+private const val changedLowBitMask = 0b001_001_001_001_001_001_001_001_001_001_0
+private const val changedHighBitMask = changedLowBitMask shl 1
+private const val changedMask = (changedLowBitMask or changedHighBitMask).inv()
+
+/**
+ * A compiler plugin utility function to change $changed flags from Different(10) to Same(01) for
+ * when captured by restart lambdas. All parameters are passed with the same value as it was
+ * previously invoked with and the changed flags should reflect that.
+ */
+@PublishedApi
+internal fun updateChangedFlags(flags: Int): Int {
+    val lowBits = flags and changedLowBitMask
+    val highBits = flags and changedHighBitMask
+    return ((flags and changedMask) or
+        (lowBits or (highBits shr 1)) or ((lowBits shl 1) and highBits))
+}
+
 private const val UsedFlag = 0x01
 private const val DefaultsInScopeFlag = 0x02
 private const val DefaultsInvalidFlag = 0x04
 private const val RequiresRecomposeFlag = 0x08
 private const val SkippedFlag = 0x10
 private const val RereadingFlag = 0x20
+
+internal interface RecomposeScopeOwner {
+    fun invalidate(scope: RecomposeScopeImpl, instance: Any?): InvalidationResult
+    fun recomposeScopeReleased(scope: RecomposeScopeImpl)
+    fun recordReadOf(value: Any)
+}
 
 /**
  * A RecomposeScope is created for a region of the composition that can be recomposed independently
@@ -47,13 +72,12 @@ private const val RereadingFlag = 0x20
  * [Composer.startRestartGroup] and is used to track how to restart the group.
  */
 internal class RecomposeScopeImpl(
-    composition: CompositionImpl?
+    owner: RecomposeScopeOwner?
 ) : ScopeUpdateScope, RecomposeScope {
 
     private var flags: Int = 0
 
-    var composition: CompositionImpl? = composition
-        private set
+    private var owner: RecomposeScopeOwner? = owner
 
     /**
      * An anchor to the location in the slot table that start the group associated with this
@@ -66,7 +90,7 @@ internal class RecomposeScopeImpl(
      * removed from the slot table. For example, if the scope is in the then clause of an if
      * statement that later becomes false.
      */
-    val valid: Boolean get() = composition != null && anchor?.valid ?: false
+    val valid: Boolean get() = owner != null && anchor?.valid ?: false
 
     val canRecompose: Boolean get() = block != null
 
@@ -146,18 +170,19 @@ internal class RecomposeScopeImpl(
     }
 
     /**
-     * Invalidate the group which will cause [composition] to request this scope be recomposed,
+     * Invalidate the group which will cause [owner] to request this scope be recomposed,
      * and an [InvalidationResult] will be returned.
      */
     fun invalidateForResult(value: Any?): InvalidationResult =
-        composition?.invalidate(this, value) ?: InvalidationResult.IGNORED
+        owner?.invalidate(this, value) ?: InvalidationResult.IGNORED
 
     /**
      * Release the recompose scope. This is called when the recompose scope has been removed by the
      * compostion because the part of the composition it was tracking was removed.
      */
     fun release() {
-        composition = null
+        owner?.recomposeScopeReleased(this)
+        owner = null
         trackedInstances = null
         trackedDependencies = null
     }
@@ -166,25 +191,28 @@ internal class RecomposeScopeImpl(
      * Called when the data tracked by this recompose scope moves to a different composition when
      * for example, the movable content it is part of has moved.
      */
-    fun adoptedBy(composition: CompositionImpl) {
-        this.composition = composition
+    fun adoptedBy(owner: RecomposeScopeOwner) {
+        this.owner = owner
     }
 
     /**
-     * Invalidate the group which will cause [composition] to request this scope be recomposed.
+     * Invalidate the group which will cause [owner] to request this scope be recomposed.
      *
      * Unlike [invalidateForResult], this method is thread safe and calls the thread safe
      * invalidate on the composer.
      */
     override fun invalidate() {
-        composition?.invalidate(this, null)
+        owner?.invalidate(this, null)
     }
 
     /**
      * Update [block]. The scope is returned by [Composer.endRestartGroup] when [used] is true
      * and implements [ScopeUpdateScope].
      */
-    override fun updateScope(block: (Composer, Int) -> Unit) { this.block = block }
+    override fun updateScope(
+        @Suppress("PrimitiveInLambda")
+        block: (Composer, Int) -> Unit
+    ) { this.block = block }
 
     private var currentToken = 0
     private var trackedInstances: IdentityArrayIntMap? = null
@@ -228,17 +256,26 @@ internal class RecomposeScopeImpl(
 
     /**
      * Track instances that were read in scope.
+     * @return whether the value was already read in scope during current pass
      */
-    fun recordRead(instance: Any) {
-        if (rereading) return
-        (trackedInstances ?: IdentityArrayIntMap().also { trackedInstances = it })
+    fun recordRead(instance: Any): Boolean {
+        if (rereading) return false // Re-reading should force composition to update its tracking
+
+        val token = (trackedInstances ?: IdentityArrayIntMap().also { trackedInstances = it })
             .add(instance, currentToken)
+
+        if (token == currentToken) {
+            return true
+        }
+
         if (instance is DerivedState<*>) {
             val tracked = trackedDependencies ?: IdentityArrayMap<DerivedState<*>, Any?>().also {
                 trackedDependencies = it
             }
-            tracked[instance] = instance.currentValue
+            tracked[instance] = instance.currentRecord.currentValue
         }
+
+        return false
     }
 
     /**
@@ -265,7 +302,7 @@ internal class RecomposeScopeImpl(
                     @Suppress("UNCHECKED_CAST")
                     it as DerivedState<Any?>
                     val policy = it.policy ?: structuralEqualityPolicy()
-                    policy.equivalent(it.currentValue, trackedDependencies[it])
+                    policy.equivalent(it.currentRecord.currentValue, trackedDependencies[it])
                 }
             }
         )
@@ -274,12 +311,12 @@ internal class RecomposeScopeImpl(
     }
 
     fun rereadTrackedInstances() {
-        composition?.let { composition ->
+        owner?.let { owner ->
             trackedInstances?.let { trackedInstances ->
                 rereading = true
                 try {
                     trackedInstances.forEach { value, _ ->
-                        composition.recordReadOf(value)
+                        owner.recordReadOf(value)
                     }
                 } finally {
                     rereading = false
@@ -327,5 +364,27 @@ internal class RecomposeScopeImpl(
                 }
             } else null
         }
+    }
+
+    companion object {
+        internal fun adoptAnchoredScopes(
+            slots: SlotWriter,
+            anchors: List<Anchor>,
+            newOwner: RecomposeScopeOwner
+        ) {
+            if (anchors.isNotEmpty()) {
+                anchors.fastForEach { anchor ->
+                    // The recompose scope is always at slot 0 of a restart group.
+                    val recomposeScope = slots.slot(anchor, 0) as? RecomposeScopeImpl
+                    // Check for null as the anchor might not be for a recompose scope
+                    recomposeScope?.adoptedBy(newOwner)
+                }
+            }
+        }
+
+        internal fun hasAnchoredRecomposeScopes(slots: SlotTable, anchors: List<Anchor>) =
+            anchors.isNotEmpty() && anchors.fastAny {
+                slots.ownsAnchor(it) && slots.slot(slots.anchorIndex(it), 0) is RecomposeScopeImpl
+            }
     }
 }

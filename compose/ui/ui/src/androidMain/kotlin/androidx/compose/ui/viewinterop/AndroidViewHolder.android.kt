@@ -19,20 +19,25 @@ package androidx.compose.ui.viewinterop
 import android.content.Context
 import android.graphics.Rect
 import android.graphics.Region
+import android.os.Build
 import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewParent
+import androidx.compose.runtime.ComposeNodeLifecycleCallback
 import androidx.compose.runtime.CompositionContext
 import androidx.compose.runtime.snapshots.SnapshotStateObserver
 import androidx.compose.ui.ExperimentalComposeUiApi
+import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
 import androidx.compose.ui.input.nestedscroll.NestedScrollSource
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.ui.layout.IntrinsicMeasurable
 import androidx.compose.ui.layout.IntrinsicMeasureScope
@@ -46,6 +51,7 @@ import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.platform.AndroidComposeView
 import androidx.compose.ui.platform.composeToViewOffset
 import androidx.compose.ui.platform.compositionContext
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Velocity
@@ -53,7 +59,7 @@ import androidx.core.view.NestedScrollingParent3
 import androidx.core.view.NestedScrollingParentHelper
 import androidx.core.view.ViewCompat
 import androidx.lifecycle.LifecycleOwner
-import androidx.lifecycle.ViewTreeLifecycleOwner
+import androidx.lifecycle.setViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistryOwner
 import androidx.savedstate.setViewTreeSavedStateRegistryOwner
 import kotlin.math.roundToInt
@@ -65,11 +71,16 @@ import kotlinx.coroutines.launch
  * `AndroidViewBinding` APIs, which are built on top of [AndroidViewHolder].
  */
 @OptIn(ExperimentalComposeUiApi::class)
-internal abstract class AndroidViewHolder(
+internal open class AndroidViewHolder(
     context: Context,
     parentContext: CompositionContext?,
-    private val dispatcher: NestedScrollDispatcher
-) : ViewGroup(context), NestedScrollingParent3 {
+    private val compositeKeyHash: Int,
+    private val dispatcher: NestedScrollDispatcher,
+    /**
+     * The view hosted by this holder.
+     */
+    val view: View
+) : ViewGroup(context), NestedScrollingParent3, ComposeNodeLifecycleCallback {
 
     init {
         // Any [Abstract]ComposeViews that are descendants of this view will host
@@ -80,22 +91,14 @@ internal abstract class AndroidViewHolder(
         }
         // We save state ourselves, depending on composition.
         isSaveFromParentEnabled = false
+
+        @Suppress("LeakingThis")
+        addView(view)
     }
 
-    /**
-     * The view hosted by this holder.
-     */
-    var view: View? = null
-        internal set(value) {
-            if (value !== field) {
-                field = value
-                removeAllViews()
-                if (value != null) {
-                    addView(value)
-                    runUpdate()
-                }
-            }
-        }
+    // Keep nullable to match the `expect` declaration of InteropViewFactoryHolder
+    @Suppress("RedundantNullableReturnType")
+    fun getInteropView(): InteropView? = view
 
     /**
      * The update logic of the [View].
@@ -107,6 +110,12 @@ internal abstract class AndroidViewHolder(
             runUpdate()
         }
     private var hasUpdateBlock = false
+
+    var reset: () -> Unit = {}
+        protected set
+
+    var release: () -> Unit = {}
+        protected set
 
     /**
      * The modifier of the `LayoutNode` corresponding to this [View].
@@ -134,12 +143,12 @@ internal abstract class AndroidViewHolder(
 
     internal var onDensityChanged: ((Density) -> Unit)? = null
 
-    /** Sets the [ViewTreeLifecycleOwner] for this view. */
+    /** Sets the ViewTreeLifecycleOwner for this view. */
     var lifecycleOwner: LifecycleOwner? = null
         set(value) {
             if (value !== field) {
                 field = value
-                ViewTreeLifecycleOwner.set(this, value)
+                setViewTreeLifecycleOwner(value)
             }
         }
 
@@ -170,6 +179,10 @@ internal abstract class AndroidViewHolder(
         }
     }
 
+    private val runInvalidate: () -> Unit = {
+        layoutNode.invalidateLayer()
+    }
+
     internal var onRequestDisallowInterceptTouchEvent: ((Boolean) -> Unit)? = null
 
     private val location = IntArray(2)
@@ -180,9 +193,38 @@ internal abstract class AndroidViewHolder(
     private val nestedScrollingParentHelper: NestedScrollingParentHelper =
         NestedScrollingParentHelper(this)
 
+    private var isDrawing = false
+
+    override fun onReuse() {
+        // We reset at the same time we remove the view. So if the view was removed, we can just
+        // re-add it and it's ready to go. If it's already attached, we didn't reset it and need
+        // to do so for it to be reused correctly.
+        if (view.parent !== this) {
+            addView(view)
+        } else {
+            reset()
+        }
+    }
+
+    override fun onDeactivate() {
+        reset()
+        removeAllViewsInLayout()
+    }
+
+    override fun onRelease() {
+        release()
+    }
+
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        view?.measure(widthMeasureSpec, heightMeasureSpec)
-        setMeasuredDimension(view?.measuredWidth ?: 0, view?.measuredHeight ?: 0)
+        if (view.parent !== this) {
+            setMeasuredDimension(
+                MeasureSpec.getSize(widthMeasureSpec),
+                MeasureSpec.getSize(heightMeasureSpec)
+            )
+            return
+        }
+        view.measure(widthMeasureSpec, heightMeasureSpec)
+        setMeasuredDimension(view.measuredWidth, view.measuredHeight)
         lastWidthMeasureSpec = widthMeasureSpec
         lastHeightMeasureSpec = heightMeasureSpec
     }
@@ -197,11 +239,11 @@ internal abstract class AndroidViewHolder(
     }
 
     override fun onLayout(changed: Boolean, l: Int, t: Int, r: Int, b: Int) {
-        view?.layout(0, 0, r - l, b - t)
+        view.layout(0, 0, r - l, b - t)
     }
 
     override fun getLayoutParams(): LayoutParams? {
-        return view?.layoutParams
+        return view.layoutParams
             ?: LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT)
     }
 
@@ -228,14 +270,35 @@ internal abstract class AndroidViewHolder(
     @Suppress("Deprecation")
     override fun invalidateChildInParent(location: IntArray?, dirty: Rect?): ViewParent? {
         super.invalidateChildInParent(location, dirty)
-        layoutNode.invalidateLayer()
+        invalidateOrDefer()
         return null
     }
 
     override fun onDescendantInvalidated(child: View, target: View) {
         // We need to call super here in order to correctly update the dirty flags of the holder.
         super.onDescendantInvalidated(child, target)
-        layoutNode.invalidateLayer()
+        invalidateOrDefer()
+    }
+
+    fun invalidateOrDefer() {
+        if (isDrawing) {
+            // If an invalidation occurs while drawing invalidate until next frame to avoid
+            // redrawing multiple times during the same frame the same content.
+            view.postOnAnimation(runInvalidate)
+        } else {
+            // when not drawing, we can invalidate any time and not risk multiple draws, we don't
+            // defer to avoid waiting a full frame to draw content.
+            layoutNode.invalidateLayer()
+        }
+    }
+
+    override fun onWindowVisibilityChanged(visibility: Int) {
+        super.onWindowVisibilityChanged(visibility)
+        // On Lollipop, when the Window becomes visible, child Views need to be explicitly
+        // invalidated for some reason.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M && visibility == View.VISIBLE) {
+            layoutNode.invalidateLayer()
+        }
     }
 
     // Always mark the region of the View to not be transparent to disable an optimisation which
@@ -262,34 +325,39 @@ internal abstract class AndroidViewHolder(
     val layoutNode: LayoutNode = run {
         // Prepare layout node that proxies measure and layout passes to the View.
         val layoutNode = LayoutNode()
+        @OptIn(InternalComposeUiApi::class)
+        layoutNode.interopViewFactoryHolder = this@AndroidViewHolder
 
         val coreModifier = Modifier
+            .nestedScroll(NoOpScrollConnection, dispatcher)
+            .semantics(true) {}
             .pointerInteropFilter(this)
             .drawBehind {
                 drawIntoCanvas { canvas ->
+                    isDrawing = true
                     (layoutNode.owner as? AndroidComposeView)
                         ?.drawAndroidView(this@AndroidViewHolder, canvas.nativeCanvas)
+                    isDrawing = false
                 }
             }.onGloballyPositioned {
                 // The global position of this LayoutNode can change with it being replaced. For
                 // these cases, we need to inform the View.
                 layoutAccordingTo(layoutNode)
             }
+        layoutNode.compositeKeyHash = compositeKeyHash
         layoutNode.modifier = modifier.then(coreModifier)
         onModifierChanged = { layoutNode.modifier = it.then(coreModifier) }
 
         layoutNode.density = density
         onDensityChanged = { layoutNode.density = it }
 
-        var viewRemovedOnDetach: View? = null
         layoutNode.onAttach = { owner ->
             (owner as? AndroidComposeView)?.addAndroidView(this, layoutNode)
-            if (viewRemovedOnDetach != null) view = viewRemovedOnDetach
+            if (view.parent !== this) addView(view)
         }
         layoutNode.onDetach = { owner ->
             (owner as? AndroidComposeView)?.removeAndroidView(this)
-            viewRemovedOnDetach = view
-            view = null
+            removeAllViewsInLayout()
         }
 
         layoutNode.measurePolicy = object : MeasurePolicy {
@@ -297,6 +365,10 @@ internal abstract class AndroidViewHolder(
                 measurables: List<Measurable>,
                 constraints: Constraints
             ): MeasureResult {
+                if (childCount == 0) {
+                    return layout(constraints.minWidth, constraints.minHeight) {}
+                }
+
                 if (constraints.minWidth != 0) {
                     getChildAt(0).minimumWidth = constraints.minWidth
                 }
@@ -491,7 +563,7 @@ internal abstract class AndroidViewHolder(
     }
 
     override fun isNestedScrollingEnabled(): Boolean {
-        return view?.isNestedScrollingEnabled ?: super.isNestedScrollingEnabled()
+        return view.isNestedScrollingEnabled
     }
 }
 
@@ -503,6 +575,12 @@ private fun View.layoutAccordingTo(layoutNode: LayoutNode) {
 }
 
 private const val Unmeasured = Int.MIN_VALUE
+
+/**
+ * No-op Connection required by nested scroll modifier. This is No-op because we don't want
+ * to influence nested scrolling with it and it is required by [Modifier.nestedScroll].
+ */
+private val NoOpScrollConnection = object : NestedScrollConnection {}
 
 private fun Int.toComposeOffset() = toFloat() * -1
 

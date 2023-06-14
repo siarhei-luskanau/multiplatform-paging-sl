@@ -17,15 +17,15 @@
 package androidx.build
 
 import androidx.build.SupportConfig.COMPILE_SDK_VERSION
-import org.gradle.api.GradleException
+import java.io.File
 import org.gradle.api.Project
 import org.gradle.api.file.FileCollection
-import java.io.File
 
 object SupportConfig {
     const val DEFAULT_MIN_SDK_VERSION = 14
     const val INSTRUMENTATION_RUNNER = "androidx.test.runner.AndroidJUnitRunner"
-    const val BUILD_TOOLS_VERSION = "33.0.0"
+    private const val INTERNAL_BUILD_TOOLS_VERSION = "34.0.0-rc3"
+    private const val PUBLIC_BUILD_TOOLS_VERSION = "34.0.0-rc4"
     const val NDK_VERSION = "23.1.7779620"
 
     /**
@@ -34,7 +34,7 @@ object SupportConfig {
      * Either an integer value or a pre-release platform code, prefixed with "android-" (ex.
      * "android-28" or "android-Q") as you would see within the SDK's platforms directory.
      */
-    const val COMPILE_SDK_VERSION = "android-33"
+    const val COMPILE_SDK_VERSION = "android-33-ext5"
 
     /**
      * The Android SDK version to use for targetSdkVersion meta-data.
@@ -48,18 +48,24 @@ object SupportConfig {
      * set to a pre-release version, tests will only be able to run on pre-release devices.
      */
     const val TARGET_SDK_VERSION = 33
+
+    /**
+     * Returns the build tools version that should be used for the project.
+     *
+     * Note that the value might be different between the internal and external (github) builds.
+     */
+    @JvmStatic
+    fun buildToolsVersion(project: Project): String {
+        return if (ProjectLayoutType.isPlayground(project)) {
+            PUBLIC_BUILD_TOOLS_VERSION
+        } else {
+            INTERNAL_BUILD_TOOLS_VERSION
+        }
+    }
 }
 
 fun Project.getExternalProjectPath(): File {
-    val path = if (System.getenv("COMPOSE_DESKTOP_GITHUB_BUILD") != null)
-        File(System.getenv("OUT_DIR")).also {
-            if (!File(it, "doclava").isDirectory()) {
-                throw GradleException("Please checkout doclava to $it")
-            }
-        }
-    else
-        File(rootProject.projectDir, "../../external")
-    return path.getCanonicalFile()
+    return File(rootProject.projectDir, "../../external").canonicalFile
 }
 
 fun Project.getKeystore(): File {
