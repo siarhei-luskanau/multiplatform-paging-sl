@@ -22,10 +22,11 @@ import androidx.paging.PageEvent.Drop
 import androidx.paging.PageEvent.Insert
 import androidx.paging.PageEvent.LoadStateUpdate
 import androidx.paging.RemoteMediator.InitializeAction.LAUNCH_INITIAL_REFRESH
+import androidx.paging.internal.BUGANIZER_URL
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterNotNull
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.onStart
 
 internal class PageFetcher<Key : Any, Value : Any>(
@@ -63,6 +64,12 @@ internal class PageFetcher<Key : Any, Value : Any>(
             }
             .simpleScan(null) { previousGeneration: GenerationInfo<Key, Value>?,
                 triggerRemoteRefresh: Boolean ->
+                // Enable refresh if this is the first generation and we have LAUNCH_INITIAL_REFRESH
+                // or if this generation was started due to [refresh] being invoked.
+                if (triggerRemoteRefresh) {
+                    remoteMediatorAccessor?.allowRefresh()
+                }
+
                 val pagingSource = generateNewPagingSource(
                     previousPagingSource = previousGeneration?.snapshot?.pagingSource
                 )
@@ -88,8 +95,12 @@ internal class PageFetcher<Key : Any, Value : Any>(
                     previousPagingState = previousGeneration.state
                 }
 
-                val initialKey: Key? = previousPagingState?.let { pagingSource.getRefreshKey(it) }
-                    ?: initialKey
+                val initialKey: Key? = when (previousPagingState) {
+                    null -> initialKey
+                    else -> pagingSource.getRefreshKey(previousPagingState).also {
+                        log(DEBUG) { "Refresh key $it returned from PagingSource $pagingSource" }
+                    }
+                }
 
                 previousGeneration?.snapshot?.close()
                 previousGeneration?.job?.cancel()
@@ -102,9 +113,8 @@ internal class PageFetcher<Key : Any, Value : Any>(
                         retryFlow = retryEvents.flow,
                         // Only trigger remote refresh on refresh signals that do not originate from
                         // initialization or PagingSource invalidation.
-                        triggerRemoteRefresh = triggerRemoteRefresh,
                         remoteMediatorConnection = remoteMediatorAccessor,
-                        invalidate = this@PageFetcher::refresh,
+                        jumpCallback = this@PageFetcher::refresh,
                         previousPagingState = previousPagingState,
                     ),
                     state = previousPagingState,
@@ -115,10 +125,12 @@ internal class PageFetcher<Key : Any, Value : Any>(
             .simpleMapLatest { generation ->
                 val downstreamFlow = generation.snapshot
                     .injectRemoteEvents(generation.job, remoteMediatorAccessor)
+                    .onEach { log(VERBOSE) { "Sent $it" } }
 
                 PagingData(
                     flow = downstreamFlow,
-                    receiver = PagerUiReceiver(generation.snapshot, retryEvents)
+                    uiReceiver = PagerUiReceiver(retryEvents),
+                    hintReceiver = PagerHintReceiver(generation.snapshot)
                 )
             }
             .collect(::send)
@@ -170,6 +182,16 @@ internal class PageFetcher<Key : Any, Value : Any>(
                                     mediator = remoteState,
                                 )
                             }
+                            is PageEvent.StaticList -> {
+                                throw IllegalStateException(
+                                    """Paging generated an event to display a static list that
+                                        | originated from a paginated source. If you see this
+                                        | exception, it is most likely a bug in the library.
+                                        | Please file a bug so we can fix it at:
+                                        | $BUGANIZER_URL"""
+                                        .trimMargin()
+                                )
+                            }
                         }
                     } else {
                         LoadStateUpdate(
@@ -202,24 +224,27 @@ internal class PageFetcher<Key : Any, Value : Any>(
         pagingSource.registerInvalidatedCallback(::invalidate)
         previousPagingSource?.unregisterInvalidatedCallback(::invalidate)
         previousPagingSource?.invalidate() // Note: Invalidate is idempotent.
+        log(DEBUG) { "Generated new PagingSource $pagingSource" }
 
         return pagingSource
     }
 
-    inner class PagerUiReceiver<Key : Any, Value : Any> constructor(
-        @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
-        internal val pageFetcherSnapshot: PageFetcherSnapshot<Key, Value>,
-        private val retryEventBus: ConflatedEventBus<Unit>
-    ) : UiReceiver {
-        override fun accessHint(viewportHint: ViewportHint) {
-            pageFetcherSnapshot.accessHint(viewportHint)
-        }
-
+    inner class PagerUiReceiver(private val retryEventBus: ConflatedEventBus<Unit>) : UiReceiver {
         override fun retry() {
             retryEventBus.send(Unit)
         }
 
         override fun refresh() = this@PageFetcher.refresh()
+    }
+
+    inner class PagerHintReceiver<Key : Any, Value : Any> constructor(
+        @VisibleForTesting(otherwise = VisibleForTesting.PRIVATE)
+        internal val pageFetcherSnapshot: PageFetcherSnapshot<Key, Value>,
+    ) : HintReceiver {
+
+        override fun accessHint(viewportHint: ViewportHint) {
+            pageFetcherSnapshot.accessHint(viewportHint)
+        }
     }
 
     private class GenerationInfo<Key : Any, Value : Any>(

@@ -16,48 +16,6 @@
 -->
 
 <resources>
-    <declare-styleable name="lbBaseGridView">
-        <!-- Allow DPAD key to navigate out at the front of the View (where position = 0),
-             default is false  -->
-        <attr name="focusOutFront" format="boolean" />
-        <!-- Allow DPAD key to navigate out at the end of the view, default is false -->
-        <attr name="focusOutEnd" format="boolean" />
-        <!-- Allow DPAD key to navigate out of first row, for HorizontalGridView, it's the
-             top edge, for VerticalGridView it's the "start" edge.  Default value is true.  -->
-        <attr name="focusOutSideStart" format="boolean" />
-        <!-- Allow DPAD key to navigate out of last row, for HorizontalGridView, it's the
-             bottom edge, for VerticalGridView it's the "end" edge.  Default value is true.  -->
-        <attr name="focusOutSideEnd" format="boolean" />
-        <!-- Deprecated, use android:horizontalSpacing -->
-        <attr name="horizontalMargin" format="dimension" />
-        <!-- Deprecated, use android:verticalSpacing -->
-        <attr name="verticalMargin" format="dimension" />
-        <!-- Defining space between two items horizontally -->
-        <attr name="android:horizontalSpacing" />
-        <!-- Defining space between two items vertically -->
-        <attr name="android:verticalSpacing" />
-        <!-- Defining gravity of child view -->
-        <attr name="android:gravity" />
-    </declare-styleable>
-
-    <declare-styleable name="lbHorizontalGridView">
-        <!-- Defining height of each row of HorizontalGridView -->
-        <attr name="rowHeight" format="dimension" >
-            <enum name="wrap_content" value="-2" />
-        </attr>
-        <!-- Defining number of rows -->
-        <attr name="numberOfRows" format="integer" />
-    </declare-styleable>
-
-    <declare-styleable name="lbVerticalGridView">
-        <!-- Defining width of each column of VerticalGridView -->
-        <attr name="columnWidth" format="dimension" >
-            <enum name="wrap_content" value="-2" />
-        </attr>
-        <!-- Defining number of columns -->
-        <attr name="numberOfColumns" format="integer" />
-    </declare-styleable>
-
     <declare-styleable name="lbBaseCardView">
         <!-- Defines the background of card -->
         <attr name="cardForeground" format="reference|color"/>
@@ -394,19 +352,19 @@
         <attr name="guidedStepImeDisappearingAnimation" format="reference" />
 
         <!-- Theme attribute for the style of the main container in a GuidanceStylist. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidanceContainerStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidanceContainerStyle}.-->
         <attr name="guidanceContainerStyle" format="reference" />
         <!-- Theme attribute for the style of the title in a GuidanceStylist. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidanceTitleStyle}. -->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidanceTitleStyle}. -->
         <attr name="guidanceTitleStyle" format="reference" />
         <!-- Theme attribute for the style of the description in a GuidanceStylist. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidanceDescriptionStyle}. -->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidanceDescriptionStyle}. -->
         <attr name="guidanceDescriptionStyle" format="reference" />
         <!-- Theme attribute for the style of the breadcrumb in a GuidanceStylist. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidanceBreadcrumbStyle}. -->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidanceBreadcrumbStyle}. -->
         <attr name="guidanceBreadcrumbStyle" format="reference" />
         <!-- Theme attribute for the style of the icon in a GuidanceStylist. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidanceIconStyle}. -->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidanceIconStyle}. -->
         <attr name="guidanceIconStyle" format="reference" />
 
         <!-- Theme attribute for the style of the item selector in a GuidedActionsPresenter. Default is
@@ -414,27 +372,27 @@
         <attr name="guidedActionsSelectorDrawable" format="reference" />
 
         <!-- Theme attribute for the shadow elevation of GuidedActions. Default is
-             {@landroidx.leanback.R.dimen#lb_guidedactions_elevation}.-->
+             {@link androidx.leanback.R.dimen#lb_guidedactions_elevation}.-->
         <attr name="guidedActionsElevation" format="dimension|reference" />
 
         <!-- Theme attribute for the background of GuidedActions. Default is
-             {@landroidx.leanback.R.color#lb_guidedactions_background}.-->
+             {@link androidx.leanback.R.color#lb_guidedactions_background}.-->
         <attr name="guidedActionsBackground" format="reference" />
 
         <!-- Theme attribute for the dark version background of GuidedActions. Default is
-             {@landroidx.leanback.R.color#lb_guidedactions_background_dark}.-->
+             {@link androidx.leanback.R.color#lb_guidedactions_background_dark}.-->
         <attr name="guidedActionsBackgroundDark" format="reference" />
 
         <!-- Theme attribute for the style of the list in a GuidedActionsPresenter. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidedActionsListStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidedActionsListStyle}.-->
         <attr name="guidedActionsListStyle" format="reference" />
 
         <!-- Theme attribute for the style of the sub actions list in a GuidedActionsPresenter. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidedSubActionsListStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidedSubActionsListStyle}.-->
         <attr name="guidedSubActionsListStyle" format="reference" />
 
         <!-- Theme attribute for the style of the list in a GuidedActionsPresenter. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_GuidedButtonActionsListStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_GuidedButtonActionsListStyle}.-->
         <attr name="guidedButtonActionsListStyle" format="reference" />
 
         <!-- Theme attribute for the style of the container of a single action in a
@@ -584,31 +542,31 @@
         <attr name="onboardingTheme" format="reference" />
 
         <!-- Theme attribute for the style of the header in onboarding screen. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingHeaderStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingHeaderStyle}.-->
         <attr name="onboardingHeaderStyle" format="reference" />
         <!-- Theme attribute for the style of the title text in onboarding screen. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingTitleStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingTitleStyle}.-->
         <attr name="onboardingTitleStyle" format="reference" />
         <!-- Theme attribute for the style of the description text in onboarding screen. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingDescriptionStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingDescriptionStyle}.-->
         <attr name="onboardingDescriptionStyle" format="reference" />
 
         <!-- Theme attribute for the style of the navigator container in onboarding screen. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingNavigatorContainerStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingNavigatorContainerStyle}.-->
         <attr name="onboardingNavigatorContainerStyle" format="reference" />
         <!-- Theme attribute for the style of the page indicator in onboarding screen. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingPageIndicatorStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingPageIndicatorStyle}.-->
         <attr name="onboardingPageIndicatorStyle" format="reference" />
         <!-- Theme attribute for the style of the start button in onboarding screen. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingStartButtonStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingStartButtonStyle}.-->
         <attr name="onboardingStartButtonStyle" format="reference" />
 
         <!-- Theme attribute for the style of the logo in onboarding screen. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingLogoStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingLogoStyle}.-->
         <attr name="onboardingLogoStyle" format="reference" />
 
         <!-- Theme attribute for the style of the main icon in onboarding fragment. Default is
-             {@landroidx.leanback.R.style#Widget_Leanback_OnboardingMainIconStyle}.-->
+             {@link androidx.leanback.R.style#Widget_Leanback_OnboardingMainIconStyle}.-->
         <attr name="onboardingMainIconStyle" format="reference" />
     </declare-styleable>
 

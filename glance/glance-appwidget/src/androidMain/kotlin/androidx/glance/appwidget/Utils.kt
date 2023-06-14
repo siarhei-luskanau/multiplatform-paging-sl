@@ -23,10 +23,10 @@ import android.view.View
 import android.widget.RemoteViews
 import androidx.annotation.IdRes
 import androidx.annotation.LayoutRes
-import androidx.core.widget.setViewStubInflatedId
-import androidx.core.widget.setViewStubLayoutResource
-import androidx.glance.unit.Dp
-import androidx.glance.unit.dp
+import androidx.core.widget.RemoteViewsCompat.setViewStubInflatedId
+import androidx.core.widget.RemoteViewsCompat.setViewStubLayoutResource
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 
 internal fun Dp.toPixels(context: Context) = toPixels(context.resources.displayMetrics)
 
@@ -50,13 +50,19 @@ internal fun RemoteViews.setViewEnabled(viewId: Int, enabled: Boolean) {
  */
 @IdRes
 internal fun RemoteViews.inflateViewStub(
+    translationContext: TranslationContext,
     @IdRes viewStubId: Int,
-    @LayoutRes layoutId: Int,
+    @LayoutRes layoutId: Int = 0,
     @IdRes inflatedId: Int? = null
 ): Int {
-    val viewId = inflatedId ?: View.generateViewId()
-    setViewStubInflatedId(viewStubId, viewId)
-    setViewStubLayoutResource(viewStubId, layoutId)
+    require(viewStubId != View.NO_ID) { "viewStubId must not be View.NO_ID" }
+    val viewId = inflatedId ?: translationContext.nextViewId()
+    if (viewId != View.NO_ID) {
+        setViewStubInflatedId(viewStubId, viewId)
+    }
+    if (layoutId != 0) {
+        setViewStubLayoutResource(viewStubId, layoutId)
+    }
     setViewVisibility(viewStubId, View.VISIBLE)
     return viewId
 }

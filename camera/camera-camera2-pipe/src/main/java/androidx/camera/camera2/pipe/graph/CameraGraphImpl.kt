@@ -14,35 +14,34 @@
  * limitations under the License.
  */
 
-@file:RequiresApi(21) // TODO(b/200306659): Remove and replace with annotation on package-info.java
-
 package androidx.camera.camera2.pipe.graph
 
 import android.view.Surface
 import androidx.annotation.RequiresApi
+import androidx.camera.camera2.pipe.CameraController
 import androidx.camera.camera2.pipe.CameraGraph
 import androidx.camera.camera2.pipe.CameraMetadata
 import androidx.camera.camera2.pipe.StreamGraph
 import androidx.camera.camera2.pipe.StreamId
-import androidx.camera.camera2.pipe.compat.Camera2StreamGraph
-import androidx.camera.camera2.pipe.compat.CameraController
 import androidx.camera.camera2.pipe.config.CameraGraphScope
 import androidx.camera.camera2.pipe.core.Debug
 import androidx.camera.camera2.pipe.core.Log
 import androidx.camera.camera2.pipe.core.TokenLockImpl
 import androidx.camera.camera2.pipe.core.acquire
 import androidx.camera.camera2.pipe.core.acquireOrNull
-import kotlinx.atomicfu.atomic
 import javax.inject.Inject
+import kotlinx.atomicfu.atomic
 
 internal val cameraGraphIds = atomic(0)
 
+@RequiresApi(21)
 @CameraGraphScope
 internal class CameraGraphImpl @Inject constructor(
     graphConfig: CameraGraph.Config,
     metadata: CameraMetadata,
     private val graphProcessor: GraphProcessor,
-    private val streamGraph: Camera2StreamGraph,
+    private val streamGraph: StreamGraphImpl,
+    private val surfaceGraph: SurfaceGraph,
     private val cameraController: CameraController,
     private val graphState3A: GraphState3A,
     private val listener3A: Listener3A
@@ -52,7 +51,7 @@ internal class CameraGraphImpl @Inject constructor(
     // Only one session can be active at a time.
     private val sessionLock = TokenLockImpl(1)
 
-    private val controller3A = Controller3A(graphProcessor, graphState3A, listener3A)
+    private val controller3A = Controller3A(graphProcessor, metadata, graphState3A, listener3A)
 
     init {
         // Log out the configuration of the camera graph when it is created.
@@ -96,7 +95,10 @@ internal class CameraGraphImpl @Inject constructor(
 
     override fun setSurface(stream: StreamId, surface: Surface?) {
         Debug.traceStart { "$stream#setSurface" }
-        streamGraph[stream] = surface
+        check(surface == null || surface.isValid) {
+            "Failed to set $surface to $stream: The surface was not valid."
+        }
+        surfaceGraph[stream] = surface
         Debug.traceStop()
     }
 
@@ -105,7 +107,7 @@ internal class CameraGraphImpl @Inject constructor(
         Log.info { "Closing $this" }
         sessionLock.close()
         graphProcessor.close()
-        cameraController.stop()
+        cameraController.close()
         Debug.traceStop()
     }
 

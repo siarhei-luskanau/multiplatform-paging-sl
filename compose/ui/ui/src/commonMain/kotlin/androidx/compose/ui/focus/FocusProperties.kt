@@ -16,16 +16,17 @@
 
 package androidx.compose.ui.focus
 
+import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.composed
 import androidx.compose.ui.modifier.ModifierLocalConsumer
 import androidx.compose.ui.modifier.ModifierLocalProvider
 import androidx.compose.ui.modifier.ModifierLocalReadScope
 import androidx.compose.ui.modifier.modifierLocalOf
-import androidx.compose.ui.node.ModifiedFocusNode
+import androidx.compose.ui.platform.InspectorInfo
+import androidx.compose.ui.platform.InspectorValueInfo
 import androidx.compose.ui.platform.debugInspectorInfo
 
 /**
@@ -33,9 +34,48 @@ import androidx.compose.ui.platform.debugInspectorInfo
  *
  * @see [focusProperties]
  */
-internal val ModifierLocalFocusProperties = modifierLocalOf { defaultFocusProperties }
+internal val ModifierLocalFocusProperties =
+    modifierLocalOf<FocusPropertiesModifier?> { null }
 
-internal val defaultFocusProperties: FocusProperties = FocusPropertiesImpl(canFocus = true)
+internal object DefaultFocusProperties : FocusProperties {
+    override var canFocus: Boolean
+        get() = true
+        set(_) = noSet()
+
+    override var next: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    override var previous: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    override var up: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    override var down: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    override var left: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    override var right: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    override var start: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    override var end: FocusRequester
+        get() = FocusRequester.Default
+        set(_) = noSet()
+
+    private fun noSet(): Nothing = error("Attempting to change DefaultFocusProperties")
+}
 
 /**
  * Properties that are applied to [focusTarget]s that can read the [ModifierLocalFocusProperties]
@@ -50,6 +90,80 @@ interface FocusProperties {
      * end up clearing focus.
      */
     var canFocus: Boolean
+
+    /**
+     * A custom item to be used when the user requests the focus to move to the "next" item.
+     *
+     * @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var next: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
+
+    /**
+     * A custom item to be used when the user requests the focus to move to the "previous" item.
+     *
+     * @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var previous: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
+
+    /**
+     *  A custom item to be used when the user moves focus "up".
+     *
+     *  @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var up: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
+
+    /**
+     *  A custom item to be used when the user moves focus "down".
+     *
+     *  @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var down: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
+
+    /**
+     * A custom item to be used when the user requests a focus moves to the "left" item.
+     *
+     * @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var left: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
+
+    /**
+     * A custom item to be used when the user requests a focus moves to the "right" item.
+     *
+     * @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var right: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
+
+    /**
+     * A custom item to be used when the user requests a focus moves to the "left" in LTR mode and
+     * "right" in RTL mode.
+     *
+     * @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var start: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
+
+    /**
+     * A custom item to be used when the user requests a focus moves to the "right" in LTR mode
+     * and "left" in RTL mode.
+     *
+     * @sample androidx.compose.ui.samples.CustomFocusOrderSample
+     */
+    var end: FocusRequester
+        get() = FocusRequester.Default
+        set(_) {}
 }
 
 /**
@@ -58,48 +172,84 @@ interface FocusProperties {
  *
  * @sample androidx.compose.ui.samples.FocusPropertiesSample
  */
-fun Modifier.focusProperties(scope: FocusProperties.() -> Unit): Modifier = composed(
-    debugInspectorInfo {
-        name = "focusProperties"
-        properties["scope"] = scope
-    }
-) {
-    val rememberedScope by rememberUpdatedState(scope)
-    remember { FocusPropertiesModifier(focusPropertiesScope = rememberedScope) }
-}
+fun Modifier.focusProperties(scope: FocusProperties.() -> Unit): Modifier = this.then(
+    FocusPropertiesModifier(
+        focusPropertiesScope = scope,
+        inspectorInfo = debugInspectorInfo {
+            name = "focusProperties"
+            properties["scope"] = scope
+        }
+    )
+)
 
+@Stable
 internal class FocusPropertiesModifier(
-    val focusPropertiesScope: FocusProperties.() -> Unit
-) : ModifierLocalConsumer, ModifierLocalProvider<FocusProperties> {
+    val focusPropertiesScope: FocusProperties.() -> Unit,
+    inspectorInfo: InspectorInfo.() -> Unit
+) : ModifierLocalConsumer,
+    ModifierLocalProvider<FocusPropertiesModifier?>,
+    InspectorValueInfo(inspectorInfo) {
 
-    private var parentFocusProperties: FocusProperties? = null
+    private var parent: FocusPropertiesModifier? by mutableStateOf(null)
 
     override fun onModifierLocalsUpdated(scope: ModifierLocalReadScope) {
-        parentFocusProperties = scope.run { ModifierLocalFocusProperties.current }
+        parent = scope.run { ModifierLocalFocusProperties.current }
     }
 
     override val key = ModifierLocalFocusProperties
 
-    override val value: FocusProperties
-        get() = defaultFocusProperties.copy {
-            // Populate with the specified focus properties.
-            apply(focusPropertiesScope)
+    override val value: FocusPropertiesModifier
+        get() = this
 
-            // current value for deactivated can be overridden by a parent's value.
-            parentFocusProperties?.let {
-                if (it != defaultFocusProperties) {
-                    canFocus = it.canFocus
-                }
-            }
-        }
+    override fun equals(other: Any?) =
+        other is FocusPropertiesModifier && focusPropertiesScope == other.focusPropertiesScope
+
+    override fun hashCode() = focusPropertiesScope.hashCode()
+
+    fun calculateProperties(focusProperties: FocusProperties) {
+        // Populate with the specified focus properties.
+        focusProperties.apply(focusPropertiesScope)
+
+        // Parent can override any values set by this
+        parent?.calculateProperties(focusProperties)
+    }
 }
 
-internal fun ModifiedFocusNode.setUpdatedProperties(properties: FocusProperties) {
+internal fun FocusModifier.setUpdatedProperties(properties: FocusProperties) {
     if (properties.canFocus) activateNode() else deactivateNode()
 }
 
-private class FocusPropertiesImpl(override var canFocus: Boolean) : FocusProperties
+internal class FocusPropertiesImpl : FocusProperties {
+    override var canFocus: Boolean = true
+    override var next: FocusRequester = FocusRequester.Default
+    override var previous: FocusRequester = FocusRequester.Default
+    override var up: FocusRequester = FocusRequester.Default
+    override var down: FocusRequester = FocusRequester.Default
+    override var left: FocusRequester = FocusRequester.Default
+    override var right: FocusRequester = FocusRequester.Default
+    override var start: FocusRequester = FocusRequester.Default
+    override var end: FocusRequester = FocusRequester.Default
+}
 
-private fun FocusProperties.copy(scope: FocusProperties.() -> Unit): FocusProperties {
-    return FocusPropertiesImpl(canFocus = canFocus).apply(scope)
+internal fun FocusProperties.clear() {
+    canFocus = true
+    next = FocusRequester.Default
+    previous = FocusRequester.Default
+    up = FocusRequester.Default
+    down = FocusRequester.Default
+    left = FocusRequester.Default
+    right = FocusRequester.Default
+    start = FocusRequester.Default
+    end = FocusRequester.Default
+}
+
+internal fun FocusModifier.refreshFocusProperties() {
+    val coordinator = coordinator ?: return
+    focusProperties.clear()
+    coordinator.layoutNode.owner?.snapshotObserver?.observeReads(this,
+        FocusModifier.RefreshFocusProperties
+    ) {
+        focusPropertiesModifier?.calculateProperties(focusProperties)
+    }
+    setUpdatedProperties(focusProperties)
 }

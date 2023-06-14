@@ -14,8 +14,8 @@
  * limitations under the License.
  */
 
-import androidx.build.LibraryGroups
 import androidx.build.Publish
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     id("AndroidXPlugin")
@@ -28,13 +28,13 @@ android {
         minSdkVersion 23
         multiDexEnabled true
     }
+    namespace "androidx.benchmark.macro.junit4"
 }
 
 dependencies {
     api(libs.junit)
     api(libs.kotlinStdlib)
     api("androidx.annotation:annotation:1.1.0")
-    api("androidx.core:core:1.6.0")
     api(project(":benchmark:benchmark-macro"))
     implementation(project(":benchmark:benchmark-common"))
     implementation("androidx.test:rules:1.3.0")
@@ -42,7 +42,6 @@ dependencies {
     implementation("androidx.test.uiautomator:uiautomator:2.2.0")
 
     androidTestImplementation(project(":internal-testutils-ktx"))
-    androidTestImplementation(project(":tracing:tracing-ktx"))
     androidTestImplementation("androidx.test:rules:1.3.0")
     androidTestImplementation(libs.testExtJunit)
     androidTestImplementation(libs.testCore)
@@ -60,4 +59,11 @@ androidx {
     mavenGroup = LibraryGroups.BENCHMARK
     inceptionYear = "2020"
     description = "Android Benchmark - Macrobenchmark JUnit4"
+}
+
+// Allow usage of Kotlin's @OptIn.
+tasks.withType(KotlinCompile).configureEach {
+    kotlinOptions {
+        freeCompilerArgs += [ '-opt-in=kotlin.RequiresOptIn' ]
+    }
 }

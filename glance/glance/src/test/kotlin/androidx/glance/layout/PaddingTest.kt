@@ -17,9 +17,9 @@ package androidx.glance.layout
 
 import android.content.res.Resources
 import android.util.DisplayMetrics
+import androidx.compose.ui.unit.dp
 import androidx.glance.GlanceModifier
 import androidx.glance.findModifier
-import androidx.glance.unit.dp
 import com.google.common.truth.Truth.assertThat
 import com.nhaarman.mockitokotlin2.doReturn
 import com.nhaarman.mockitokotlin2.mock
@@ -155,8 +155,8 @@ class PaddingTest {
 
         assertThat(paddingModifier).isEqualTo(
             PaddingModifier(
-                start = PaddingDimension(dp = 12.dp, resources = listOf(dimensionRes2)),
-                end = PaddingDimension(dp = 12.dp, resources = listOf(dimensionRes2)),
+                start = PaddingDimension(dp = 12.dp, resourceIds = listOf(dimensionRes2)),
+                end = PaddingDimension(dp = 12.dp, resourceIds = listOf(dimensionRes2)),
                 top = PaddingDimension(dimensionRes2),
                 bottom = PaddingDimension(dimensionRes2),
             )
@@ -184,7 +184,7 @@ class PaddingTest {
         assertThat(paddingModifier).isEqualTo(
             PaddingModifier(
                 start = PaddingDimension(15.dp),
-                end = PaddingDimension(dp = 12.dp, resources = listOf(dimensionRes1)),
+                end = PaddingDimension(dp = 12.dp, resourceIds = listOf(dimensionRes1)),
                 top = PaddingDimension(20.dp),
             )
         )
@@ -199,7 +199,7 @@ class PaddingTest {
 
         assertThat(paddingModifier).isEqualTo(
             PaddingModifier(
-                left = PaddingDimension(dp = 15.dp, resources = listOf(dimensionRes1)),
+                left = PaddingDimension(dp = 15.dp, resourceIds = listOf(dimensionRes1)),
                 right = PaddingDimension(12.dp),
                 bottom = PaddingDimension(dimensionRes2),
             )

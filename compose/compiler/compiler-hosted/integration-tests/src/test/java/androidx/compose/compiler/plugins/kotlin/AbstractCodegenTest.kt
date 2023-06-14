@@ -17,6 +17,7 @@
 package androidx.compose.compiler.plugins.kotlin
 
 import com.intellij.openapi.project.Project
+import com.intellij.openapi.util.io.FileUtil
 import com.intellij.openapi.util.text.StringUtilRt
 import com.intellij.openapi.vfs.CharsetToolkit
 import com.intellij.psi.PsiFileFactory
@@ -34,6 +35,7 @@ import org.jetbrains.kotlin.idea.KotlinLanguage
 import org.jetbrains.kotlin.psi.KtFile
 import org.jetbrains.kotlin.resolve.AnalyzingUtils
 import java.io.File
+import org.jetbrains.kotlin.cli.jvm.config.configureJdkClasspathRoots
 
 abstract class AbstractCodegenTest : AbstractCompilerTest() {
     override fun setUp() {
@@ -42,6 +44,7 @@ abstract class AbstractCodegenTest : AbstractCompilerTest() {
 
         val configuration = newConfiguration()
         configuration.addJvmClasspathRoots(classPath)
+        configuration.configureJdkClasspathRoots()
         updateConfiguration(configuration)
 
         myEnvironment = KotlinCoreEnvironment.createForTests(
@@ -264,4 +267,8 @@ fun createFile(name: String, text: String, project: Project): KtFile {
     val factory = PsiFileFactory.getInstance(project) as PsiFileFactoryImpl
 
     return factory.trySetupPsiForFile(virtualFile, KotlinLanguage.INSTANCE, true, false) as KtFile
+}
+
+fun tmpDir(name: String): File {
+    return FileUtil.createTempDirectory(name, "", false).canonicalFile
 }

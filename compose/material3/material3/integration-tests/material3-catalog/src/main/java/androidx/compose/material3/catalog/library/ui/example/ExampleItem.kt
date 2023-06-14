@@ -16,8 +16,6 @@
 
 package androidx.compose.material3.catalog.library.ui.example
 
-import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -25,52 +23,39 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.Card
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.KeyboardArrowRight
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedCard
 import androidx.compose.material3.Text
 import androidx.compose.material3.catalog.library.model.Example
-import androidx.compose.material3.catalog.library.ui.common.BorderWidth
-import androidx.compose.material3.catalog.library.ui.common.compositeBorderColor
-import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 
-// TODO: Use components/values from Material3 when available
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExampleItem(
     example: Example,
     onClick: (example: Example) -> Unit
 ) {
-    val backgroundColor = MaterialTheme.colorScheme.background
-    Card(
-        elevation = 0.dp,
-        border = BorderStroke(
-            width = BorderWidth,
-            color = compositeBorderColor()
-        ),
-        backgroundColor = backgroundColor,
-        contentColor = contentColorFor(backgroundColor),
+    OutlinedCard(
+        onClick = { onClick(example) },
         modifier = Modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier
-                .clickable { onClick(example) }
-                .padding(ExampleItemPadding)
-        ) {
+        Row(modifier = Modifier.padding(ExampleItemPadding)) {
             Column(modifier = Modifier.weight(1f, fill = true)) {
                 Text(
                     text = example.name,
-                    style = MaterialTheme.typography.bodySmall
+                    style = MaterialTheme.typography.titleSmall
                 )
                 Spacer(modifier = Modifier.height(ExampleItemTextPadding))
                 Text(
                     text = example.description,
-                    style = MaterialTheme.typography.labelSmall,
+                    style = MaterialTheme.typography.bodySmall,
                 )
             }
             Spacer(modifier = Modifier.width(ExampleItemPadding))

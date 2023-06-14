@@ -18,23 +18,47 @@ package androidx.benchmark.macro.junit4
 
 import android.Manifest
 import androidx.annotation.RequiresApi
-import androidx.annotation.RestrictTo
+import androidx.benchmark.Arguments
+import androidx.benchmark.macro.ExperimentalBaselineProfilesApi
 import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.collectBaselineProfile
 import androidx.test.rule.GrantPermissionRule
+import org.junit.Assume.assumeTrue
 import org.junit.rules.RuleChain
 import org.junit.rules.TestRule
 import org.junit.runner.Description
 import org.junit.runners.model.Statement
 
 /**
- * A [TestRule] that helps collect baseline profiles.
+ * A [TestRule] that collects Baseline Profiles to be embedded in your APK.
  *
- * @suppress
+ * These rules are used at install time to partially pre-compile your application code.
+ *
+ * ```
+ * @ExperimentalBaselineProfilesApi
+ * @RunWith(AndroidJUnit4::class)
+ * class BaselineProfileGenerator {
+ *     @get:Rule
+ *     val baselineProfileRule = BaselineProfileRule()
+ *
+ *     @Test
+ *     fun startup() = baselineProfileRule.collectBaselineProfile(
+ *         packageName = "com.example.app"
+ *     ) {
+ *         pressHome()
+ *         // This block defines the app's critical user journey. Here we are
+ *         // interested in optimizing for app startup, but you can also navigate
+ *         // and scroll through your most important UI.
+ *         startActivityAndWait()
+ *     }
+ * }
+ * ```
+ *
+ * See the [Baseline Profile Guide](https://developer.android.com/studio/profile/baselineprofiles)
+ * for more information on creating Baseline Profiles.
  */
 @RequiresApi(28)
-// Ideally we want to restrict this to tests, but this is the next best thing.
-@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP_PREFIX)
+@ExperimentalBaselineProfilesApi
 class BaselineProfileRule : TestRule {
     private lateinit var currentDescription: Description
 
@@ -47,20 +71,31 @@ class BaselineProfileRule : TestRule {
 
     private fun applyInternal(base: Statement, description: Description) = object : Statement() {
         override fun evaluate() {
+            assumeTrue(Arguments.RuleType.BaselineProfile in Arguments.enabledRules)
             currentDescription = description
             base.evaluate()
         }
     }
 
+    /**
+     * Collects baseline profiles for a critical user journey.
+     * @param packageName Package name of the app for which profiles are to be generated.
+     * @param packageFilters List of package names to use as a filter for the generated profiles.
+     *  By default no filters are applied. Note that this works only when the code is not obfuscated.
+     * @param [profileBlock] defines the critical user journey.
+     */
+    @JvmOverloads
     public fun collectBaselineProfile(
         packageName: String,
-        setupBlock: MacrobenchmarkScope.() -> Unit = {},
+        iterations: Int = 3,
+        packageFilters: List<String> = emptyList(),
         profileBlock: MacrobenchmarkScope.() -> Unit
     ) {
         collectBaselineProfile(
-            currentDescription.toUniqueName(),
+            uniqueName = currentDescription.toUniqueName(),
             packageName = packageName,
-            setupBlock = setupBlock,
+            iterations = iterations,
+            packageFilters = packageFilters,
             profileBlock = profileBlock
         )
     }

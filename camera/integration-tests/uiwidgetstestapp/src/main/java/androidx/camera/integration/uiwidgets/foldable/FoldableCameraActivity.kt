@@ -47,27 +47,23 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.PopupMenu
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.ExperimentalCamera2Interop
-import androidx.camera.core.Camera
 import androidx.camera.core.CameraInfo
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.FocusMeteringAction
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.ImageCaptureException
 import androidx.camera.core.MeteringPointFactory
-import androidx.camera.core.Preview
 import androidx.camera.integration.uiwidgets.R
 import androidx.camera.integration.uiwidgets.databinding.ActivityFoldableCameraBinding
 import androidx.camera.integration.uiwidgets.rotations.CameraActivity
-import androidx.camera.lifecycle.ProcessCameraProvider
+import androidx.camera.view.LifecycleCameraController
 import androidx.camera.view.PreviewView
-import androidx.concurrent.futures.await
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.window.layout.DisplayFeature
 import androidx.window.layout.FoldingFeature
-import androidx.window.layout.WindowInfoRepository
-import androidx.window.layout.WindowInfoRepository.Companion.windowInfoRepository
+import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
 import androidx.window.layout.WindowMetrics
 import androidx.window.layout.WindowMetricsCalculator
@@ -87,12 +83,9 @@ class FoldableCameraActivity : AppCompatActivity() {
     }
 
     private lateinit var binding: ActivityFoldableCameraBinding
-    private lateinit var windowInfoRepository: WindowInfoRepository
-    private lateinit var imageCapture: ImageCapture
-    private lateinit var camera: Camera
-    private lateinit var cameraProvider: ProcessCameraProvider
+    private lateinit var windowInfoTracker: WindowInfoTracker
     private var currentCameraSelectorString = BACK_CAMERA_STR
-    private var currentCameraSelector = CameraSelector.DEFAULT_BACK_CAMERA
+    private lateinit var cameraController: LifecycleCameraController
     private var isPreviewInLeftTop = true
     private var activeWindowLayoutInfo: WindowLayoutInfo? = null
     private val lastWindowMetrics: WindowMetrics
@@ -101,14 +94,17 @@ class FoldableCameraActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityFoldableCameraBinding.inflate(layoutInflater)
+        cameraController = LifecycleCameraController(this)
+        binding.previewView.controller = cameraController
         setContentView(binding.root)
         savedInstanceState?.let {
             currentCameraSelectorString = it.getString(KEY_CAMERA_SELECTOR) ?: BACK_CAMERA_STR
-            currentCameraSelector = getCameraSelectorFromString(currentCameraSelectorString)
+            cameraController.cameraSelector =
+                getCameraSelectorFromString(currentCameraSelectorString)
             binding.previewView.scaleType =
                 PreviewView.ScaleType.valueOf(it.getString(KEY_SCALETYPE)!!)
         }
-        windowInfoRepository = windowInfoRepository()
+        windowInfoTracker = WindowInfoTracker.getOrCreate(this)
 
         if (shouldRequestPermissionsAtRuntime() && !hasPermissions()) {
             ActivityCompat.requestPermissions(this, PERMISSIONS, REQUEST_CODE_PERMISSIONS)
@@ -149,8 +145,25 @@ class FoldableCameraActivity : AppCompatActivity() {
         return super.onCreateOptionsMenu(menu)
     }
 
+    override fun onPrepareOptionsMenu(menu: Menu): Boolean {
+        menu.findItem(R.id.implementationMode)
+            ?.setTitle("Current impl: ${binding.previewView.implementationMode}")
+        return super.onPrepareOptionsMenu(menu)
+    }
+
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
+            R.id.implementationMode -> {
+                binding.previewView.implementationMode =
+                    when (binding.previewView.implementationMode) {
+                        PreviewView.ImplementationMode.PERFORMANCE ->
+                            PreviewView.ImplementationMode.COMPATIBLE
+                        else -> PreviewView.ImplementationMode.PERFORMANCE
+                    }
+                // Reset controller so the new implementation mode will be effective.
+                binding.previewView.controller = null
+                binding.previewView.controller = cameraController
+            }
             R.id.fitCenter -> binding.previewView.scaleType = PreviewView.ScaleType.FIT_CENTER
             R.id.fillCenter -> binding.previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
             R.id.fitStart -> binding.previewView.scaleType = PreviewView.ScaleType.FIT_START
@@ -162,9 +175,7 @@ class FoldableCameraActivity : AppCompatActivity() {
     private fun startCamera() {
         lifecycleScope.launch {
             showCamerasAndDisplayInfo()
-            cameraProvider =
-                ProcessCameraProvider.getInstance(this@FoldableCameraActivity).await()
-            bindUseCases(cameraProvider)
+            cameraController.bindToLifecycle(this@FoldableCameraActivity)
             setupUI()
         }
 
@@ -172,33 +183,13 @@ class FoldableCameraActivity : AppCompatActivity() {
 
         // Runs Flow.collect in separate coroutine because it will block the coroutine.
         lifecycleScope.launch {
-            windowInfoRepository.windowLayoutInfo.collect { newLayoutInfo ->
-                Log.d(TAG, "newLayoutInfo: $newLayoutInfo")
-                activeWindowLayoutInfo = newLayoutInfo
-                adjustPreviewByFoldingState()
-            }
+            windowInfoTracker.windowLayoutInfo(this@FoldableCameraActivity)
+                .collect { newLayoutInfo ->
+                    Log.d(TAG, "newLayoutInfo: $newLayoutInfo")
+                    activeWindowLayoutInfo = newLayoutInfo
+                    adjustPreviewByFoldingState()
+                }
         }
-    }
-
-    @OptIn(ExperimentalCamera2Interop::class)
-    private fun bindUseCases(cameraProvider: ProcessCameraProvider) {
-        val preview = Preview.Builder()
-            .build()
-            .apply {
-                setSurfaceProvider(binding.previewView.surfaceProvider)
-            }
-
-        imageCapture = ImageCapture.Builder()
-            .build()
-
-        camera = cameraProvider.bindToLifecycle(
-            this,
-            currentCameraSelector,
-            preview,
-            imageCapture
-        )
-
-        binding.txtCameraId.text = "cameraId=${Camera2CameraInfo.from(camera.cameraInfo).cameraId}"
     }
 
     private fun setupUI() {
@@ -211,7 +202,7 @@ class FoldableCameraActivity : AppCompatActivity() {
                 contentValues
             ).build()
 
-            imageCapture.takePicture(
+            cameraController.takePicture(
                 outputFileOptions,
                 ContextCompat.getMainExecutor(this),
                 object : ImageCapture.OnImageSavedCallback {
@@ -253,10 +244,10 @@ class FoldableCameraActivity : AppCompatActivity() {
     private val mScaleGestureListener: SimpleOnScaleGestureListener =
         object : SimpleOnScaleGestureListener() {
             override fun onScale(detector: ScaleGestureDetector): Boolean {
-                val cameraInfo = camera.cameraInfo
+                val cameraInfo = cameraController.cameraInfo
                 val newZoom =
-                    cameraInfo.zoomState.value!!.zoomRatio * detector.scaleFactor
-                camera.cameraControl.setZoomRatio(newZoom)
+                    cameraInfo!!.zoomState.value!!.zoomRatio * detector.scaleFactor
+                cameraController.setZoomRatio(newZoom)
                 return true
             }
         }
@@ -268,7 +259,7 @@ class FoldableCameraActivity : AppCompatActivity() {
                     factory.createPoint(e.x, e.y)
                 ).build()
 
-                val future = camera.cameraControl.startFocusAndMetering(action)
+                val future = cameraController.cameraControl!!.startFocusAndMetering(action)
                 future.addListener({}, { v -> v.run() })
                 return true
             }
@@ -426,9 +417,8 @@ class FoldableCameraActivity : AppCompatActivity() {
 
         popup.setOnMenuItemClickListener { menuItem ->
             currentCameraSelectorString = menuItem.title as String
-            currentCameraSelector = getCameraSelectorFromString(currentCameraSelectorString)
-            cameraProvider.unbindAll()
-            bindUseCases(cameraProvider)
+            cameraController.cameraSelector =
+                getCameraSelectorFromString(currentCameraSelectorString)
             true
         }
     }

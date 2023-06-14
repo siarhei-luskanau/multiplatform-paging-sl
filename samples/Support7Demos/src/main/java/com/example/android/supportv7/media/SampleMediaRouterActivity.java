@@ -78,6 +78,7 @@ import java.io.File;
  * targets.
  * </p>
  */
+@SuppressWarnings("deprecation")
 public class SampleMediaRouterActivity extends AppCompatActivity {
     private static final String TAG = "SampleMediaRouter";
     private static final String DISCOVERY_FRAGMENT_TAG = "DiscoveryFragment";
@@ -744,6 +745,19 @@ public class SampleMediaRouterActivity extends AppCompatActivity {
         public MediaRouterParams getRouterParams() {
             return new MediaRouterParams.Builder(super.getRouterParams())
                     .setOutputSwitcherEnabled(true)
+                    .build();
+        }
+    }
+
+    /**
+     * It doesn't use MediaRouter2
+     */
+    public static class LegacyMediaRouterActivity extends SampleMediaRouterActivity {
+        @NonNull
+        @Override
+        public MediaRouterParams getRouterParams() {
+            return new MediaRouterParams.Builder(super.getRouterParams())
+                    .setMediaTransferReceiverEnabled(false)
                     .build();
         }
     }

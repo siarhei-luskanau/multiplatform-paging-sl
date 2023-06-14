@@ -34,8 +34,6 @@ import org.jetbrains.kotlin.descriptors.PropertyDescriptor
 import org.jetbrains.kotlin.extensions.StorageComponentContainerContributor
 import org.jetbrains.kotlin.idea.MainFunctionDetector
 import org.jetbrains.kotlin.platform.TargetPlatform
-import org.jetbrains.kotlin.platform.js.isJs
-import org.jetbrains.kotlin.platform.jvm.isJvm
 import org.jetbrains.kotlin.psi.KtDeclaration
 import org.jetbrains.kotlin.psi.KtFunction
 import org.jetbrains.kotlin.psi.KtProperty
@@ -50,9 +48,7 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
         platform: TargetPlatform,
         moduleDescriptor: ModuleDescriptor
     ) {
-        if (platform.isJvm() || platform.isJs()) {
-            container.useInstance(this)
-        }
+        container.useInstance(this)
     }
 
     override fun check(
@@ -89,6 +85,25 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
                         listOf(descriptor, override)
                     )
                 )
+            } else if (!descriptor.toScheme(null).canOverride(override.toScheme(null))) {
+                context.trace.report(
+                    ComposeErrors.COMPOSE_APPLIER_DECLARATION_MISMATCH.on(declaration)
+                )
+            }
+
+            descriptor.valueParameters.forEach { valueParameter ->
+                valueParameter.overriddenDescriptors.firstOrNull()?.let { overriddenParam ->
+                    val overrideIsComposable = overriddenParam.type.hasComposableAnnotation()
+                    val paramIsComposable = valueParameter.type.hasComposableAnnotation()
+                    if (paramIsComposable != overrideIsComposable) {
+                        context.trace.report(
+                            ComposeErrors.CONFLICTING_OVERLOADS.on(
+                                declaration,
+                                listOf(valueParameter, overriddenParam)
+                            )
+                        )
+                    }
+                }
             }
         }
         if (descriptor.isSuspend && hasComposableAnnotation) {

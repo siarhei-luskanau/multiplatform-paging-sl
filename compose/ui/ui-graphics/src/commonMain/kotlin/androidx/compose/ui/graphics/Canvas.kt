@@ -20,6 +20,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntSize
+import androidx.compose.ui.graphics.internal.JvmDefaultWithCompatibility
 
 /**
  * Create a new Canvas instance that targets its drawing commands
@@ -167,6 +168,7 @@ fun Canvas.scale(sx: Float, sy: Float = sx, pivotX: Float, pivotY: Float) {
  */
 expect val Canvas.nativeCanvas: NativeCanvas
 
+@JvmDefaultWithCompatibility
 interface Canvas {
 
     /**
@@ -308,12 +310,6 @@ interface Canvas {
      * Reduces the clip region to the intersection of the current clip and the
      * given rectangle.
      *
-     * If the clip is not axis-aligned with the display device, and
-     * [Paint.isAntiAlias] is true, then the clip will be anti-aliased. If
-     * multiple draw commands intersect with the clip boundary, this can result
-     * in incorrect blending at the clip boundary. See [saveLayer] for a
-     * discussion of how to address that.
-     *
      * Use [ClipOp.Difference] to subtract the provided rectangle from the
      * current clip.
      */
@@ -324,12 +320,6 @@ interface Canvas {
     /**
      * Reduces the clip region to the intersection of the current clip and the
      * given bounds.
-     *
-     * If the clip is not axis-aligned with the display device, and
-     * [Paint.isAntiAlias] is true, then the clip will be anti-aliased. If
-     * multiple draw commands intersect with the clip boundary, this can result
-     * in incorrect blending at the clip boundary. See [saveLayer] for a
-     * discussion of how to address that.
      *
      * Use [ClipOp.Difference] to subtract the provided rectangle from the
      * current clip.
@@ -350,11 +340,6 @@ interface Canvas {
     /**
      * Reduces the clip region to the intersection of the current clip and the
      * given [Path].
-     *
-     * If [Paint.isAntiAlias] is true, then the clip will be anti-aliased. If
-     * multiple draw commands intersect with the clip boundary, this can result
-     * in incorrect blending at the clip boundary. See [saveLayer] for a
-     * discussion of how to address that.
      */
     fun clipPath(path: Path, clipOp: ClipOp = ClipOp.Intersect)
 

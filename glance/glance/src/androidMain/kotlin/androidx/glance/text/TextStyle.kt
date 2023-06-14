@@ -17,36 +17,52 @@
 package androidx.glance.text
 
 import androidx.compose.runtime.Immutable
-import androidx.glance.unit.Sp
+import androidx.compose.ui.unit.TextUnit
+import androidx.glance.unit.ColorProvider
 
 /**
  * Description of a text style for the [androidx.glance.layout.Text] composable.
  */
 @Immutable
-public class TextStyle(
-    public val fontSize: Sp? = null,
-    public val fontWeight: FontWeight? = null,
-    public val fontStyle: FontStyle? = null,
-    public val textAlign: TextAlign? = null,
-    public val textDecoration: TextDecoration? = null,
+class TextStyle(
+    val color: ColorProvider? = null,
+    val fontSize: TextUnit? = null,
+    val fontWeight: FontWeight? = null,
+    val fontStyle: FontStyle? = null,
+    val textAlign: TextAlign? = null,
+    val textDecoration: TextDecoration? = null,
 ) {
+    fun copy(
+        color: ColorProvider? = this.color,
+        fontSize: TextUnit? = this.fontSize,
+        fontWeight: FontWeight? = this.fontWeight,
+        fontStyle: FontStyle? = this.fontStyle,
+        textAlign: TextAlign? = this.textAlign,
+        textDecoration: TextDecoration? = this.textDecoration
+    ) = TextStyle(
+        color = color,
+        fontSize = fontSize,
+        fontWeight = fontWeight,
+        fontStyle = fontStyle,
+        textAlign = textAlign,
+        textDecoration = textDecoration
+    )
+
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (javaClass != other?.javaClass) return false
-
-        other as TextStyle
-
+        if (other !is TextStyle) return false
+        if (color != other.color) return false
         if (fontSize != other.fontSize) return false
         if (fontWeight != other.fontWeight) return false
         if (fontStyle != other.fontStyle) return false
         if (textDecoration != other.textDecoration) return false
         if (textAlign != other.textAlign) return false
-
         return true
     }
 
     override fun hashCode(): Int {
-        var result = fontSize.hashCode()
+        var result = color.hashCode()
+        result = 31 * result + fontSize.hashCode()
         result = 31 * result + fontWeight.hashCode()
         result = 31 * result + fontStyle.hashCode()
         result = 31 * result + textDecoration.hashCode()
@@ -55,6 +71,6 @@ public class TextStyle(
     }
 
     override fun toString() =
-        "TextStyle(fontSize=$fontSize, fontWeight=$fontWeight, fontStyle=$fontStyle, " +
-            "textDecoration=$textDecoration, textAlign=$textAlign)"
+        "TextStyle(color=$color, fontSize=$fontSize, fontWeight=$fontWeight, " +
+            "fontStyle=$fontStyle, textDecoration=$textDecoration, textAlign=$textAlign)"
 }

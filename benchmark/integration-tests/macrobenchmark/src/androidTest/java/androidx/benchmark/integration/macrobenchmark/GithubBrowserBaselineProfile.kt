@@ -17,6 +17,7 @@
 package androidx.benchmark.integration.macrobenchmark
 
 import android.graphics.Point
+import androidx.benchmark.macro.ExperimentalBaselineProfilesApi
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.filters.LargeTest
 import androidx.test.filters.SdkSuppress
@@ -31,7 +32,7 @@ import org.junit.Test
 
 @LargeTest
 @SdkSuppress(minSdkVersion = 29)
-@Ignore
+@OptIn(ExperimentalBaselineProfilesApi::class)
 class GithubBrowserBaselineProfile {
 
     /**
@@ -58,13 +59,12 @@ class GithubBrowserBaselineProfile {
     }
 
     @Test
+    @Ignore
     fun githubBrowserProfiles() {
         baselineRule.collectBaselineProfile(
             packageName = PACKAGE_NAME,
-            setupBlock = {
-                startActivityAndWait()
-            },
             profileBlock = {
+                startActivityAndWait()
                 val searchText = device.findObject(By.res(PACKAGE_NAME, REPO_SEARCH_ID))
                 searchText?.text = "Test"
                 val search = device.findObject(By.res(PACKAGE_NAME, SEARCH_ID))

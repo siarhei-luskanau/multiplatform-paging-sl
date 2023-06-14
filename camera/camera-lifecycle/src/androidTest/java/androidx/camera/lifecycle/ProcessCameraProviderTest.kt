@@ -24,14 +24,20 @@ import androidx.annotation.OptIn
 import androidx.annotation.RequiresApi
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.CameraXConfig
+import androidx.camera.core.EffectBundle
 import androidx.camera.core.Preview
+import androidx.camera.core.SurfaceEffect.PREVIEW
+import androidx.camera.core.UseCaseGroup
 import androidx.camera.core.impl.CameraFactory
+import androidx.camera.core.impl.utils.executor.CameraXExecutors.mainThreadExecutor
+import androidx.camera.core.processing.SurfaceEffectWithExecutor
 import androidx.camera.testing.fakes.FakeAppConfig
 import androidx.camera.testing.fakes.FakeCamera
 import androidx.camera.testing.fakes.FakeCameraDeviceSurfaceManager
 import androidx.camera.testing.fakes.FakeCameraFactory
 import androidx.camera.testing.fakes.FakeCameraInfoInternal
 import androidx.camera.testing.fakes.FakeLifecycleOwner
+import androidx.camera.testing.fakes.FakeSurfaceEffect
 import androidx.camera.testing.fakes.FakeUseCaseConfigFactory
 import androidx.concurrent.futures.await
 import androidx.test.core.app.ApplicationProvider
@@ -49,7 +55,7 @@ import org.junit.Test
 
 @SmallTest
 @SdkSuppress(minSdkVersion = 21)
-public class ProcessCameraProviderTest {
+class ProcessCameraProviderTest {
 
     private val context = ApplicationProvider.getApplicationContext() as Context
     private val lifecycleOwner0 = FakeLifecycleOwner()
@@ -58,7 +64,7 @@ public class ProcessCameraProviderTest {
     private lateinit var provider: ProcessCameraProvider
 
     @After
-    public fun tearDown() {
+    fun tearDown() {
         runBlocking {
             try {
                 val provider = ProcessCameraProvider.getInstance(context).await()
@@ -70,7 +76,32 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun canGetInstance_fromMetaData(): Unit = runBlocking {
+    fun bindUseCaseGroupWithEffect_effectIsSetOnUseCase() {
+        // Arrange.
+        ProcessCameraProvider.configureInstance(FakeAppConfig.create())
+        val surfaceEffect = FakeSurfaceEffect(mainThreadExecutor())
+        val effectBundle =
+            EffectBundle.Builder(mainThreadExecutor()).addEffect(PREVIEW, surfaceEffect).build()
+        val preview = Preview.Builder().setSessionOptionUnpacker { _, _ -> }.build()
+        val useCaseGroup = UseCaseGroup.Builder().addUseCase(preview)
+            .setEffectBundle(effectBundle).build()
+
+        runBlocking(MainScope().coroutineContext) {
+            // Act.
+            provider = ProcessCameraProvider.getInstance(context).await()
+            provider.bindToLifecycle(
+                lifecycleOwner0, CameraSelector.DEFAULT_BACK_CAMERA,
+                useCaseGroup
+            )
+
+            // Assert.
+            val useCaseEffect = (preview.effect as SurfaceEffectWithExecutor).surfaceEffect
+            assertThat(useCaseEffect).isEqualTo(surfaceEffect)
+        }
+    }
+
+    @Test
+    fun canGetInstance_fromMetaData(): Unit = runBlocking {
         // Check the static invocation count for the test CameraXConfig.Provider which is defined
         // in the instrumentation test's AndroidManfiest.xml. It should be incremented after
         // retrieving the ProcessCameraProvider.
@@ -83,7 +114,7 @@ public class ProcessCameraProviderTest {
 
     @OptIn(ExperimentalCameraProviderConfiguration::class)
     @Test
-    public fun configuredGetInstance_doesNotUseMetaData() {
+    fun configuredGetInstance_doesNotUseMetaData() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking {
             // Check the static invocation count for the test CameraXConfig.Provider which is defined
@@ -100,7 +131,7 @@ public class ProcessCameraProviderTest {
 
     @OptIn(ExperimentalCameraProviderConfiguration::class)
     @Test
-    public fun configuredGetInstance_doesNotUseApplication() {
+    fun configuredGetInstance_doesNotUseApplication() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking {
             // Wrap the context with a TestAppContextWrapper and provide a context with an
@@ -115,7 +146,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun unconfiguredGetInstance_usesApplicationProvider(): Unit = runBlocking {
+    fun unconfiguredGetInstance_usesApplicationProvider(): Unit = runBlocking {
         val testApp = TestApplication(context.packageManager)
         val contextWrapper = TestAppContextWrapper(context, testApp)
         provider = ProcessCameraProvider.getInstance(contextWrapper).await()
@@ -125,7 +156,7 @@ public class ProcessCameraProviderTest {
 
     @OptIn(ExperimentalCameraProviderConfiguration::class)
     @Test
-    public fun multipleConfigureInstance_throwsISE() {
+    fun multipleConfigureInstance_throwsISE() {
         val config = FakeAppConfig.create()
         ProcessCameraProvider.configureInstance(config)
         assertThrows<IllegalStateException> {
@@ -135,7 +166,7 @@ public class ProcessCameraProviderTest {
 
     @OptIn(ExperimentalCameraProviderConfiguration::class)
     @Test
-    public fun configuredGetInstance_returnsProvider() {
+    fun configuredGetInstance_returnsProvider() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -145,7 +176,7 @@ public class ProcessCameraProviderTest {
 
     @OptIn(ExperimentalCameraProviderConfiguration::class)
     @Test
-    public fun configuredGetInstance_usesConfiguredExecutor() {
+    fun configuredGetInstance_usesConfiguredExecutor() {
         var executeCalled = false
         val config =
             CameraXConfig.Builder.fromConfig(FakeAppConfig.create()).setCameraExecutor { runnable ->
@@ -163,7 +194,7 @@ public class ProcessCameraProviderTest {
 
     @OptIn(ExperimentalCameraProviderConfiguration::class)
     @Test
-    public fun canRetrieveCamera_withZeroUseCases() {
+    fun canRetrieveCamera_withZeroUseCases() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking(MainScope().coroutineContext) {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -174,7 +205,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bindUseCase_isBound() {
+    fun bindUseCase_isBound() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -191,7 +222,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bindSecondUseCaseToDifferentLifecycle_firstUseCaseStillBound() {
+    fun bindSecondUseCaseToDifferentLifecycle_firstUseCaseStillBound() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -219,7 +250,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun isNotBound_afterUnbind() {
+    fun isNotBound_afterUnbind() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -240,7 +271,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun unbindFirstUseCase_secondUseCaseStillBound() {
+    fun unbindFirstUseCase_secondUseCaseStillBound() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -264,7 +295,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun unbindAll_unbindsAllUseCasesFromCameras() {
+    fun unbindAll_unbindsAllUseCasesFromCameras() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -284,7 +315,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bindMultipleUseCases() {
+    fun bindMultipleUseCases() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -303,7 +334,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bind_createsDifferentLifecycleCameras_forDifferentLifecycles() {
+    fun bind_createsDifferentLifecycleCameras_forDifferentLifecycles() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -326,7 +357,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun exception_withDestroyedLifecycle() {
+    fun exception_withDestroyedLifecycle() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -341,7 +372,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bind_returnTheSameCameraForSameSelectorAndLifecycleOwner() {
+    fun bind_returnTheSameCameraForSameSelectorAndLifecycleOwner() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -367,7 +398,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bindUseCases_withDifferentLensFacingButSameLifecycleOwner() {
+    fun bindUseCases_withDifferentLensFacingButSameLifecycleOwner() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -389,7 +420,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bindUseCases_withDifferentLensFacingAndLifecycle() {
+    fun bindUseCases_withDifferentLensFacingAndLifecycle() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
 
         runBlocking(MainScope().coroutineContext) {
@@ -417,7 +448,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun bindUseCases_withNotExistedLensFacingCamera() {
+    fun bindUseCases_withNotExistedLensFacingCamera() {
         val cameraFactoryProvider =
             CameraFactory.Provider { _, _, _ ->
                 val cameraFactory = FakeCameraFactory()
@@ -461,7 +492,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun lifecycleCameraIsNotActive_withZeroUseCases_bindBeforeLifecycleStarted() {
+    fun lifecycleCameraIsNotActive_withZeroUseCases_bindBeforeLifecycleStarted() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking(MainScope().coroutineContext) {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -474,7 +505,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun lifecycleCameraIsNotActive_withZeroUseCases_bindAfterLifecycleStarted() {
+    fun lifecycleCameraIsNotActive_withZeroUseCases_bindAfterLifecycleStarted() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking(MainScope().coroutineContext) {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -487,7 +518,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun lifecycleCameraIsActive_withUseCases_bindBeforeLifecycleStarted() {
+    fun lifecycleCameraIsActive_withUseCases_bindBeforeLifecycleStarted() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking(MainScope().coroutineContext) {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -503,7 +534,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun lifecycleCameraIsActive_withUseCases_bindAfterLifecycleStarted() {
+    fun lifecycleCameraIsActive_withUseCases_bindAfterLifecycleStarted() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking(MainScope().coroutineContext) {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -519,7 +550,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun lifecycleCameraIsNotActive_unbindUseCase() {
+    fun lifecycleCameraIsNotActive_unbindUseCase() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking(MainScope().coroutineContext) {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -537,7 +568,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun lifecycleCameraIsNotActive_unbindAll() {
+    fun lifecycleCameraIsNotActive_unbindAll() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking(MainScope().coroutineContext) {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -555,7 +586,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun getAvailableCameraInfos_usesAllCameras() {
+    fun getAvailableCameraInfos_usesAllCameras() {
         ProcessCameraProvider.configureInstance(FakeAppConfig.create())
         runBlocking {
             provider = ProcessCameraProvider.getInstance(context).await()
@@ -564,7 +595,7 @@ public class ProcessCameraProviderTest {
     }
 
     @Test
-    public fun getAvailableCameraInfos_usesFilteredCameras() {
+    fun getAvailableCameraInfos_usesFilteredCameras() {
         ProcessCameraProvider.configureInstance(
             FakeAppConfig.create(CameraSelector.DEFAULT_BACK_CAMERA)
         )
@@ -577,6 +608,28 @@ public class ProcessCameraProviderTest {
             val cameraInfo = cameraInfos.first() as FakeCameraInfoInternal
             assertThat(cameraInfo.lensFacing).isEqualTo(CameraSelector.LENS_FACING_BACK)
         }
+    }
+
+    @Test
+    fun cannotConfigureTwice() {
+        ProcessCameraProvider.configureInstance(FakeAppConfig.create())
+        assertThrows<IllegalStateException> {
+            ProcessCameraProvider.configureInstance(FakeAppConfig.create())
+        }
+    }
+
+    @Test
+    fun shutdown_clearsPreviousConfiguration() {
+        ProcessCameraProvider.configureInstance(FakeAppConfig.create())
+
+        runBlocking {
+            provider = ProcessCameraProvider.getInstance(context).await()
+            // Clear the configuration so we can reinit
+            provider.shutdown().await()
+        }
+
+        // Should not throw exception
+        ProcessCameraProvider.configureInstance(FakeAppConfig.create())
     }
 }
 

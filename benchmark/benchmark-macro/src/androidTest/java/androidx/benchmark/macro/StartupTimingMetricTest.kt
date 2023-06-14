@@ -76,7 +76,7 @@ class StartupTimingMetricTest {
         }
 
         assertEquals(
-            setOf("timeToInitialDisplayMs", "timeToFullDisplayMs"),
+            setOf("timeToInitialDisplayMs"),
             iterationResult.singleMetrics.keys
         )
         assertNotNull(iterationResult.timelineRangeNs)
@@ -134,7 +134,6 @@ class StartupTimingMetricTest {
 
     @LargeTest
     @Test
-    @SdkSuppress(minSdkVersion = 29) // TODO: fullydrawn behavior pre-profileable tag
     fun validateStartup_fullyDrawn_delayed() {
         validateStartup_fullyDrawn(100)
     }
@@ -180,9 +179,9 @@ class StartupTimingMetricTest {
             setOf("timeToInitialDisplayMs", "timeToFullDisplayMs"),
             metrics.singleMetrics.keys
         )
-        assertEquals(169.67427, metrics.singleMetrics["timeToInitialDisplayMs"]!!, 0.0001)
-        assertEquals(169.67427, metrics.singleMetrics["timeToFullDisplayMs"]!!, 0.0001)
-        assertEquals(477547965787..477717640057, metrics.timelineRangeNs)
+        assertEquals(178.58525, metrics.singleMetrics["timeToInitialDisplayMs"]!!, 0.0001)
+        assertEquals(178.58525, metrics.singleMetrics["timeToFullDisplayMs"]!!, 0.0001)
+        assertEquals(1680207215350..1680385800600, metrics.timelineRangeNs)
     }
 
     @MediumTest
@@ -195,7 +194,7 @@ class StartupTimingMetricTest {
             setOf("timeToInitialDisplayMs", "timeToFullDisplayMs"),
             metrics.singleMetrics.keys
         )
-        assertEquals(64.748027, metrics.singleMetrics["timeToInitialDisplayMs"]!!, 0.0001)
+        assertEquals(62.373965, metrics.singleMetrics["timeToInitialDisplayMs"]!!, 0.0001)
         assertEquals(555.968701, metrics.singleMetrics["timeToFullDisplayMs"]!!, 0.0001)
         assertEquals(186982050780778..186982606749479, metrics.timelineRangeNs)
     }
@@ -220,12 +219,10 @@ internal fun measureStartup(
     startupMode: StartupMode,
     measureBlock: () -> Unit
 ): IterationResult {
-    val wrapper = PerfettoCaptureWrapper()
     val metric = StartupTimingMetric()
     metric.configure(packageName)
-    val tracePath = wrapper.record(
+    val tracePath = PerfettoCaptureWrapper().record(
         benchmarkName = packageName,
-        iteration = 1,
         // note - packageName may be this package, so we convert to set then list to make unique
         // and on API 23 and below, we use reflection to trace instead within this process
         packages = if (Build.VERSION.SDK_INT >= 24 && packageName != Packages.TEST) {

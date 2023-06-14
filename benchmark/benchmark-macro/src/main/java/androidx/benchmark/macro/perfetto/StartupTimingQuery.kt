@@ -16,20 +16,13 @@
 
 package androidx.benchmark.macro.perfetto
 
+import android.util.Log
 import androidx.benchmark.macro.StartupMode
-import kotlin.math.max
+import androidx.benchmark.macro.perfetto.PerfettoTraceProcessor.processNameLikePkg
 
 internal object StartupTimingQuery {
 
-    /**
-     * On older platforms, process name may be truncated, especially in cold startup traces,
-     * when the process name dump at trace begin happens _before_ app process is created.
-     *
-     * @see perfetto.protos.ProcessStatsConfig.scan_all_processes_on_start
-     */
-    private fun String.truncatedProcessName() = takeLast(15)
-
-    private fun getFullQuery(testProcessName: String, targetProcessName: String) = """
+    private fun getFullQuery(testPackageName: String, targetPackageName: String) = """
         ------ Select all startup-relevant slices from slice table
         SELECT
             slice.name as name,
@@ -40,14 +33,9 @@ internal object StartupTimingQuery {
             INNER JOIN thread USING(utid)
             INNER JOIN process USING(upid)
         WHERE (
-            -- Test process starts before tracing, so it shouldn't have truncation problem
-            (process.name LIKE "$testProcessName" AND slice.name LIKE "startActivityAndWait") OR
+            (${processNameLikePkg(testPackageName)} AND slice.name LIKE "startActivityAndWait") OR
             (
-                (
-                    -- check for full or truncated process name (can happen on older platforms)
-                    process.name LIKE "$targetProcessName" OR
-                    process.name LIKE "${targetProcessName.truncatedProcessName()}"
-                ) AND (
+                ${processNameLikePkg(targetPackageName)} AND (
                     (slice.name LIKE "activityResume" AND process.pid LIKE thread.tid) OR
                     (slice.name LIKE "Choreographer#doFrame%" AND process.pid LIKE thread.tid) OR
                     (slice.name LIKE "reportFullyDrawn() for %" AND process.pid LIKE thread.tid) OR
@@ -128,8 +116,8 @@ internal object StartupTimingQuery {
         val queryResult = PerfettoTraceProcessor.rawQuery(
             absoluteTracePath = absoluteTracePath,
             query = getFullQuery(
-                testProcessName = testPackageName,
-                targetProcessName = targetPackageName
+                testPackageName = testPackageName,
+                targetPackageName = targetPackageName
             )
         )
         val slices = Slice.parseListFromQueryResult(queryResult)
@@ -158,6 +146,11 @@ internal object StartupTimingQuery {
         val uiSlices = groupedData.getOrElse(StartupSliceType.FrameUiThread) { listOf() }
         val rtSlices = groupedData.getOrElse(StartupSliceType.FrameRenderThread) { listOf() }
 
+        if (uiSlices.isEmpty() || rtSlices.isEmpty()) {
+            Log.d("Benchmark", "No UI / RT slices seen, not reporting startup.")
+            return null
+        }
+
         val startTs: Long
         val initialDisplayTs: Long
         if (captureApiLevel >= 29 || startupMode != StartupMode.HOT) {
@@ -178,17 +171,13 @@ internal object StartupTimingQuery {
                 launchingSlice.ts
             }
 
-            initialDisplayTs = max(
-                // conservative end - end of launching slice
-                launchingSlice.endTs,
-                // in some cases, 'launching' slice doesn't account for rendering response,
-                // so we do that manually - look for first frame starting within launch slice
-                // TODO: investigate where this happens (e.g. which APIs/StartupModes)
-                // TODO: would last frame that starts during launch be better?
-                findEndRenderTimeForUiFrame(uiSlices, rtSlices) { uiSlice ->
-                    uiSlice.ts > launchingSlice.ts
-                }
-            )
+            // We use the end of rt slice here instead of the end of the 'launching' slice. This is
+            // both because on some platforms the launching slice may not wait for renderthread, but
+            // also because this allows us to make the guarantee that timeToInitialDisplay ==
+            // timeToFirstDisplay when they are the same frame.
+            initialDisplayTs = findEndRenderTimeForUiFrame(uiSlices, rtSlices) { uiSlice ->
+                uiSlice.ts > launchingSlice.ts
+            }
         } else {
             // Prior to API 29, hot starts weren't traced with the launching slice, so we do a best
             // guess - the time taken to Activity#onResume, and then produce the next frame.

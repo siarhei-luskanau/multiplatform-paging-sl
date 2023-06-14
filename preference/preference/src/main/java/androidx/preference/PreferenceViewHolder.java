@@ -23,6 +23,7 @@ import android.view.View;
 import android.widget.TextView;
 
 import androidx.annotation.IdRes;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.RestrictTo;
 import androidx.core.view.ViewCompat;
@@ -34,13 +35,13 @@ import androidx.recyclerview.widget.RecyclerView;
  */
 public class PreferenceViewHolder extends RecyclerView.ViewHolder {
     @Nullable
-    private Drawable mBackground;
+    private final Drawable mBackground;
     private ColorStateList mTitleTextColors;
     private final SparseArray<View> mCachedViews = new SparseArray<>(4);
     private boolean mDividerAllowedAbove;
     private boolean mDividerAllowedBelow;
 
-    PreferenceViewHolder(View itemView) {
+    PreferenceViewHolder(@NonNull View itemView) {
         super(itemView);
 
         final TextView titleView = itemView.findViewById(android.R.id.title);
@@ -61,7 +62,8 @@ public class PreferenceViewHolder extends RecyclerView.ViewHolder {
 
     /** @hide */
     @RestrictTo(RestrictTo.Scope.TESTS)
-    public static PreferenceViewHolder createInstanceForTests(View itemView) {
+    @NonNull
+    public static PreferenceViewHolder createInstanceForTests(@NonNull View itemView) {
         return new PreferenceViewHolder(itemView);
     }
 
@@ -72,6 +74,7 @@ public class PreferenceViewHolder extends RecyclerView.ViewHolder {
      * @param id Resource ID of the view to find
      * @return The view, or {@code null} if no view with the requested ID is found
      */
+    @Nullable
     public View findViewById(@IdRes int id) {
         final View cachedView = mCachedViews.get(id);
         if (cachedView != null) {

@@ -21,7 +21,6 @@ import androidx.build.addToBuildOnServer
 import androidx.build.addToCheckTask
 import androidx.build.checkapi.ApiLocation
 import androidx.build.checkapi.getRequiredCompatibilityApiLocation
-import androidx.build.dependencyTracker.AffectedModuleDetector
 import androidx.build.metalava.UpdateApiTask
 import androidx.build.uptodatedness.cacheEvenIfNoOutputs
 import org.gradle.api.Project
@@ -39,14 +38,12 @@ object ResourceTasks {
         builtApiLocation: ApiLocation,
         outputApiLocations: List<ApiLocation>
     ) {
-        @OptIn(ExperimentalStdlibApi::class)
         val packageResTask = project.tasks
             .named(
                 "package${variantName.replaceFirstChar {
                     if (it.isLowerCase()) it.titlecase(Locale.US) else it.toString()
                 }}Resources"
             )
-        @Suppress("UnstableApiUsage") // flatMap
         val builtApiFile = packageResTask.flatMap { task ->
             (task as com.android.build.gradle.tasks.MergeResources).publicFile
         }
@@ -63,13 +60,11 @@ object ResourceTasks {
             task.description = "Generates resource API files from source"
             task.builtApi.set(builtApiFile)
             task.apiLocation.set(builtApiLocation)
-            AffectedModuleDetector.configureTaskGuard(task)
         }
 
         // Policy: If the artifact has previously been released, e.g. has a beta or later API file
         // checked in, then we must verify "release compatibility" against the work-in-progress
         // API file.
-        @Suppress("UnstableApiUsage") // flatMap
         val checkResourceApiRelease = project.getRequiredCompatibilityApiLocation()?.let {
             lastReleasedApiFile ->
             project.tasks.register(
@@ -81,14 +76,12 @@ object ResourceTasks {
                 // Since apiLocation isn't a File, we have to manually set up the dependency.
                 task.dependsOn(generateResourceApi)
                 task.cacheEvenIfNoOutputs()
-                AffectedModuleDetector.configureTaskGuard(task)
             }
         }
 
         // Policy: All changes to API surfaces for which compatibility is enforced must be
         // explicitly confirmed by running the updateApi task. To enforce this, the implementation
         // checks the "work-in-progress" built API file against the checked in current API file.
-        @Suppress("UnstableApiUsage") // flatMap
         val checkResourceApi = project.tasks.register(
             CHECK_RESOURCE_API_TASK,
             CheckResourceApiTask::class.java
@@ -104,10 +97,8 @@ object ResourceTasks {
             checkResourceApiRelease?.let {
                 task.dependsOn(it)
             }
-            AffectedModuleDetector.configureTaskGuard(task)
         }
 
-        @Suppress("UnstableApiUsage") // flatMap
         val updateResourceApi = project.tasks.register(
             UPDATE_RESOURCE_API_TASK,
             UpdateResourceApiTask::class.java
@@ -118,9 +109,7 @@ object ResourceTasks {
             // Since apiLocation isn't a File, we have to manually set up the dependency.
             task.dependsOn(generateResourceApi)
             task.outputApiLocations.set(outputApiLocations)
-            task.forceUpdate.set(
-                project.providers.gradleProperty("force").forUseAtConfigurationTime().isPresent()
-            )
+            task.forceUpdate.set(project.providers.gradleProperty("force").isPresent)
             checkResourceApiRelease?.let {
                 // If a developer (accidentally) makes a non-backwards compatible change to an
                 // API, the developer will want to be informed of it as soon as possible.
@@ -129,7 +118,6 @@ object ResourceTasks {
                 // compatible
                 task.dependsOn(it)
             }
-            AffectedModuleDetector.configureTaskGuard(task)
         }
 
         // Ensure that this task runs as part of "updateApi" task from MetalavaTasks.

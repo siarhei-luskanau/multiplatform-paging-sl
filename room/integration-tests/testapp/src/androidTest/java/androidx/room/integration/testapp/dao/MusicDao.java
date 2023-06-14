@@ -208,12 +208,12 @@ public interface MusicDao {
     Map<Integer, List<Song>> getReleaseYearToAlbums();
 
     @RewriteQueriesToDropUnusedColumns
-    @MapInfo(keyColumn = "mArtistId")
+    @MapInfo(keyColumn = "mImageYear")
     @Query("SELECT * FROM Artist JOIN Image ON Artist.mArtistName = Image.mArtistInImage")
     LongSparseArray<Artist> getAllAlbumCoverYearToArtistsWithLongSparseArray();
 
     @RewriteQueriesToDropUnusedColumns
-    @MapInfo(keyColumn = "mArtistId")
+    @MapInfo(keyColumn = "mImageYear")
     @Query("SELECT * FROM Artist JOIN Image ON Artist.mArtistName = Image.mArtistInImage")
     SparseArrayCompat<Artist> getAllAlbumCoverYearToArtistsWithIntSparseArray();
 
@@ -309,4 +309,24 @@ public interface MusicDao {
     @MapInfo(keyColumn = "dog", valueColumn = "cat")
     @RawQuery
     Map<Artist, Integer> getMapWithInvalidColumnRawQuery(SupportSQLiteQuery query);
+
+    @Query("SELECT * FROM Artist LEFT JOIN Album ON Artist.mArtistName = Album.mAlbumArtist")
+    Map<Artist, List<Album>> getArtistAndAlbumsLeftJoin();
+
+    @Query("SELECT * FROM Artist LEFT JOIN Album ON Artist.mArtistName = Album.mAlbumArtist")
+    Map<Artist, Album> getArtistAndAlbumsLeftJoinOneToOne();
+
+    @Query("SELECT * FROM Artist LEFT JOIN Album ON Artist.mArtistName = Album.mAlbumArtist")
+    ImmutableListMultimap<Artist, Album> getArtistAndAlbumsLeftJoinGuava();
+
+    @RewriteQueriesToDropUnusedColumns
+    @MapInfo(valueColumn = "mAlbumName")
+    @Query("SELECT * FROM Artist LEFT JOIN Album ON Artist.mArtistName = Album.mAlbumArtist")
+    Map<Artist, List<String>> getArtistAndAlbumNamesLeftJoin();
+
+    @Query("SELECT * FROM Album LEFT JOIN Artist ON Artist.mArtistName = Album.mAlbumArtist")
+    Map<Album, Artist> getAlbumToArtistLeftJoin();
+
+    @Query("SELECT * FROM Album LEFT JOIN Artist ON Artist.mArtistName = Album.mAlbumArtist")
+    Map<Artist, Album> getArtistToAlbumLeftJoin();
 }

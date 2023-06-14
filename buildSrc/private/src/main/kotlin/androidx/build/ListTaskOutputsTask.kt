@@ -16,6 +16,7 @@
 
 package androidx.build
 
+import java.io.File
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
 import org.gradle.api.Project
@@ -24,12 +25,13 @@ import org.gradle.api.provider.Property
 import org.gradle.api.tasks.Input
 import org.gradle.api.tasks.OutputFile
 import org.gradle.api.tasks.TaskAction
-import java.io.File
+import org.gradle.work.DisableCachingByDefault
 
 /**
  * Finds the outputs of every task and saves this mapping into a file
  */
-abstract class ListTaskOutputsTask() : DefaultTask() {
+@DisableCachingByDefault(because = "Uses too many inputs to be feasible to cache, but runs quickly")
+abstract class ListTaskOutputsTask : DefaultTask() {
     @OutputFile
     val outputFile: Property<File> = project.objects.property(File::class.java)
     @Input
@@ -40,6 +42,9 @@ abstract class ListTaskOutputsTask() : DefaultTask() {
     init {
         group = "Help"
         outputs.upToDateWhen { false }
+        notCompatibleWithConfigurationCache(
+            "This task uses project object to inspect outputs of all tasks"
+        )
     }
 
     fun setOutput(f: File) {
@@ -48,11 +53,11 @@ abstract class ListTaskOutputsTask() : DefaultTask() {
     }
 
     fun removePrefix(prefix: String) {
-        removePrefixes.add(prefix + "/")
+        removePrefixes.add("$prefix/")
     }
 
     // Given a map from output file to Task, formats into a String
-    fun formatTasks(tasksByOutput: Map<File, Task>): String {
+    private fun formatTasks(tasksByOutput: Map<File, Task>): String {
         val messages: MutableList<String> = mutableListOf()
         for ((output, task) in tasksByOutput) {
             var filePath = output.path
@@ -67,12 +72,11 @@ abstract class ListTaskOutputsTask() : DefaultTask() {
             )
         }
         messages.sort()
-        val text = messages.joinToString("\n")
-        return text
+        return messages.joinToString("\n")
     }
 
     // Given a list of columns, indents and joins them to be easy to read
-    fun formatInColumns(columns: List<String>): String {
+    private fun formatInColumns(columns: List<String>): String {
         val components = mutableListOf<String>()
         var textLength = 0
         for (column in columns) {
@@ -85,7 +89,7 @@ abstract class ListTaskOutputsTask() : DefaultTask() {
             components.add(extraSpaces)
             textLength = roundedTextLength
             components.add(column)
-            textLength += column.length.toInt()
+            textLength += column.length
         }
         return components.joinToString("")
     }
@@ -108,13 +112,6 @@ val taskNamesKnownToDuplicateOutputs = setOf(
     "kotlinSourcesJar",
     "releaseSourcesJar",
     "sourceJarRelease",
-    // Can remove "lint" after AGP 7.1.0-alpha05.
-    "lint",
-    "lintReport",
-    "lintFix",
-    // Can remove "lintVital" after AGP 7.1.0-alpha05.
-    "lintVital",
-    "lintVitalReport",
     "sourceJar",
     // MPP plugin has issues with modules using withJava() clause, see b/158747039.
     "processTestResources",
@@ -127,14 +124,20 @@ val taskNamesKnownToDuplicateOutputs = setOf(
     "generateDebugProtos",
     "generateReleaseProtos",
     // Release APKs
-    "copyReleaseApk"
+    "copyReleaseApk",
+)
+
+val taskTypesKnownToDuplicateOutputs = setOf(
+    // b/224564238
+    "com.android.build.gradle.internal.lint.AndroidLintTask_Decorated"
 )
 
 fun shouldValidateTaskOutput(task: Task): Boolean {
     if (!task.enabled) {
         return false
     }
-    return !taskNamesKnownToDuplicateOutputs.contains(task.name)
+    return !taskNamesKnownToDuplicateOutputs.contains(task.name) &&
+        !taskTypesKnownToDuplicateOutputs.contains(task::class.qualifiedName)
 }
 
 // For this project and all subprojects, collects all tasks and creates a map keyed by their output files
@@ -160,7 +163,7 @@ fun Project.findAllTasksByOutput(): Map<File, Task> {
                     )
                 }
             }
-            tasksByOutput.put(otherTaskOutput, otherTask)
+            tasksByOutput[otherTaskOutput] = otherTask
         }
     }
     return tasksByOutput
