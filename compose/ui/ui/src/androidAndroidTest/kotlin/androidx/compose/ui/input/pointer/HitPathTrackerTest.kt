@@ -23,12 +23,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.autofill.Autofill
 import androidx.compose.ui.autofill.AutofillTree
 import androidx.compose.ui.focus.FocusDirection
-import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.focus.FocusOwner
 import androidx.compose.ui.geometry.MutableRect
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.Shape
@@ -38,7 +39,6 @@ import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.LayoutCoordinates
-import androidx.compose.ui.layout.LookaheadScope
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.modifier.ModifierLocalManager
 import androidx.compose.ui.node.InternalCoreApi
@@ -56,8 +56,10 @@ import androidx.compose.ui.platform.ClipboardManager
 import androidx.compose.ui.platform.TextToolbar
 import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.WindowInfo
+import androidx.compose.ui.text.ExperimentalTextApi
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.PlatformTextInputPluginRegistry
 import androidx.compose.ui.text.input.TextInputService
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -69,6 +71,10 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.MediumTest
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
+import java.util.concurrent.Executors
+import kotlin.coroutines.CoroutineContext
+import kotlin.test.assertEquals
+import kotlinx.coroutines.asCoroutineDispatcher
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -496,7 +502,7 @@ class HitPathTrackerTest {
         hitPathTracker.dispatchChanges(internalPointerEvent)
 
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes.values.first())
+            .assertThat(internalPointerEvent.changes.valueAt(0))
             .isStructurallyEqualTo(down(5))
     }
 
@@ -518,7 +524,7 @@ class HitPathTrackerTest {
         hitPathTracker.dispatchChanges(internalPointerEvent)
 
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes.values.first())
+            .assertThat(internalPointerEvent.changes.valueAt(0))
             .isStructurallyEqualTo(down(13).apply { if (pressed != previousPressed) consume() })
     }
 
@@ -624,7 +630,7 @@ class HitPathTrackerTest {
         assertThat(log1[5].pass).isEqualTo(PointerEventPass.Main)
 
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes.values.first())
+            .assertThat(internalPointerEvent.changes.valueAt(0))
             .isStructurallyEqualTo(
                 consumedExpectedChange
             )
@@ -766,14 +772,14 @@ class HitPathTrackerTest {
             )
         assertThat(log2[3].pass).isEqualTo(PointerEventPass.Main)
 
-        assertThat(internalPointerEvent.changes).hasSize(2)
+        assertEquals(2, internalPointerEvent.changes.size())
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes[actualEvent1.id])
+            .assertThat(internalPointerEvent.changes[actualEvent1.id.value])
             .isStructurallyEqualTo(
                 consumedExpectedEvent1
             )
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes[actualEvent2.id])
+            .assertThat(internalPointerEvent.changes[actualEvent2.id.value])
             .isStructurallyEqualTo(
                 consumedExpectedEvent2
             )
@@ -877,13 +883,13 @@ class HitPathTrackerTest {
             )
         assertThat(log1[5].pass).isEqualTo(PointerEventPass.Main)
 
-        assertThat(internalPointerEvent.changes).hasSize(2)
+        assertEquals(2, internalPointerEvent.changes.size())
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes[actualEvent1.id])
+            .assertThat(internalPointerEvent.changes[actualEvent1.id.value])
             .isStructurallyEqualTo(consumedEvent1)
 
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes[actualEvent2.id])
+            .assertThat(internalPointerEvent.changes[actualEvent2.id.value])
             .isStructurallyEqualTo(consumedEvent2)
     }
 
@@ -966,14 +972,14 @@ class HitPathTrackerTest {
             )
         assertThat(log1[3].pass).isEqualTo(PointerEventPass.Main)
 
-        assertThat(internalPointerEvent.changes).hasSize(2)
+        assertEquals(2, internalPointerEvent.changes.size())
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes[actualEvent1.id])
+            .assertThat(internalPointerEvent.changes[actualEvent1.id.value])
             .isStructurallyEqualTo(
                 consumedEvent1
             )
         PointerInputChangeSubject
-            .assertThat(internalPointerEvent.changes[actualEvent2.id])
+            .assertThat(internalPointerEvent.changes[actualEvent2.id.value])
             .isStructurallyEqualTo(
                 consumedEvent2
             )
@@ -3524,7 +3530,7 @@ class HitPathTrackerTest {
     }
 
     private fun areEqual(actualNode: Node, expectedNode: Node): Boolean {
-        if (actualNode.pointerInputNode !== expectedNode.pointerInputNode) {
+        if (actualNode.modifierNode !== expectedNode.modifierNode) {
             return false
         }
 
@@ -3532,8 +3538,8 @@ class HitPathTrackerTest {
             return false
         }
         var check = true
-        actualNode.pointerIds.forEach {
-            check = check && expectedNode.pointerIds.contains(it)
+        for (i in 0 until actualNode.pointerIds.size) {
+            check = check && expectedNode.pointerIds.contains(actualNode.pointerIds[i])
         }
         if (!check) {
             return false
@@ -3557,9 +3563,11 @@ internal class LayoutCoordinatesStub(
 ) : NodeCoordinator(LayoutNode()) {
 
     var additionalOffset = Offset.Zero
-    override fun createLookaheadDelegate(scope: LookaheadScope): LookaheadDelegate {
+    override fun ensureLookaheadDelegateCreated() {
         TODO("Not yet implemented")
     }
+
+    override var lookaheadDelegate: LookaheadDelegate? = null
 
     override val providedAlignmentLines: Set<AlignmentLine>
         get() = TODO("not implemented")
@@ -3612,7 +3620,9 @@ internal class LayoutCoordinatesStub(
 @OptIn(InternalCoreApi::class)
 private class MockOwner(
     val position: IntOffset = IntOffset.Zero,
-    override val root: LayoutNode = LayoutNode()
+    override val root: LayoutNode = LayoutNode(),
+    override val coroutineContext: CoroutineContext =
+        Executors.newFixedThreadPool(3).asCoroutineDispatcher()
 ) : Owner {
     val onRequestMeasureParams = mutableListOf<LayoutNode>()
     val onAttachParams = mutableListOf<LayoutNode>()
@@ -3641,9 +3651,12 @@ private class MockOwner(
         get() = Density(1f)
     override val textInputService: TextInputService
         get() = TODO("Not yet implemented")
+    @OptIn(ExperimentalTextApi::class)
+    override val platformTextInputPluginRegistry: PlatformTextInputPluginRegistry
+        get() = TODO("Not yet implemented")
     override val pointerIconService: PointerIconService
         get() = TODO("Not yet implemented")
-    override val focusManager: FocusManager
+    override val focusOwner: FocusOwner
         get() = TODO("Not yet implemented")
     override val windowInfo: WindowInfo
         get() = TODO("Not yet implemented")
@@ -3676,7 +3689,8 @@ private class MockOwner(
     override fun onRequestMeasure(
         layoutNode: LayoutNode,
         affectsLookahead: Boolean,
-        forceRequest: Boolean
+        forceRequest: Boolean,
+        scheduleMeasureAndLayout: Boolean
     ) {
         onRequestMeasureParams += layoutNode
         if (affectsLookahead) {
@@ -3722,7 +3736,7 @@ private class MockOwner(
     override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
     }
 
-    override fun forceMeasureTheSubtree(layoutNode: LayoutNode) {
+    override fun forceMeasureTheSubtree(layoutNode: LayoutNode, affectsLookahead: Boolean) {
     }
 
     override fun createLayer(
@@ -3747,6 +3761,7 @@ private class MockOwner(
                 renderEffect: RenderEffect?,
                 ambientShadowColor: Color,
                 spotShadowColor: Color,
+                compositingStrategy: CompositingStrategy,
                 layoutDirection: LayoutDirection,
                 density: Density
             ) {

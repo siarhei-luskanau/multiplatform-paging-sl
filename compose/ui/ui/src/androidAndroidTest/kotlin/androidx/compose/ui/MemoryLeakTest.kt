@@ -30,7 +30,10 @@ import androidx.compose.testutils.createAndroidComposeBenchmarkRunner
 import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
+import androidx.test.filters.SdkSuppress
 import com.google.common.truth.Truth.assertThat
+import java.text.NumberFormat
+import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
@@ -38,8 +41,6 @@ import kotlinx.coroutines.yield
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.text.NumberFormat
-import java.util.Locale
 
 @LargeTest
 @RunWith(AndroidJUnit4::class)
@@ -94,6 +95,7 @@ class MemoryLeakTest {
         }
     }
 
+    @SdkSuppress(minSdkVersion = 22) // b/266743031
     @Test
     fun disposeContent_assertNoLeak() = runBlocking(AndroidUiDispatcher.Main) {
         // We have to ignore the first run because `dispose` leaves the OwnerView in the

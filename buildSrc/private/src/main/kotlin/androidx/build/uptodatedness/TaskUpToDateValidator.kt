@@ -48,6 +48,8 @@ private const val ENABLE_FLAG_NAME = VERIFY_UP_TO_DATE
 val ALLOW_RERUNNING_TASKS = setOf(
     "buildOnServer",
     "checkExternalLicenses",
+    // caching disabled for now while we look for a fix for b/273294710
+    "createAllArchives",
     // https://youtrack.jetbrains.com/issue/KT-52632
     "commonizeNativeDistribution",
     "createDiffArchiveForAll",
@@ -117,39 +119,42 @@ val ALLOW_RERUNNING_TASKS = setOf(
     ":hilt:hilt-navigation-compose:kaptGenerateStubsReleaseKotlin",
     ":lint-checks:integration-tests:copyDebugAndroidLintReports",
 
-    // https://github.com/gradle/gradle/issues/17262
-    ":doclava:compileJava",
-    ":doclava:processResources",
-    ":doclava:jar",
-
     // https://youtrack.jetbrains.com/issue/KT-49933
-    "generateProjectStructureMetadata"
+    "generateProjectStructureMetadata",
+
+    // https://github.com/google/protobuf-gradle-plugin/issues/667
+    ":appactions:interaction:interaction-service-proto:extractIncludeTestProto",
+    ":datastore:datastore-preferences-proto:extractIncludeTestProto",
+    ":glance:glance-appwidget-proto:extractIncludeTestProto",
+    ":health:connect:connect-client-proto:extractIncludeTestProto",
+    ":privacysandbox:tools:tools-core:extractIncludeTestProto",
+    ":test:screenshot:screenshot-proto:extractIncludeTestProto",
+    ":wear:protolayout:protolayout-proto:extractIncludeTestProto",
+    ":wear:tiles:tiles-proto:extractIncludeTestProto"
 )
 
 // Additional tasks that are expected to be temporarily out-of-date after running once
 // Tasks in this set we don't even try to rerun, because they're known to be unnecessary
 val DONT_TRY_RERUNNING_TASKS = setOf(
-    ":buildSrc-tests:project-subsets:test",
     "listTaskOutputs",
-    "validateProperties",
     "tasks",
 
-    // More information about the fact that these dokka tasks rerun can be found at b/167569304
-    "dokkaKotlinDocs",
-    "zipDokkaDocs",
-    "dackkaDocs",
-
-    // Flakily not up-to-date, b/176120659
-    "doclavaDocs",
+    // More information about the fact that these dackka tasks rerun can be found at b/167569304
+    "docs",
 
     // We know that these tasks are never up to date due to maven-metadata.xml changing
     // https://github.com/gradle/gradle/issues/11203
     "partiallyDejetifyArchive",
     "stripArchiveForPartialDejetification",
-    "createArchive"
+    "createArchive",
+
+    // https://github.com/spdx/spdx-gradle-plugin/issues/18
+    "spdxSbomForRelease",
 )
 
 val DONT_TRY_RERUNNING_TASK_TYPES = setOf(
+    // TODO(aurimas): add back when upgrading to AGP 8.0.0-beta01
+    "com.android.build.gradle.internal.tasks.BundleLibraryJavaRes_Decorated",
     "com.android.build.gradle.internal.lint.AndroidLintTextOutputTask_Decorated",
     // lint report tasks
     "com.android.build.gradle.internal.lint.AndroidLintTask_Decorated",
@@ -165,7 +170,6 @@ val DONT_TRY_RERUNNING_TASK_TYPES = setOf(
     "androidx.build.license.CheckExternalDependencyLicensesTask_Decorated",
 )
 
-@Suppress("UnstableApiUsage") // usage of BuildService that's incubating
 abstract class TaskUpToDateValidator :
     BuildService<TaskUpToDateValidator.Parameters>, OperationCompletionListener {
     interface Parameters : BuildServiceParameters {

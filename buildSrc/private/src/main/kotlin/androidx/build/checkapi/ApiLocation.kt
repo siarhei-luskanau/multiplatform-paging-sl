@@ -16,12 +16,11 @@
 
 package androidx.build.checkapi
 
-import java.io.File
-
 import androidx.build.Version
 import androidx.build.version
-import org.gradle.api.Project
+import java.io.File
 import java.io.Serializable
+import org.gradle.api.Project
 
 /**
  * Contains information about the files used to record a library's API surfaces. This class may
@@ -32,7 +31,6 @@ import java.io.Serializable
  * <ul>
  * <li>public
  * <li>restricted
- * <li>experimental
  * <li>resource
  * </ul>
  */
@@ -50,13 +48,12 @@ data class ApiLocation(
     val removedApiFile: File,
     // File where the library's public plus restricted (see @RestrictTo) API surfaces are recorded
     val restrictedApiFile: File,
-    // File where the library's public plus experimental (see @Experimental) API surfaces are
-    // recorded
-    val experimentalApiFile: File,
     // File where the library's public resources are recorded
     val resourceFile: File,
     // Directory where native API files are stored
-    val nativeApiDirectory: File
+    val nativeApiDirectory: File,
+    // Directory where the library's stable AIDL surface is recorded
+    val aidlApiDirectory: File
 ) : Serializable {
 
     /**
@@ -84,8 +81,8 @@ data class ApiLocation(
             return fromBaseName(apiFileDir, CURRENT)
         }
 
-        fun isResourceApiFile(apiFile: File): Boolean {
-            return apiFile.name.startsWith(PREFIX_RESOURCE)
+        fun isResourceApiFilename(filename: String): Boolean {
+            return filename.startsWith(PREFIX_RESOURCE)
         }
 
         private fun fromBaseName(apiFileDir: File, baseName: String): ApiLocation {
@@ -94,9 +91,9 @@ data class ApiLocation(
                 publicApiFile = File(apiFileDir, "$baseName$EXTENSION"),
                 removedApiFile = File(apiFileDir, "$PREFIX_REMOVED$baseName$EXTENSION"),
                 restrictedApiFile = File(apiFileDir, "$PREFIX_RESTRICTED$baseName$EXTENSION"),
-                experimentalApiFile = File(apiFileDir, "$PREFIX_EXPERIMENTAL$baseName$EXTENSION"),
                 resourceFile = File(apiFileDir, "$PREFIX_RESOURCE$baseName$EXTENSION"),
-                nativeApiDirectory = File(apiFileDir, NATIVE_API_DIRECTORY_NAME).resolve(baseName)
+                nativeApiDirectory = File(apiFileDir, NATIVE_API_DIRECTORY_NAME).resolve(baseName),
+                aidlApiDirectory = File(apiFileDir, AIDL_API_DIRECTORY_NAME).resolve(baseName)
             )
         }
 
@@ -121,11 +118,6 @@ data class ApiLocation(
         private const val PREFIX_RESTRICTED = "restricted_"
 
         /**
-         * Prefix used for experimental API surface files.
-         */
-        private const val PREFIX_EXPERIMENTAL = "public_plus_experimental_"
-
-        /**
          * Prefix used for resource-type API files.
          */
         private const val PREFIX_RESOURCE = "res-"
@@ -134,6 +126,11 @@ data class ApiLocation(
          * Directory name for location of native API files
          */
         private const val NATIVE_API_DIRECTORY_NAME = "native"
+
+        /**
+         * Directory name for location of AIDL API files
+         */
+        private const val AIDL_API_DIRECTORY_NAME = "aidl"
     }
 }
 

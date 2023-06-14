@@ -19,6 +19,22 @@ package androidx.build
 import androidx.build.dependencyTracker.AffectedModuleDetector
 import org.gradle.api.GradleException
 import org.gradle.api.Project
+import org.gradle.api.provider.Provider
+
+/**
+ * Whether to enable constraints for projects in same-version groups
+ *
+ * This is expected to be true during builds that publish artifacts externally
+ * This is expected to be false during most other builds because:
+ *   Developers may be interested in including only a subset of projects in ANDROIDX_PROJECTS to
+ *     make Studio run more quickly.
+ *   If a build contains only a subset of projects, we cannot necessarily add constraints between
+ *     all pairs of projects in the same group.
+ *   We want most builds to have high remote cache usage, so we want constraints to be
+ *     similar across most builds
+ * See go/androidx-group-constraints for more information
+ */
+const val ADD_GROUP_CONSTRAINTS = "androidx.constraints"
 
 /**
  * Setting this property makes Test tasks succeed even if there
@@ -64,12 +80,6 @@ const val ENABLE_COMPOSE_COMPILER_REPORTS = "androidx.enableComposeCompilerRepor
 const val ENABLE_DOCUMENTATION = "androidx.enableDocumentation"
 
 /**
- * Adjusts the set of projects participating in this build.
- * See settings.gradle for more information
- */
-const val PROJECT_SUBSET = "androidx.projects"
-
-/**
  * Setting this property puts a summary of the relevant failure messages into standard error
  */
 const val SUMMARIZE_STANDARD_ERROR = "androidx.summarizeStderr"
@@ -94,11 +104,6 @@ const val PLAYGROUND_SNAPSHOT_BUILD_ID = "androidx.playground.snapshotBuildId"
  * Build Id used to pull SNAPSHOT version of Metalava for Playground projects
  */
 const val PLAYGROUND_METALAVA_BUILD_ID = "androidx.playground.metalavaBuildId"
-
-/**
- * Build Id used to pull SNAPSHOT version of Dokka for Playground projects
- */
-const val PLAYGROUND_DOKKA_BUILD_ID = "androidx.playground.dokkaBuildId"
 
 /**
  * Filepath to the java agent of YourKit for profiling
@@ -130,7 +135,36 @@ const val KMP_GITHUB_BUILD = "androidx.github.build"
  */
 const val ALLOW_MISSING_LINT_CHECKS_PROJECT = "androidx.allow.missing.lint"
 
+/**
+ * If set to a uri, this is the location that will be used to download `xcodegen` when running
+ * Darwin benchmarks.
+ */
+const val XCODEGEN_DOWNLOAD_URI = "androidx.benchmark.darwin.xcodeGenDownloadUri"
+
+/**
+ * If true, don't restrict usage of compileSdk property.
+ */
+const val ALLOW_CUSTOM_COMPILE_SDK = "androidx.allowCustomCompileSdk"
+
+/**
+ * Whether to update gradle signature verification metadata
+ */
+const val UPDATE_SIGNATURES = "androidx.update.signatures"
+
+/**
+ * Comma-delimited list of project path prefixes which have been opted-out of the Suppress
+ * Compatibility migration.
+ */
+const val SUPPRESS_COMPATIBILITY_OPT_OUT = "androidx.suppress.compatibility.optout"
+
+/**
+ * Comma-delimited list of project path prefixes which have been opted-in to the Suppress
+ * Compatibility migration.
+ */
+const val SUPPRESS_COMPATIBILITY_OPT_IN = "androidx.suppress.compatibility.optin"
+
 val ALL_ANDROIDX_PROPERTIES = setOf(
+    ADD_GROUP_CONSTRAINTS,
     ALTERNATIVE_PROJECT_URL,
     VERSION_EXTRA_CHECK_ENABLED,
     VALIDATE_PROJECT_STRUCTURE,
@@ -139,7 +173,6 @@ val ALL_ANDROIDX_PROPERTIES = setOf(
     ENABLE_COMPOSE_COMPILER_REPORTS,
     DISPLAY_TEST_OUTPUT,
     ENABLE_DOCUMENTATION,
-    PROJECT_SUBSET,
     STUDIO_TYPE,
     SUMMARIZE_STANDARD_ERROR,
     USE_MAX_DEP_VERSIONS,
@@ -151,12 +184,27 @@ val ALL_ANDROIDX_PROPERTIES = setOf(
     AffectedModuleDetector.BASE_COMMIT_ARG,
     PLAYGROUND_SNAPSHOT_BUILD_ID,
     PLAYGROUND_METALAVA_BUILD_ID,
-    PLAYGROUND_DOKKA_BUILD_ID,
     PROFILE_YOURKIT_AGENT_PATH,
     KMP_GITHUB_BUILD,
     ENABLED_KMP_TARGET_PLATFORMS,
-    ALLOW_MISSING_LINT_CHECKS_PROJECT
+    ALLOW_MISSING_LINT_CHECKS_PROJECT,
+    XCODEGEN_DOWNLOAD_URI,
+    ALLOW_CUSTOM_COMPILE_SDK,
+    UPDATE_SIGNATURES,
+    FilteredAnchorTask.PROP_TASK_NAME,
+    FilteredAnchorTask.PROP_PATH_PREFIX,
 )
+
+val PREFIXED_ANDROIDX_PROPERTIES = setOf(
+    SUPPRESS_COMPATIBILITY_OPT_OUT,
+    SUPPRESS_COMPATIBILITY_OPT_IN,
+)
+
+/**
+ * Whether to enable constraints for projects in same-version groups
+ * See the property definition for more details
+ */
+fun Project.shouldAddGroupConstraints() = booleanPropertyProvider(ADD_GROUP_CONSTRAINTS)
 
 /**
  * Returns alternative project url that will be used as "url" property
@@ -186,7 +234,8 @@ fun Project.isValidateProjectStructureEnabled(): Boolean =
 fun Project.validateAllAndroidxArgumentsAreRecognized() {
     for (propertyName in project.properties.keys) {
         if (propertyName.startsWith("androidx")) {
-            if (!ALL_ANDROIDX_PROPERTIES.contains(propertyName)) {
+            if (!ALL_ANDROIDX_PROPERTIES.contains(propertyName) &&
+                PREFIXED_ANDROIDX_PROPERTIES.none { propertyName.startsWith(it) }) {
                 val message = "Unrecognized Androidx property '$propertyName'.\n" +
                     "\n" +
                     "Is this a misspelling? All recognized Androidx properties:\n" +
@@ -243,4 +292,37 @@ fun Project.usingMaxDepVersions(): Boolean {
 fun Project.allowMissingLintProject() =
     findBooleanProperty(ALLOW_MISSING_LINT_CHECKS_PROJECT) ?: false
 
+/**
+ * Whether libraries are allowed to customize the value of the compileSdk property.
+ */
+fun Project.isCustomCompileSdkAllowed(): Boolean =
+    findBooleanProperty(ALLOW_CUSTOM_COMPILE_SDK) ?: true
+
 fun Project.findBooleanProperty(propName: String) = (findProperty(propName) as? String)?.toBoolean()
+
+fun Project.booleanPropertyProvider(propName: String): Provider<Boolean> {
+    return project.providers.gradleProperty(propName).map { s ->
+        s.toBoolean()
+    }.orElse(false)
+}
+
+/**
+ * List of project path prefixes which have been opted-in to the Suppress Compatibility migration.
+ */
+fun Project.getSuppressCompatibilityOptInPathPrefixes(): List<String> =
+    aggregatePropertyPrefix(SUPPRESS_COMPATIBILITY_OPT_IN)
+
+/**
+ * List of project path prefixes which have been opted out of the Suppress Compatibility migration.
+ */
+fun Project.getSuppressCompatibilityOptOutPathPrefixes(): List<String> =
+    aggregatePropertyPrefix(SUPPRESS_COMPATIBILITY_OPT_OUT)
+
+internal fun Project.aggregatePropertyPrefix(prefix: String): List<String> =
+    properties.flatMap { (name, value) ->
+        if (name.startsWith(prefix)) {
+            (value as? String)?.split(",") ?: emptyList()
+        } else {
+            emptyList()
+        }
+    }

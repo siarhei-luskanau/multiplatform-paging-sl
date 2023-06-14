@@ -16,30 +16,24 @@
 
 package androidx.paging
 
-import androidx.testutils.TestDispatcher
+import kotlin.coroutines.EmptyCoroutineContext
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.UnconfinedTestDispatcher
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFalse
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.junit.runners.JUnit4
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
-import org.mockito.Mockito.verifyZeroInteractions
-import kotlin.coroutines.EmptyCoroutineContext
-import kotlin.test.assertFailsWith
 
-@RunWith(JUnit4::class)
+@OptIn(ExperimentalCoroutinesApi::class)
 class PageKeyedDataSourceTest {
-    private val mainThread = TestDispatcher()
-    private val backgroundThread = TestDispatcher()
-
     internal data class Item(val name: String)
 
     internal data class Page(val prev: String?, val data: List<Item>, val next: String?)
@@ -245,7 +239,7 @@ class PageKeyedDataSourceTest {
         @Suppress("UNCHECKED_CAST", "DEPRECATION")
         val boundaryCallback =
             mock(PagedList.BoundaryCallback::class.java) as PagedList.BoundaryCallback<String>
-        val dispatcher = TestDispatcher()
+        val dispatcher = StandardTestDispatcher()
 
         val testCoroutineScope = CoroutineScope(EmptyCoroutineContext)
         @Suppress("DEPRECATION")
@@ -258,9 +252,9 @@ class PageKeyedDataSourceTest {
 
         pagedList.loadAround(0)
 
-        verifyZeroInteractions(boundaryCallback)
+        verifyNoMoreInteractions(boundaryCallback)
 
-        dispatcher.executeAll()
+        dispatcher.scheduler.advanceUntilIdle()
 
         // verify boundary callbacks are triggered
         verify(boundaryCallback).onItemAtFrontLoaded("A")
@@ -298,7 +292,7 @@ class PageKeyedDataSourceTest {
         @Suppress("UNCHECKED_CAST", "DEPRECATION")
         val boundaryCallback =
             mock(PagedList.BoundaryCallback::class.java) as PagedList.BoundaryCallback<String>
-        val dispatcher = TestDispatcher()
+        val dispatcher = StandardTestDispatcher()
 
         val testCoroutineScope = CoroutineScope(EmptyCoroutineContext)
         @Suppress("DEPRECATION")
@@ -311,9 +305,9 @@ class PageKeyedDataSourceTest {
 
         pagedList.loadAround(0)
 
-        verifyZeroInteractions(boundaryCallback)
+        verifyNoMoreInteractions(boundaryCallback)
 
-        dispatcher.executeAll()
+        dispatcher.scheduler.advanceUntilIdle()
 
         // verify boundary callbacks are triggered
         verify(boundaryCallback).onItemAtFrontLoaded("B")
@@ -511,13 +505,6 @@ class PageKeyedDataSourceTest {
             }
             PAGE_MAP = map
             ITEM_LIST = list
-        }
-    }
-
-    private fun drain() {
-        while (backgroundThread.queue.isNotEmpty() || mainThread.queue.isNotEmpty()) {
-            backgroundThread.executeAll()
-            mainThread.executeAll()
         }
     }
 }

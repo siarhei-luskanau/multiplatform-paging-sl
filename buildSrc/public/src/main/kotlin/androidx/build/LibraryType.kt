@@ -36,17 +36,33 @@ package androidx.build
  *
  * The possible values of LibraryType are as follows:
  * PUBLISHED_LIBRARY: a conventional library, published, sourced, documented, and versioned.
- * SAMPLES: a library of samples, published as additional properties to a conventional library,
- *      including published source. Documented in a special way, not API tracked.
+ * PUBLISHED_TEST_LIBRARY: PUBLISHED_LIBRARY, but allows calling @VisibleForTesting API. Used for
+ * libraries that allow developers to test code that uses your library. Often provides test fakes.
+ * PUBLISHED_NATIVE_LIBRARY: PUBLISHED_LIBRARY, but uses native API tracking instead of Java
+ * INTERNAL_TEST_LIBRARY: unpublished, untracked, undocumented. Used in internal tests. Usually
+ * contains integration tests, but is _not_ an app. Runs device tests.
+ * INTERNAL_HOST_TEST_LIBRARY: as INTERNAL_TEST_LIBRARY, but runs host tests instead. Avoid mixing
+ * host tests and device tests in the same library, for performance / test-result-caching reasons.
+ * SAMPLES: a library containing sample code referenced in your library's documentation with
+ * @sampled, published as a documentation-related supplement to a conventional library.
  * LINT: a library of lint rules for using a conventional library. Published through lintPublish as
- *      part of an AAR, not published standalone.
- * COMPILER_PLUGIN: a tool that modifies the kotlin or java compiler. Used only while compiling.
+ * part of an AAR, not published standalone.
+ * COMPILER_DAEMON: a tool that modifies the kotlin or java compiler. Used only while compiling. Has
+ * no API and does not publish source jars, but does release to maven.
+ * COMPILER_DAEMON_TEST: a compiler plugin that is not published at all, for internal-only use.
+ * COMPILER_PLUGIN: as COMPILER_DAEMON, but is compatible with JDK 11.
  * GRADLE_PLUGIN: a library that is a gradle plugin.
  * ANNOTATION_PROCESSOR: a library consisting of an annotation processor. Used only while compiling.
+ * ANNOTATION_PROCESSOR_UTILS: contains reference code for understanding an annotation processor.
+ * Publishes source jars, but does not track API.
  * OTHER_CODE_PROCESSOR: a library that algorithmically generates and/or alters code
  *                      but not through hooking into custom annotations or the kotlin compiler.
  *                      For example, navigation:safe-args-generator or Jetifier.
+ * IDE_PLUGIN: a library that should only ever be downloaded by studio. Unfortunately, we don't
+ * yet have a good way to track API for these. b/281843422
  * UNSET: a library that has not yet been migrated to using LibraryType. Should never be used.
+ * APP: an app, such as an example app or integration testsapp. Should never be used; apps should
+ * not apply the AndroidX plugin or have an androidx block in their build.gradle files.
  *
  * TODO: potential future LibraryTypes:
  * KOTLIN_ONLY_LIBRARY: like PUBLISHED_LIBRARY, but not intended for use from java. ktx and compose.
@@ -59,7 +75,8 @@ sealed class LibraryType(
     val publish: Publish = Publish.NONE,
     val sourceJars: Boolean = false,
     val checkApi: RunApiTasks = RunApiTasks.No("Unknown Library Type"),
-    val compilationTarget: CompilationTarget = CompilationTarget.DEVICE
+    val compilationTarget: CompilationTarget = CompilationTarget.DEVICE,
+    val allowCallingVisibleForTestsApis: Boolean = false
 ) {
     val name: String
         get() = javaClass.simpleName
@@ -69,6 +86,7 @@ sealed class LibraryType(
         val PUBLISHED_TEST_LIBRARY = PublishedTestLibrary()
         val PUBLISHED_NATIVE_LIBRARY = PublishedNativeLibrary()
         val INTERNAL_TEST_LIBRARY = InternalTestLibrary()
+        val INTERNAL_HOST_TEST_LIBRARY = InternalHostTestLibrary()
         val SAMPLES = Samples()
         val LINT = Lint()
         val COMPILER_DAEMON = CompilerDaemon()
@@ -79,18 +97,56 @@ sealed class LibraryType(
         val ANNOTATION_PROCESSOR_UTILS = AnnotationProcessorUtils()
         val OTHER_CODE_PROCESSOR = OtherCodeProcessor()
         val IDE_PLUGIN = IdePlugin()
-        val KMP_LIBRARY = KmpLibrary()
         val UNSET = Unset()
+        @Deprecated("Do not use an androidx block for apps/testapps, only for libraries")
+        val APP = UNSET
+
+        @Suppress("DEPRECATION")
+        private val allTypes = mapOf(
+            "PUBLISHED_LIBRARY" to PUBLISHED_LIBRARY,
+            "PUBLISHED_TEST_LIBRARY" to PUBLISHED_TEST_LIBRARY,
+            "PUBLISHED_NATIVE_LIBRARY" to PUBLISHED_NATIVE_LIBRARY,
+            "INTERNAL_TEST_LIBRARY" to INTERNAL_TEST_LIBRARY,
+            "INTERNAL_HOST_TEST_LIBRARY" to INTERNAL_HOST_TEST_LIBRARY,
+            "SAMPLES" to SAMPLES,
+            "LINT" to LINT,
+            "COMPILER_DAEMON" to COMPILER_DAEMON,
+            "COMPILER_DAEMON_TEST" to COMPILER_DAEMON_TEST,
+            "COMPILER_PLUGIN" to COMPILER_PLUGIN,
+            "GRADLE_PLUGIN" to GRADLE_PLUGIN,
+            "ANNOTATION_PROCESSOR" to ANNOTATION_PROCESSOR,
+            "ANNOTATION_PROCESSOR_UTILS" to ANNOTATION_PROCESSOR_UTILS,
+            "OTHER_CODE_PROCESSOR" to OTHER_CODE_PROCESSOR,
+            "IDE_PLUGIN" to IDE_PLUGIN,
+            "UNSET" to UNSET,
+            "APP" to APP
+        )
+        fun valueOf(name: String): LibraryType {
+            val result = allTypes[name]
+            check(result != null) {
+                "LibraryType with name $name not found"
+            }
+            return result
+        }
     }
-    open class PublishedLibrary : LibraryType(
+    open class PublishedLibrary(allowCallingVisibleForTestsApis: Boolean = false) : LibraryType(
         publish = Publish.SNAPSHOT_AND_RELEASE,
         sourceJars = true,
-        checkApi = RunApiTasks.Yes()
+        checkApi = RunApiTasks.Yes(),
+        allowCallingVisibleForTestsApis = allowCallingVisibleForTestsApis
+    )
+    open class InternalLibrary(
+        compilationTarget: CompilationTarget = CompilationTarget.DEVICE,
+        allowCallingVisibleForTestsApis: Boolean = false
+    ) : LibraryType(
+        checkApi = RunApiTasks.No("Internal Library"),
+        compilationTarget = compilationTarget,
+        allowCallingVisibleForTestsApis = allowCallingVisibleForTestsApis
     )
 
-    class PublishedTestLibrary() : PublishedLibrary()
-    open class InternalLibrary() : LibraryType()
-    class InternalTestLibrary() : InternalLibrary()
+    class PublishedTestLibrary() : PublishedLibrary(allowCallingVisibleForTestsApis = true)
+    class InternalTestLibrary() : InternalLibrary(allowCallingVisibleForTestsApis = true)
+    class InternalHostTestLibrary() : InternalLibrary(CompilationTarget.HOST)
     class PublishedNativeLibrary : PublishedLibrary()
     class Samples : LibraryType(
         publish = Publish.SNAPSHOT_AND_RELEASE,
@@ -153,12 +209,6 @@ sealed class LibraryType(
         checkApi = RunApiTasks.No("IDE Plugin (consumed only by Android Studio"),
         // This is a bit complicated. IDE plugins usually have an on-device component installed by
         // Android Studio, rather than by a client of the library, but also a host-side component.
-        compilationTarget = CompilationTarget.DEVICE
-    )
-    class KmpLibrary : LibraryType(
-        publish = Publish.SNAPSHOT_AND_RELEASE,
-        sourceJars = true,
-        checkApi = RunApiTasks.Yes(),
         compilationTarget = CompilationTarget.DEVICE
     )
     class Unset : LibraryType()

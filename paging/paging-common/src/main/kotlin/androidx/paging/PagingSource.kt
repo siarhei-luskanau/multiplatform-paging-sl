@@ -240,6 +240,8 @@ public abstract class PagingSource<Key : Any, Value : Any> {
         /**
          * Success result object for [PagingSource.load].
          *
+         * As a convenience, iterating on this object will iterate through its loaded [data].
+         *
          * @sample androidx.paging.samples.pageKeyedPage
          * @sample androidx.paging.samples.pageIndexedPage
          */
@@ -258,16 +260,18 @@ public abstract class PagingSource<Key : Any, Value : Any> {
              */
             val nextKey: Key?,
             /**
-             * Optional count of items before the loaded data.
+             * Count of items before the loaded data. Must be implemented if
+             * [jumping][PagingSource.jumpingSupported] is enabled. Optional otherwise.
              */
             @IntRange(from = COUNT_UNDEFINED.toLong())
             val itemsBefore: Int = COUNT_UNDEFINED,
             /**
-             * Optional count of items after the loaded data.
+             * Count of items after the loaded data. Must be implemented if
+             * [jumping][PagingSource.jumpingSupported] is enabled. Optional otherwise.
              */
             @IntRange(from = COUNT_UNDEFINED.toLong())
             val itemsAfter: Int = COUNT_UNDEFINED
-        ) : LoadResult<Key, Value>() {
+        ) : LoadResult<Key, Value>(), Iterable<Value> {
 
             /**
              * Success result object for [PagingSource.load].
@@ -293,6 +297,11 @@ public abstract class PagingSource<Key : Any, Value : Any> {
                     "itemsAfter cannot be negative"
                 }
             }
+
+            override fun iterator(): Iterator<Value> {
+                return data.listIterator()
+            }
+
             override fun toString(): String {
                 return """LoadResult.Page(
                     |   data size: ${data.size}
@@ -327,6 +336,10 @@ public abstract class PagingSource<Key : Any, Value : Any> {
      *
      * [PagingSource]s that support jumps should override [getRefreshKey] to return a [Key] that
      * would load data fulfilling the viewport given a user's current [PagingState.anchorPosition].
+     *
+     * To support jumping, the [LoadResult.Page] returned from this PagingSource must implement
+     * [itemsBefore][LoadResult.Page.itemsBefore] and [itemsAfter][LoadResult.Page.itemsAfter] to
+     * notify Paging the boundaries within which it can jump.
      *
      * @see [PagingConfig.jumpThreshold]
      */

@@ -24,7 +24,6 @@ import androidx.room.compiler.processing.ksp.KspAnnotated.UseSiteFilter.Companio
 import androidx.room.compiler.processing.ksp.synthetic.KspSyntheticPropertyMethodElement
 import com.google.devtools.ksp.isPrivate
 import com.google.devtools.ksp.symbol.KSPropertyDeclaration
-import com.google.devtools.ksp.symbol.KSType
 import com.google.devtools.ksp.symbol.Modifier
 
 internal class KspFieldElement(
@@ -48,8 +47,11 @@ internal class KspFieldElement(
     }
 
     override val type: KspType by lazy {
-        asMemberOf(enclosingElement.type?.ksType)
+        createAsMemberOf(closestMemberContainer.type)
     }
+
+    override val jvmDescriptor: String
+        get() = this.jvmDescriptor()
 
     val syntheticAccessors: List<KspSyntheticPropertyMethodElement> by lazy {
         when {
@@ -59,7 +61,11 @@ internal class KspFieldElement(
                 emptyList()
             }
             declaration.isPrivate() -> emptyList()
-
+            declaration.modifiers.contains(Modifier.CONST) -> {
+                // No accessors are needed for const properties:
+                // https://kotlinlang.org/docs/java-to-kotlin-interop.html#static-fields
+                emptyList()
+            }
             else -> {
                 sequenceOf(declaration.getter, declaration.setter)
                     .filterNotNull()
@@ -68,21 +74,12 @@ internal class KspFieldElement(
                         // them out.
                         it.modifiers.contains(Modifier.PRIVATE)
                     }
-                    .filter {
-                        if (isStatic()) {
-                            // static fields are the properties that are coming from the
-                            // companion. Whether we'll generate method for it or not depends on
-                            // the JVMStatic annotation
-                            it.hasJvmStaticAnnotation() || declaration.hasJvmStaticAnnotation()
-                        } else {
-                            true
-                        }
-                    }
                     .map { accessor ->
                         KspSyntheticPropertyMethodElement.create(
                             env = env,
                             field = this,
-                            accessor = accessor
+                            accessor = accessor,
+                            isSyntheticStatic = false
                         )
                     }.toList()
             }
@@ -95,17 +92,23 @@ internal class KspFieldElement(
         }
 
     override fun asMemberOf(other: XType): KspType {
-        if (enclosingElement.type?.isSameType(other) != false) {
-            return type
+        return if (closestMemberContainer.type?.isSameType(other) != false) {
+            type
+        } else {
+            return createAsMemberOf(other)
         }
-        check(other is KspType)
-        return asMemberOf(other.ksType)
     }
 
-    private fun asMemberOf(ksType: KSType?): KspType {
+    private fun createAsMemberOf(container: XType?): KspType {
+        check(container is KspType?)
         return env.wrap(
             originatingReference = declaration.type,
-            ksType = declaration.typeAsMemberOf(ksType)
+            ksType = declaration.typeAsMemberOf(container?.ksType)
+        ).copyWithScope(
+            KSTypeVarianceResolverScope.PropertyType(
+                field = this,
+                asMemberOf = container,
+            )
         )
     }
 

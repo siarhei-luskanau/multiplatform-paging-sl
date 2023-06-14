@@ -20,13 +20,13 @@ import androidx.datastore.OkioPath
 import androidx.datastore.OkioTestIO
 import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.okio.OkioSerializer
-import kotlinx.coroutines.test.runTest
-import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runTest
 import okio.FileSystem
 
 @kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -37,7 +37,7 @@ class PreferencesSerializerJavaTest {
     private val testIO = OkioTestIO()
 
     private lateinit var testFile: OkioPath
-    private val preferencesSerializer: OkioSerializer<Preferences> = getPreferencesSerializer()
+    private val preferencesSerializer: OkioSerializer<Preferences> = PreferencesSerializer
     private val fileSystem: FileSystem = FileSystem.SYSTEM
 
     @BeforeTest

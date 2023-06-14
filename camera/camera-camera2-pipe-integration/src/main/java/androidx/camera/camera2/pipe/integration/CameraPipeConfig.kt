@@ -25,15 +25,19 @@ import androidx.camera.core.CameraXConfig
  * Convenience class for generating a pre-populated CameraPipe based [CameraXConfig].
  */
 @RequiresApi(21) // TODO(b/200306659): Remove and replace with annotation on package-info.java
-object CameraPipeConfig {
-    /**
-     * Creates a [CameraXConfig] containing a default CameraPipe implementation for CameraX.
-     */
-    fun defaultConfig(): CameraXConfig {
-        return CameraXConfig.Builder()
-            .setCameraFactoryProvider(::CameraFactoryAdapter)
-            .setDeviceSurfaceManagerProvider(::CameraSurfaceAdapter)
-            .setUseCaseConfigFactoryProvider(::CameraUseCaseAdapter)
-            .build()
+class CameraPipeConfig private constructor() {
+    companion object {
+
+        /**
+         * Creates a [CameraXConfig] containing a default CameraPipe implementation for CameraX.
+         */
+        @JvmStatic
+        fun defaultConfig(): CameraXConfig {
+            return CameraXConfig.Builder()
+                .setCameraFactoryProvider(::CameraFactoryAdapter)
+                .setDeviceSurfaceManagerProvider(::CameraSurfaceAdapter)
+                .setUseCaseConfigFactoryProvider(::CameraUseCaseAdapter)
+                .build()
+        }
     }
 }

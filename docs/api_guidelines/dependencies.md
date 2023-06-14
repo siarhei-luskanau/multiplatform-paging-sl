@@ -95,8 +95,9 @@ must conform to the following guidelines:
     more individual owners (e.g. NOT a group alias)
 *   Library **must** be approved by legal
 
-Please see Jetpack's [open-source policy page](open_source.md) for more details
-on using third-party libraries.
+Please see Jetpack's
+[open-source policy page](/company/teams/androidx/open_source.md) for more
+details on using third-party libraries.
 
 ### Types of dependencies {#dependencies-types}
 
@@ -145,8 +146,16 @@ and, in rare cases, to avoid conflicts resulting from classes being moved
 between artifacts
 ([example](https://android-review.googlesource.com/c/platform/frameworks/support/+/2086029)).
 
-`core/core-ktx/build.gradle`: `dependencies { // Atomic group constraints {
-implementation(project(":core:core")) } }`
+`core/core-ktx/build.gradle`:
+
+```
+dependencies {
+    // Atomic group
+    constraints {
+        implementation(project(":core:core"))
+    }
+}
+```
 
 In *extremely* rare cases, libraries may need to define a constraint on a
 project that is not in its `studiow` project set, ex. a constraint between the
@@ -155,10 +164,16 @@ coordinate using a version variable
 ([example](https://android-review.googlesource.com/c/platform/frameworks/support/+/2160202))
 to indicate the tip-of-tree version.
 
-`paging/paging-common.build.gradle`: `dependencies { // Atomic Group constraints
-{
-implementation("androidx.paging:paging-compose:${LibraryVersions.PAGING_COMPOSE}")
-}`
+`paging/paging-common/build.gradle`:
+
+```
+dependencies {
+    // Atomic group
+    constraints {
+        implementation("androidx.paging:paging-compose:${LibraryVersions.PAGING_COMPOSE}")
+    }
+}
+```
 
 ### System health {#dependencies-health}
 
@@ -184,16 +199,24 @@ maintain binary compatibility during the migration.
 Kotlin's coroutine library adds around 100kB post-shrinking. New libraries that
 are written in Kotlin should prefer coroutines over `ListenableFuture`, but
 existing libraries must consider the size impact on their clients. See
-[Asynchronous work with return values](#async-return) for more details on using
-Kotlin coroutines in Jetpack libraries.
+[Asynchronous work with return values](/company/teams/androidx/api_guidelines#async-return)
+for more details on using Kotlin coroutines in Jetpack libraries.
 
 #### Guava {#dependencies-guava}
 
-The full Guava library is very large and *must not* be used. Libraries that
-would like to depend on Guava's `ListenableFuture` may instead depend on the
-standalone `com.google.guava:listenablefuture` artifact. See
-[Asynchronous work with return values](#async-return) for more details on using
-`ListenableFuture` in Jetpack libraries.
+The full Guava library is very large and should only be used in cases where
+there is a reasonable assumption that clients already depend on full Guava.
+
+For example, consider a library `androidx.foo:foo` implemented using Kotlin
+`suspend fun`s and an optional `androidx.foo:foo-guava` library that provides
+`ListenableFuture` interop wrappers with a direct dependency on
+`kotlinx.coroutines:kotlinx-coroutines-guava` and a transitive dependency on
+Guava.
+
+Libraries that only need `ListenableFuture` may instead depend on the standalone
+`com.google.guava:listenablefuture` artifact. See
+[Asynchronous work with return values](/company/teams/androidx/api_guidelines#async-return)
+for more details on using `ListenableFuture` in Jetpack libraries.
 
 #### Protobuf {#dependencies-protobuf}
 
@@ -236,13 +259,9 @@ component via service discovery or initialization.
 Some examples of safely depending on closed-source components include:
 
 -   WorkManager's GCM Network Manager integration, which uses
-    [manifest metadata](https://cs.android.com/androidx/platform/frameworks/support/+/androidx-main:work/workmanager-gcm/src/main/AndroidManifest.xml)
+    [manifest metadata](https://cs.android.com/androidx/platform/frameworks/support/+/androidx-main:work/work-gcm/src/main/AndroidManifest.xml)
     for service discovery and provides an optional artifact exposing the
     service.
--   Ads Identifier's Play Services integration, which provides a default backend
-    and uses
-    [`Intent` handling](https://cs.android.com/androidx/platform/frameworks/support/+/androidx-master-dev:ads/ads-identifier-provider/src/main/java/androidx/ads/identifier/provider/AdvertisingIdProviderManager.java;l=108)
-    as a service discovery mechanism for Play Services.
 -   Downloadable Fonts integration with Play Services, which plugs in via a
     [`ContentProvider`](https://cs.android.com/androidx/platform/frameworks/support/+/androidx-main:core/core/src/androidTest/java/androidx/core/provider/MockFontProvider.java)
     as a service discovery mechanism with developer-specified

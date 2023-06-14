@@ -73,7 +73,7 @@ internal actual inline fun <R> synchronized(lock: Any, block: () -> R): R {
 internal actual typealias TestOnly = org.jetbrains.annotations.TestOnly
 
 internal actual fun invokeComposable(composer: Composer, composable: @Composable () -> Unit) {
-    @Suppress("UNCHECKED_CAST")
+    @Suppress("UNCHECKED_CAST", "PrimitiveInLambda")
     val realFn = composable as Function2<Composer, Int, Unit>
     realFn(composer, 1)
 }
@@ -82,7 +82,7 @@ internal actual fun <T> invokeComposableForResult(
     composer: Composer,
     composable: @Composable () -> T
 ): T {
-    @Suppress("UNCHECKED_CAST")
+    @Suppress("UNCHECKED_CAST", "PrimitiveInLambda")
     val realFn = composable as Function2<Composer, Int, T>
     return realFn(composer, 1)
 }
@@ -95,6 +95,9 @@ internal actual class AtomicInt actual constructor(value: Int) {
 }
 
 internal actual fun ensureMutable(it: Any) { /* NOTHING */ }
+
+internal actual class WeakReference<T : Any> actual constructor(reference: T) :
+    java.lang.ref.WeakReference<T>(reference)
 
 /**
  * Implementation of [SnapshotContextElement] that enters a single given snapshot when updating

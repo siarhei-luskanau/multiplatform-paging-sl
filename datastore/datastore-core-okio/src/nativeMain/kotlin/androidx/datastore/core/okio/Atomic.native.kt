@@ -16,8 +16,8 @@
 
 package androidx.datastore.core.okio
 
-import kotlinx.atomicfu.AtomicInt as AtomicFuAtomicInt
 import kotlinx.atomicfu.AtomicBoolean as AtomicFuAtomicBoolean
+import kotlinx.atomicfu.AtomicInt as AtomicFuAtomicInt
 import kotlinx.atomicfu.atomic
 
 internal actual class AtomicInt actual constructor(initialValue: Int) {
@@ -28,7 +28,7 @@ internal actual class AtomicInt actual constructor(initialValue: Int) {
         return delegate.getAndIncrement()
     }
     actual fun decrementAndGet(): Int {
-        return delegate.getAndDecrement()
+        return delegate.decrementAndGet()
     }
     actual fun get(): Int = property
 

@@ -17,23 +17,23 @@
 package androidx.paging
 
 import androidx.paging.PagingSource.LoadResult.Page.Companion.COUNT_UNDEFINED
-import com.nhaarman.mockitokotlin2.capture
-import com.nhaarman.mockitokotlin2.mock
+import kotlin.random.Random
+import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
+import kotlin.test.assertTrue
+import kotlin.test.fail
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.runBlocking
-import org.junit.Assert.assertEquals
-import org.junit.Assert.assertTrue
-import org.junit.Assert.fail
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.junit.runners.JUnit4
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.test.runTest
 import org.mockito.ArgumentCaptor
 import org.mockito.Mockito.verify
 import org.mockito.Mockito.verifyNoMoreInteractions
-import kotlin.test.assertFailsWith
+import org.mockito.kotlin.capture
+import org.mockito.kotlin.mock
 
+@OptIn(ExperimentalCoroutinesApi::class)
 @Suppress("DEPRECATION")
-@RunWith(JUnit4::class)
 class ItemKeyedDataSourceTest {
 
     // ----- STANDARD -----
@@ -50,7 +50,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial() = runBlocking {
+    fun loadInitial() = runTest {
         val dataSource = ItemDataSource()
         val result = loadInitial(dataSource, dataSource.getKey(ITEMS_BY_NAME_ID[49]), 10, true)
 
@@ -60,7 +60,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial_keyMatchesSingleItem() = runBlocking {
+    fun loadInitial_keyMatchesSingleItem() = runTest {
         val dataSource = ItemDataSource(items = ITEMS_BY_NAME_ID.subList(0, 1))
 
         // this is tricky, since load after and load before with the passed key will fail
@@ -72,7 +72,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial_keyMatchesLastItem() = runBlocking {
+    fun loadInitial_keyMatchesLastItem() = runTest {
         val dataSource = ItemDataSource()
 
         // tricky, because load after key is empty, so another load before and load after required
@@ -85,7 +85,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial_nullKey() = runBlocking {
+    fun loadInitial_nullKey() = runTest {
         val dataSource = ItemDataSource()
 
         val result = loadInitial(dataSource, null, 10, true)
@@ -96,7 +96,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial_keyPastEndOfList() = runBlocking {
+    fun loadInitial_keyPastEndOfList() = runTest {
         val dataSource = ItemDataSource()
 
         // if key is past entire data set, should return last items in data set
@@ -114,7 +114,7 @@ class ItemKeyedDataSourceTest {
     // ----- UNCOUNTED -----
 
     @Test
-    fun loadInitial_disablePlaceholders() = runBlocking {
+    fun loadInitial_disablePlaceholders() = runTest {
         val dataSource = ItemDataSource()
 
         // dispatchLoadInitial(key, count) == null padding, loadAfter(key, count), null padding
@@ -127,7 +127,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial_uncounted() = runBlocking {
+    fun loadInitial_uncounted() = runTest {
         val dataSource = ItemDataSource(counted = false)
 
         // dispatchLoadInitial(key, count) == null padding, loadAfter(key, count), null padding
@@ -140,7 +140,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial_nullKey_uncounted() = runBlocking {
+    fun loadInitial_nullKey_uncounted() = runTest {
         val dataSource = ItemDataSource(counted = false)
 
         // dispatchLoadInitial(null, count) == dispatchLoadInitial(count)
@@ -154,7 +154,7 @@ class ItemKeyedDataSourceTest {
     // ----- EMPTY -----
 
     @Test
-    fun loadInitial_empty() = runBlocking {
+    fun loadInitial_empty() = runTest {
         val dataSource = ItemDataSource(items = ArrayList())
 
         // dispatchLoadInitial(key, count) == null padding, loadAfter(key, count), null padding
@@ -167,7 +167,7 @@ class ItemKeyedDataSourceTest {
     }
 
     @Test
-    fun loadInitial_nullKey_empty() = runBlocking {
+    fun loadInitial_nullKey_empty() = runTest {
         val dataSource = ItemDataSource(items = ArrayList())
         val result = loadInitial(dataSource, null, 10, true)
 
@@ -501,8 +501,8 @@ class ItemKeyedDataSourceTest {
             Item(
                 names[it % 10],
                 it,
-                Math.random() * 1000,
-                (Math.random() * 200).toInt().toString() + " fake st."
+                Random.nextDouble(1000.0),
+                Random.nextInt(200).toString() + " fake st."
             )
         }.sortedWith(ITEM_COMPARATOR)
     }

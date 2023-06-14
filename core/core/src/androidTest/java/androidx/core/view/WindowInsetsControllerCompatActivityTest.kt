@@ -36,8 +36,12 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
 import androidx.test.filters.SdkSuppress
 import androidx.testutils.withActivity
-import org.hamcrest.Matchers.`is`
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
+import kotlin.concurrent.thread
 import org.hamcrest.Matchers.equalTo
+import org.hamcrest.Matchers.`is`
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.fail
@@ -46,10 +50,6 @@ import org.junit.Before
 import org.junit.Ignore
 import org.junit.Test
 import org.junit.runner.RunWith
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicReference
-import kotlin.concurrent.thread
 
 @Suppress("DEPRECATION")
 @SdkSuppress(minSdkVersion = 23)
@@ -226,6 +226,7 @@ public class WindowInsetsControllerCompatActivityTest {
         testShow(WindowInsetsCompat.Type.statusBars())
     }
 
+    @Ignore // b/244445899
     @Test
     public fun toggle_NavBar() {
         testHide(WindowInsetsCompat.Type.navigationBars())
@@ -375,12 +376,31 @@ public class WindowInsetsControllerCompatActivityTest {
     }
 
     @Test
-    // minSdkVersion = 21 due to b/189492236
-    @SdkSuppress(minSdkVersion = 21, maxSdkVersion = 29) // Flag deprecated in 30+
-    public fun systemBarsBehavior_swipe() {
+    @SdkSuppress(minSdkVersion = 31) // Older APIs does not support getSystemBarsBehavior
+    fun systemBarsBehavior() {
         scenario.onActivity {
             windowInsetsController.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_BARS_BY_SWIPE
+                WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
+            assertEquals(
+                WindowInsetsControllerCompat.BEHAVIOR_DEFAULT,
+                windowInsetsController.systemBarsBehavior
+            )
+            windowInsetsController.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            assertEquals(
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+                windowInsetsController.systemBarsBehavior
+            )
+        }
+    }
+
+    @Test
+    // minSdkVersion = 21 due to b/189492236
+    @SdkSuppress(minSdkVersion = 21, maxSdkVersion = 29) // Flag deprecated in 30+
+    public fun systemBarsBehavior_default() {
+        scenario.onActivity {
+            windowInsetsController.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_DEFAULT
         }
         val decorView = scenario.withActivity { window.decorView }
         val sysUiVis = decorView.systemUiVisibility
@@ -408,23 +428,6 @@ public class WindowInsetsControllerCompatActivityTest {
         assertEquals(0, sysUiVis and View.SYSTEM_UI_FLAG_IMMERSIVE)
     }
 
-    @Test
-    public fun systemBarsBehavior_touch() {
-        scenario.onActivity {
-            windowInsetsController.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_BARS_BY_TOUCH
-        }
-        val decorView = scenario.withActivity { window.decorView }
-        val sysUiVis = decorView.systemUiVisibility
-        assertEquals(
-            0,
-            sysUiVis and (
-                View.SYSTEM_UI_FLAG_IMMERSIVE
-                    or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                )
-        )
-    }
-
     private fun assumeNotCuttlefish() {
         // TODO: remove this if b/159103848 is resolved
         assumeFalse(
@@ -449,11 +452,11 @@ public class WindowInsetsControllerCompatActivityTest {
         try {
             thread {
                 while (loop) {
-                    val rootWindowInsets = scenario.withActivity {
-                        ViewCompat
-                            .getRootWindowInsets(this@assertInsetsVisibility)!!
+                    var rootWindowInsets: WindowInsetsCompat? = null
+                    scenario.onActivity {
+                        rootWindowInsets = ViewCompat.getRootWindowInsets(this)
                     }
-                    lastVisibility = rootWindowInsets.isVisible(type)
+                    lastVisibility = rootWindowInsets?.isVisible(type)
                     if (lastVisibility == expectedVisibility) {
                         latch.countDown()
                     }

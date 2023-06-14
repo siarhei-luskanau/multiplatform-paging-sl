@@ -47,7 +47,6 @@ import org.gradle.build.event.BuildEventsListenerRegistry
 import org.gradle.kotlin.dsl.extra
 
 abstract class AndroidXRootImplPlugin : Plugin<Project> {
-    @Suppress("UnstableApiUsage")
     @get:javax.inject.Inject
     abstract val registry: BuildEventsListenerRegistry
 
@@ -68,6 +67,8 @@ abstract class AndroidXRootImplPlugin : Plugin<Project> {
         setDependencyVersions()
         configureKtlintCheckFile()
         tasks.register(CheckExternalDependencyLicensesTask.TASK_NAME)
+
+        maybeRegisterFilterableTask()
 
         // If we're running inside Studio, validate the Android Gradle Plugin version.
         val expectedAgpVersion = System.getenv("EXPECTED_AGP_VERSION")
@@ -91,8 +92,6 @@ abstract class AndroidXRootImplPlugin : Plugin<Project> {
         )
         buildOnServerTask.cacheEvenIfNoOutputs()
         buildOnServerTask.distributionDirectory = getDistributionDirectory()
-        buildOnServerTask.repositoryDirectory = getRepositoryDirectory()
-        buildOnServerTask.buildId = getBuildId()
         buildOnServerTask.dependsOn(
             tasks.register(
                 CREATE_AGGREGATE_BUILD_INFO_FILES_TASK,
@@ -106,9 +105,6 @@ abstract class AndroidXRootImplPlugin : Plugin<Project> {
         VerifyPlaygroundGradleConfigurationTask.createIfNecessary(project)?.let {
             buildOnServerTask.dependsOn(it)
         }
-
-        val createArchiveTask = Release.getGlobalFullZipTask(this)
-        buildOnServerTask.dependsOn(createArchiveTask)
 
         extra.set("projects", ConcurrentHashMap<String, String>())
         subprojects { project ->
@@ -139,12 +135,7 @@ abstract class AndroidXRootImplPlugin : Plugin<Project> {
             project.plugins.withType(JavaPlugin::class.java) {
                 buildOnServerTask.dependsOn("${project.path}:jar")
             }
-
-            project.tasks.register("validateProperties", ValidatePropertiesTask::class.java)
         }
-        project.configureRootProjectForLint()
-
-        tasks.register(AndroidXImplPlugin.BUILD_TEST_APKS_TASK)
 
         // NOTE: this task is used by the Github CI as well. If you make any changes here,
         // please update the .github/workflows files as well, if necessary.
@@ -158,6 +149,7 @@ abstract class AndroidXRootImplPlugin : Plugin<Project> {
             it.entryCompression = ZipEntryCompression.STORED
             // Archive is greater than 4Gb :O
             it.isZip64 = true
+            it.isReproducibleFileOrder = true
         }
         project.tasks.register(
             ZIP_CONSTRAINED_TEST_CONFIGS_WITH_APKS_TASK, Zip::class.java
@@ -169,6 +161,7 @@ abstract class AndroidXRootImplPlugin : Plugin<Project> {
             it.entryCompression = ZipEntryCompression.STORED
             // Archive is greater than 4Gb :O
             it.isZip64 = true
+            it.isReproducibleFileOrder = true
         }
 
         AffectedModuleDetector.configure(gradle, this)
@@ -227,6 +220,9 @@ abstract class AndroidXRootImplPlugin : Plugin<Project> {
         project.tasks.register("listTaskOutputs", ListTaskOutputsTask::class.java) { task ->
             task.setOutput(File(project.getDistributionDirectory(), "task_outputs.txt"))
             task.removePrefix(project.getCheckoutRoot().path)
+        }
+        tasks.matching { it.name == "commonizeNativeDistribution" }.configureEach {
+            it.notCompatibleWithConfigurationCache("https://youtrack.jetbrains.com/issue/KT-54627")
         }
     }
 

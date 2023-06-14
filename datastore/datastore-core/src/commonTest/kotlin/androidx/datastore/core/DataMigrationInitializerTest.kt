@@ -23,13 +23,12 @@ import androidx.kruth.assertThat
 import androidx.kruth.assertThrows
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlinx.coroutines.test.TestScope
-import kotlinx.coroutines.test.UnconfinedTestDispatcher
-
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.UnconfinedTestDispatcher
 import kotlinx.coroutines.test.runTest
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -143,7 +142,8 @@ abstract class DataMigrationInitializerTest<F : TestFile, IOE : Throwable>
         )
 
         val storage = testIO.getStorage(
-            TestingSerializerConfig(failingWrite = true)
+            TestingSerializerConfig(failingWrite = true),
+            { createSingleProcessCoordinator() }
         ) { testIO.newTempFile() }
         val store = newDataStore(
             initTasksList = listOf(
@@ -194,10 +194,11 @@ abstract class DataMigrationInitializerTest<F : TestFile, IOE : Throwable>
     private fun newDataStore(
         initTasksList: List<suspend (api: InitializerApi<Byte>) -> Unit> = listOf(),
         storage: Storage<Byte> = testIO.getStorage(
-            TestingSerializerConfig()
+            TestingSerializerConfig(),
+            { createSingleProcessCoordinator() }
         )
     ): DataStore<Byte> {
-        return SingleProcessDataStore(
+        return DataStoreImpl(
             storage,
             scope = dataStoreScope,
             initTasksList = initTasksList

@@ -16,16 +16,19 @@
 
 package androidx.graphics.lowlatency
 
-import android.opengl.GLES20
+import android.annotation.SuppressLint
 import android.os.Build
 import android.util.Log
 import android.view.SurfaceHolder
 import android.view.SurfaceView
 import androidx.annotation.RequiresApi
+import androidx.graphics.opengl.FrameBuffer
+import androidx.graphics.opengl.FrameBufferRenderer
 import androidx.graphics.opengl.GLRenderer
 import androidx.graphics.opengl.egl.EGLManager
 import androidx.graphics.opengl.egl.EGLSpec
 import androidx.graphics.surface.SurfaceControlCompat
+import androidx.hardware.SyncFenceCompat
 import java.util.Collections
 
 /**
@@ -38,19 +41,63 @@ internal class SurfaceViewRenderLayer<T>(
 ) : ParentRenderLayer<T> {
 
     private var mLayerCallback: ParentRenderLayer.Callback<T>? = null
-    private var mHardwareBufferRenderer: HardwareBufferRenderer? = null
+    private var mFrameBufferRenderer: FrameBufferRenderer? = null
     private var mRenderTarget: GLRenderer.RenderTarget? = null
     private var mParentSurfaceControl: SurfaceControlCompat? = null
+    private val mBufferTransform = BufferTransformer()
+
+    private val mTransformResolver = BufferTransformHintResolver()
+
+    private var mTransformHint = BufferTransformHintResolver.UNKNOWN_TRANSFORM
+    private var mInverse = BufferTransformHintResolver.UNKNOWN_TRANSFORM
+    private val mHolderCallback = object : SurfaceHolder.Callback {
+
+        override fun surfaceCreated(holder: SurfaceHolder) {
+            // NO-OP wait on surfaceChanged callback
+        }
+
+        override fun surfaceChanged(
+            holder: SurfaceHolder,
+            format: Int,
+            width: Int,
+            height: Int
+        ) {
+            mTransformHint = mTransformResolver.getBufferTransformHint(surfaceView)
+            mInverse = mBufferTransform.invertBufferTransform(mTransformHint)
+            mBufferTransform.computeTransform(width, height, mInverse)
+            mParentSurfaceControl?.release()
+            mParentSurfaceControl = createDoubleBufferedSurfaceControl()
+            mLayerCallback?.onSizeChanged(width, height)
+        }
+
+        override fun surfaceDestroyed(p0: SurfaceHolder) {
+            mLayerCallback?.onLayerDestroyed()
+        }
+    }
+
+    init {
+        surfaceView.holder.addCallback(mHolderCallback)
+    }
+
+    override fun getInverseBufferTransform(): Int = mInverse
+
+    override fun getBufferWidth(): Int = mBufferTransform.glWidth
+
+    override fun getBufferHeight(): Int = mBufferTransform.glHeight
+
+    override fun getTransform(): FloatArray = mBufferTransform.transform
 
     override fun buildReparentTransaction(
         child: SurfaceControlCompat,
         transaction: SurfaceControlCompat.Transaction
     ) {
-        transaction.reparent(child, surfaceView)
+        transaction.reparent(child, mParentSurfaceControl)
     }
 
     override fun setParent(builder: SurfaceControlCompat.Builder) {
-        builder.setParent(surfaceView)
+        mParentSurfaceControl?.let { parentSurfaceControl ->
+            builder.setParent(parentSurfaceControl)
+        }
     }
 
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
@@ -58,37 +105,44 @@ internal class SurfaceViewRenderLayer<T>(
         renderer: GLRenderer,
         renderLayerCallback: GLFrontBufferedRenderer.Callback<T>
     ): GLRenderer.RenderTarget {
-        val hardwareBufferRenderer = HardwareBufferRenderer(
-            object : HardwareBufferRenderer.RenderCallbacks {
+        var params: Collection<T>? = null
+        val bufferInfo = BufferInfo()
+        val frameBufferRenderer = FrameBufferRenderer(
+            object : FrameBufferRenderer.RenderCallback {
 
-                override fun obtainRenderBuffer(egl: EGLSpec): RenderBuffer =
-                    mLayerCallback?.getRenderBufferPool()?.obtain(egl)
-                        ?: throw IllegalArgumentException("No RenderBufferPool available")
-
-                override fun onDraw(eglManager: EGLManager) {
-                    GLES20.glClearColor(0.0f, 0.0f, 0.0f, 0.0f)
-                    GLES20.glClear(GLES20.GL_COLOR_BUFFER_BIT)
-                    val params = mLayerCallback?.obtainDoubleBufferedLayerParams()
-                    if (params != null) {
-                        renderLayerCallback.onDrawDoubleBufferedLayer(eglManager, params)
-                        params.clear()
-                    } else {
-                        renderLayerCallback.onDrawDoubleBufferedLayer(
-                            eglManager,
-                            Collections.emptyList()
-                        )
-                    }
+                override fun obtainFrameBuffer(egl: EGLSpec): FrameBuffer {
+                    val frameBuffer = mLayerCallback?.getFrameBufferPool()?.obtain(egl)
+                        ?: throw IllegalArgumentException("No FrameBufferPool available")
+                    bufferInfo.frameBufferId = frameBuffer.frameBuffer
+                    return frameBuffer
                 }
 
+                override fun onDraw(eglManager: EGLManager) {
+                    bufferInfo.apply {
+                        this.width = mBufferTransform.glWidth
+                        this.height = mBufferTransform.glHeight
+                    }
+                    renderLayerCallback.onDrawMultiBufferedLayer(
+                        eglManager,
+                        bufferInfo,
+                        mBufferTransform.transform,
+                        params ?: Collections.emptyList()
+                    )
+                }
+
+                @SuppressLint("WrongConstant")
                 @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-                override fun onDrawComplete(renderBuffer: RenderBuffer) {
+                override fun onDrawComplete(
+                    frameBuffer: FrameBuffer,
+                    syncFenceCompat: SyncFenceCompat?
+                ) {
                     val frontBufferedLayerSurfaceControl = mLayerCallback
-                            ?.getFrontBufferedLayerSurfaceControl()
+                        ?.getFrontBufferedLayerSurfaceControl()
                     val sc = mParentSurfaceControl
-                        // At this point the parentSurfaceControl should already be created
-                        // in the surfaceChanged callback, however, if for whatever reason this
-                        // was not the case, create the double buffered SurfaceControl now and cache
-                        // it
+                    // At this point the parentSurfaceControl should already be created
+                    // in the surfaceChanged callback, however, if for whatever reason this
+                    // was not the case, create the double buffered SurfaceControl now and cache
+                    // it
                         ?: createDoubleBufferedSurfaceControl().also {
                             mParentSurfaceControl = it
                         }
@@ -96,69 +150,67 @@ internal class SurfaceViewRenderLayer<T>(
                         val transaction = SurfaceControlCompat.Transaction()
                             .setVisibility(frontBufferedLayerSurfaceControl, false)
                             .setVisibility(sc, true)
-                            .setBuffer(sc, renderBuffer.hardwareBuffer) {
-                                mLayerCallback?.getRenderBufferPool()?.release(renderBuffer)
+                            .setBuffer(sc, frameBuffer.hardwareBuffer, syncFenceCompat) {
+                                mLayerCallback?.getFrameBufferPool()?.release(frameBuffer)
                             }
+                        if (mTransformHint != BufferTransformHintResolver.UNKNOWN_TRANSFORM) {
+                            transaction.setBufferTransform(sc, mInverse)
+                        }
 
-                        renderLayerCallback.onDoubleBufferedLayerRenderComplete(
+                        renderLayerCallback.onMultiBufferedLayerRenderComplete(
                             frontBufferedLayerSurfaceControl,
                             transaction
                         )
                         transaction.commit()
                     } else {
-                        Log.e(TAG, "Error, no front buffered SurfaceControl available to " +
-                            "synchronize transaction with")
+                        Log.e(
+                            TAG, "Error, no front buffered SurfaceControl available to " +
+                                "synchronize transaction with"
+                        )
                     }
                 }
-        })
-        surfaceView.holder.addCallback(object : SurfaceHolder.Callback {
-
-            override fun surfaceCreated(holder: SurfaceHolder) {
-                // NO-OP wait on surfaceChanged callback
-            }
-
-            override fun surfaceChanged(
-                holder: SurfaceHolder,
-                format: Int,
-                width: Int,
-                height: Int
-            ) {
-                mParentSurfaceControl?.release()
-                mLayerCallback?.onSizeChanged(width, height)
-                mParentSurfaceControl = createDoubleBufferedSurfaceControl()
-            }
-
-            override fun surfaceDestroyed(p0: SurfaceHolder) {
-                mLayerCallback?.onLayerDestroyed()
-            }
-        })
-        val renderTarget = renderer.attach(surfaceView, hardwareBufferRenderer)
+            })
+        val parentFrameBufferRenderer = WrapperFrameBufferRenderer<T>(frameBufferRenderer) {
+            params = mLayerCallback?.obtainMultiBufferedLayerParams()
+            params != null
+        }
+        val renderTarget = renderer.attach(surfaceView, parentFrameBufferRenderer)
         mRenderTarget = renderTarget
-        mHardwareBufferRenderer = hardwareBufferRenderer
+        mFrameBufferRenderer = frameBufferRenderer
         return renderTarget
     }
 
-    internal fun createDoubleBufferedSurfaceControl(): SurfaceControlCompat =
-        SurfaceControlCompat.Builder()
+    internal fun createDoubleBufferedSurfaceControl(): SurfaceControlCompat {
+        val surfaceControl = SurfaceControlCompat.Builder()
             .setParent(surfaceView)
             .setName("DoubleBufferedLayer")
             .build()
+        // SurfaceControl is not visible by default so make it visible right after creation
+        SurfaceControlCompat.Transaction().setVisibility(surfaceControl, true).commit()
+        return surfaceControl
+    }
 
     override fun setParentLayerCallbacks(callback: ParentRenderLayer.Callback<T>?) {
         mLayerCallback = callback
     }
 
     override fun clear() {
-        mHardwareBufferRenderer?.clear()
+        mFrameBufferRenderer?.clear()
         mRenderTarget?.requestRender()
     }
 
-    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
-    override fun release(transaction: SurfaceControlCompat.Transaction) {
+    override fun detach(transaction: SurfaceControlCompat.Transaction) {
         mParentSurfaceControl?.let {
             transaction.reparent(it, null)
             it.release()
         }
+        mParentSurfaceControl = null
+    }
+
+    override fun release() {
+        surfaceView.holder.removeCallback(mHolderCallback)
+        // Release the parent surface control if it was not released previously
+        mParentSurfaceControl?.release()
         mParentSurfaceControl = null
     }
 

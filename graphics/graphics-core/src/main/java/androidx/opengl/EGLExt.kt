@@ -20,8 +20,10 @@ import android.opengl.EGLDisplay
 import android.os.Build
 import androidx.annotation.IntDef
 import androidx.annotation.RequiresApi
+import androidx.annotation.RestrictTo
 import androidx.graphics.opengl.egl.EGLConfigAttributes
-import androidx.hardware.SyncFence
+import androidx.hardware.SyncFenceCompat
+import androidx.hardware.SyncFenceV19
 import androidx.opengl.EGLExt.Companion.eglCreateSyncKHR
 
 /**
@@ -184,6 +186,14 @@ class EGLExt private constructor() {
         const val EGL_KHR_IMAGE_BASE = "EGL_KHR_image_base"
 
         /**
+         * Extension that allows creating an EGLClientBuffer from an Android [HardwareBuffer]
+         * object which can later be used to create an [EGLImageKHR] instance.
+         * See:
+         * https://registry.khronos.org/EGL/extensions/ANDROID/EGL_ANDROID_get_native_client_buffer.txt
+         */
+        const val EGL_ANDROID_CLIENT_BUFFER = "EGL_ANDROID_get_native_client_buffer"
+
+        /**
          * Extension that defines a new EGL resource type that is suitable for
          * sharing 2D arrays of image data between client APIs, the EGLImage,
          * and allows creating EGLImages from EGL native pixmaps.
@@ -195,9 +205,8 @@ class EGLExt private constructor() {
 
         /**
          * Specifies the types of attributes that can be queried in [eglGetSyncAttribKHR]
-         *
-         * @hide
          */
+        @RestrictTo(RestrictTo.Scope.LIBRARY)
         @Suppress("AcronymName")
         @IntDef(value = [EGL_SYNC_TYPE_KHR, EGL_SYNC_STATUS_KHR, EGL_SYNC_CONDITION_KHR])
         annotation class EGLSyncAttribute
@@ -254,9 +263,8 @@ class EGLExt private constructor() {
 
         /**
          * Specifies the type of fence to create in [eglCreateSyncKHR]
-         *
-         * @hide
          */
+        @RestrictTo(RestrictTo.Scope.LIBRARY)
         @Suppress("AcronymName")
         @IntDef(value = [EGL_SYNC_FENCE_KHR, EGL_SYNC_NATIVE_FENCE_ANDROID])
         annotation class EGLFenceType
@@ -302,9 +310,8 @@ class EGLExt private constructor() {
 
         /**
          * Specifies various return values for the [eglClientWaitSyncKHR] method
-         *
-         * @hide
          */
+        @RestrictTo(RestrictTo.Scope.LIBRARY)
         @Target(AnnotationTarget.TYPE)
         @Suppress("AcronymName")
         @IntDef(value = [EGL_CONDITION_SATISFIED_KHR, EGL_TIMEOUT_EXPIRED_KHR, EGL_FALSE])
@@ -553,12 +560,12 @@ class EGLExt private constructor() {
          * https://www.khronos.org/registry/EGL/extensions/ANDROID/EGL_ANDROID_native_fence_sync.txt
          *
          * @param display The EGLDisplay connection
-         * @param sync The EGLSyncKHR to fetch the [SyncFence] from
-         * @return A [SyncFence] representing the native fence.
-         *  If [sync] is not a valid sync object for [display], an invalid [SyncFence]
+         * @param sync The EGLSyncKHR to fetch the [SyncFenceCompat] from
+         * @return A [SyncFenceCompat] representing the native fence.
+         *  If [sync] is not a valid sync object for [display], an invalid [SyncFenceCompat]
          *  instance is returned and an EGL_BAD_PARAMETER error is generated.
          *  If the EGL_SYNC_NATIVE_FENCE_FD_ANDROID attribute of [sync] is
-         *  EGL_NO_NATIVE_FENCE_FD_ANDROID, an invalid [SyncFence] is
+         *  EGL_NO_NATIVE_FENCE_FD_ANDROID, an invalid [SyncFenceCompat] is
          *  returned and an EGL_BAD_PARAMETER error is generated.
          *  If [display] does not match the display passed to [eglCreateSyncKHR]
          *  when [sync] was created, the behavior is undefined.
@@ -566,15 +573,18 @@ class EGLExt private constructor() {
         @JvmStatic
         @Suppress("AcronymName")
         @RequiresApi(Build.VERSION_CODES.KITKAT)
-        fun eglDupNativeFenceFDANDROID(display: EGLDisplay, sync: EGLSyncKHR): SyncFence {
+        internal fun eglDupNativeFenceFDANDROID(
+            display: EGLDisplay,
+            sync: EGLSyncKHR
+        ): SyncFenceCompat {
             val fd = EGLBindings.nDupNativeFenceFDANDROID(
                 display.obtainNativeHandle(),
                 sync.nativeHandle
             )
             return if (fd >= 0) {
-                SyncFence(fd)
+                SyncFenceCompat(SyncFenceV19(fd))
             } else {
-                SyncFence(-1)
+                SyncFenceCompat(SyncFenceV19(-1))
             }
         }
 
@@ -636,6 +646,7 @@ class EGLExt private constructor() {
  */
 internal class EGLBindings {
     companion object {
+        @JvmStatic
         external fun nCreateImageFromHardwareBuffer(
             eglDisplayPtr: Long,
             hardwareBuffer: HardwareBuffer
@@ -643,9 +654,16 @@ internal class EGLBindings {
 
         // Note this API is explicitly a GL API and not an EGL API which is the reason
         // why this has the GL prefix vs EGL
+        @JvmStatic
         external fun nImageTargetTexture2DOES(target: Int, eglImagePtr: Long)
+
+        @JvmStatic
         external fun nDupNativeFenceFDANDROID(eglDisplayPtr: Long, syncPtr: Long): Int
+
+        @JvmStatic
         external fun nCreateSyncKHR(eglDisplayPtr: Long, type: Int, attrs: IntArray?): Long
+
+        @JvmStatic
         external fun nGetSyncAttribKHR(
             eglDisplayPtr: Long,
             syncPtr: Long,
@@ -653,23 +671,48 @@ internal class EGLBindings {
             result: IntArray,
             offset: Int
         ): Boolean
+
+        @JvmStatic
         external fun nClientWaitSyncKHR(
             eglDisplayPtr: Long,
             syncPtr: Long,
             flags: Int,
             timeout: Long
         ): Int
+
+        @JvmStatic
         external fun nDestroySyncKHR(eglDisplayPtr: Long, syncPtr: Long): Boolean
+        @JvmStatic
         external fun nDestroyImageKHR(eglDisplayPtr: Long, eglImagePtr: Long): Boolean
+
+        @JvmStatic
         external fun nSupportsEglGetNativeClientBufferAndroid(): Boolean
+
+        @JvmStatic
         external fun nSupportsDupNativeFenceFDANDROID(): Boolean
+
+        @JvmStatic
         external fun nSupportsEglCreateImageKHR(): Boolean
+
+        @JvmStatic
         external fun nSupportsEglDestroyImageKHR(): Boolean
+
+        @JvmStatic
         external fun nSupportsGlImageTargetTexture2DOES(): Boolean
+
+        @JvmStatic
         external fun nSupportsEglCreateSyncKHR(): Boolean
+
+        @JvmStatic
         external fun nSupportsEglGetSyncAttribKHR(): Boolean
+
+        @JvmStatic
         external fun nSupportsEglClientWaitSyncKHR(): Boolean
+
+        @JvmStatic
         external fun nSupportsEglDestroySyncKHR(): Boolean
+
+        @JvmStatic
         external fun nEqualToNativeForeverTimeout(timeoutNanos: Long): Boolean
 
         init {

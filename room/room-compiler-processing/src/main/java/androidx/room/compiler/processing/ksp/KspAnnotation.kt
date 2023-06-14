@@ -18,8 +18,8 @@ package androidx.room.compiler.processing.ksp
 
 import androidx.room.compiler.processing.InternalXAnnotation
 import androidx.room.compiler.processing.XAnnotationBox
-import androidx.room.compiler.processing.XType
 import androidx.room.compiler.processing.XAnnotationValue
+import androidx.room.compiler.processing.XType
 import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSType
 
@@ -28,7 +28,9 @@ internal class KspAnnotation(
     val ksAnnotated: KSAnnotation
 ) : InternalXAnnotation() {
 
-    val ksType: KSType by lazy { ksAnnotated.annotationType.resolve() }
+    val ksType: KSType by lazy {
+        ksAnnotated.annotationType.resolve()
+    }
 
     override val name: String
         get() = ksAnnotated.shortName.asString()

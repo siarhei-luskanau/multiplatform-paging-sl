@@ -18,7 +18,8 @@ package androidx.room.compiler.processing.ksp
 
 import androidx.room.compiler.processing.XNullability
 import com.google.devtools.ksp.symbol.KSType
-import com.squareup.javapoet.TypeName
+import com.squareup.kotlinpoet.javapoet.JTypeName
+import com.squareup.kotlinpoet.javapoet.KTypeName
 
 /**
  * Representation of `void` in KSP.
@@ -31,14 +32,19 @@ internal class KspVoidType(
     env: KspProcessingEnv,
     ksType: KSType,
     val boxed: Boolean,
-    jvmTypeResolver: KspJvmTypeResolver?
-) : KspType(env, ksType, jvmTypeResolver) {
-    override fun resolveTypeName(): TypeName {
+    scope: KSTypeVarianceResolverScope? = null,
+    typeAlias: KSType? = null,
+) : KspType(env, ksType, scope, typeAlias) {
+    override fun resolveJTypeName(): JTypeName {
         return if (boxed || nullability == XNullability.NULLABLE) {
-            TypeName.VOID.box()
+            JTypeName.VOID.box()
         } else {
-            TypeName.VOID
+            JTypeName.VOID
         }
+    }
+
+    override fun resolveKTypeName(): KTypeName {
+        return com.squareup.kotlinpoet.UNIT
     }
 
     override fun boxed(): KspType {
@@ -49,26 +55,16 @@ internal class KspVoidType(
                 env = env,
                 ksType = ksType,
                 boxed = true,
-                jvmTypeResolver = jvmTypeResolver
+                scope = scope,
+                typeAlias = typeAlias,
             )
         }
     }
 
-    override fun copyWithNullability(nullability: XNullability): KspType {
-        return KspVoidType(
-            env = env,
-            ksType = ksType.withNullability(nullability),
-            boxed = boxed || nullability == XNullability.NULLABLE,
-            jvmTypeResolver = jvmTypeResolver
-        )
-    }
-
-    override fun copyWithJvmTypeResolver(jvmTypeResolver: KspJvmTypeResolver): KspType {
-        return KspVoidType(
-            env = env,
-            ksType = ksType,
-            boxed = boxed,
-            jvmTypeResolver = jvmTypeResolver
-        )
-    }
+    override fun copy(
+        env: KspProcessingEnv,
+        ksType: KSType,
+        scope: KSTypeVarianceResolverScope?,
+        typeAlias: KSType?,
+    ) = KspVoidType(env, ksType, boxed, scope, typeAlias)
 }

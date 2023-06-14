@@ -29,7 +29,7 @@ plugins {
 def enableNative = KmpPlatformsKt.enableNative(project)
 
 androidXMultiplatform {
-    jvm {
+    jvm() {
         withJava()
     }
     mac()
@@ -115,16 +115,12 @@ BundleInsideHelper.forInsideJarKmp(
 )
 
 dependencies {
-    bundleInside(project(
-            path: ":datastore:datastore-preferences-proto",
-            configuration: "export"
-    ))
+    bundleInside(project(path: ":datastore:datastore-preferences-proto", configuration: "export"))
 }
 
 androidx {
-    name = "Android Preferences DataStore Core"
-    type = LibraryType.KMP_LIBRARY
-    mavenGroup = LibraryGroups.DATASTORE
+    name = "Preferences DataStore Core"
+    type = LibraryType.PUBLISHED_LIBRARY
     inceptionYear = "2020"
     description = "Android Preferences DataStore without the Android Dependencies"
     legacyDisableKotlinStrictApiMode = true

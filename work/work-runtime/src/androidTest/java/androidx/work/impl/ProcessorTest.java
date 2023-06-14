@@ -40,8 +40,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
-import java.util.Collections;
-
 @RunWith(AndroidJUnit4.class)
 public class ProcessorTest extends DatabaseTest {
 
@@ -57,8 +55,7 @@ public class ProcessorTest extends DatabaseTest {
                 appContext,
                 configuration,
                 new InstantWorkTaskExecutor(),
-                mDatabase,
-                Collections.singletonList(mMockScheduler)) {
+                mDatabase) {
         };
     }
 
@@ -66,7 +63,7 @@ public class ProcessorTest extends DatabaseTest {
     @SmallTest
     public void testStopWork_invalidWorkId() {
         WorkGenerationalId id = new WorkGenerationalId("INVALID_WORK_ID", 0);
-        assertThat(mProcessor.stopWork(new StartStopToken(id)), is(false));
+        assertThat(mProcessor.stopWork(new StartStopToken(id), 0), is(false));
     }
 
     @Test

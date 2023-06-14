@@ -32,15 +32,15 @@ import androidx.test.filters.LargeTest
 import androidx.test.filters.SdkSuppress
 import androidx.test.filters.SmallTest
 import com.google.common.truth.Truth
+import java.lang.ref.PhantomReference
+import java.lang.ref.ReferenceQueue
+import java.util.concurrent.TimeoutException
+import java.util.concurrent.atomic.AtomicReference
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentMatchers
 import org.mockito.Mockito
-import java.lang.ref.PhantomReference
-import java.lang.ref.ReferenceQueue
-import java.util.concurrent.TimeoutException
-import java.util.concurrent.atomic.AtomicReference
 
 @SmallTest
 @RunWith(AndroidJUnit4::class)
@@ -74,10 +74,25 @@ class SurfaceRequestTest {
     }
 
     @Test
-    fun expectedFrameRateIsNull_whenNotSet() {
+    fun expectedFrameRateIsUnspecified_whenNotSet() {
         val resolution = Size(640, 480)
         val request = createNewRequest(resolution)
-        Truth.assertThat(request.expectedFrameRate).isNull()
+        Truth.assertThat(request.expectedFrameRate).isEqualTo(
+            SurfaceRequest.FRAME_RATE_RANGE_UNSPECIFIED
+        )
+    }
+
+    @Test
+    fun canRetrieveDynamicRange() {
+        val dynamicRange = DynamicRange.HDR_UNSPECIFIED_10_BIT
+        val request = createNewRequest(FAKE_SIZE, dynamicRange)
+        Truth.assertThat(request.dynamicRange).isEqualTo(dynamicRange)
+    }
+
+    @Test
+    fun dynamicRangeIsSdr_whenNotSet() {
+        val request = createNewRequest(FAKE_SIZE)
+        Truth.assertThat(request.dynamicRange).isEqualTo(DynamicRange.SDR)
     }
 
     @Test
@@ -168,6 +183,47 @@ class SurfaceRequestTest {
                 )
             )
         )
+    }
+
+    @Test
+    fun handleInvalidate_runWhenInvalidateCalled() {
+        // Arrange.
+        var isCalled = false
+        val request = createNewRequest(FAKE_SIZE) {
+            isCalled = true
+        }
+        Truth.assertThat(isCalled).isFalse()
+
+        // Act.
+        request.willNotProvideSurface()
+        request.invalidate()
+
+        // Assert.
+        Truth.assertThat(isCalled).isTrue()
+    }
+
+    @Test
+    fun isServiced_trueAfterProvideSurface() {
+        val request = createNewRequest(FAKE_SIZE)
+        request.provideSurface(
+            MOCK_SURFACE,
+            CameraXExecutors.directExecutor(),
+            NO_OP_RESULT_LISTENER
+        )
+        Truth.assertThat(request.isServiced).isTrue()
+    }
+
+    @Test
+    fun isServiced_trueAfterWillNotProvideSurface() {
+        val request = createNewRequest(FAKE_SIZE)
+        request.willNotProvideSurface()
+        Truth.assertThat(request.isServiced).isTrue()
+    }
+
+    @Test
+    fun isServiced_falseInitially() {
+        val request = createNewRequest(FAKE_SIZE)
+        Truth.assertThat(request.isServiced).isFalse()
     }
 
     @Test
@@ -330,10 +386,18 @@ class SurfaceRequestTest {
 
     private fun createNewRequest(
         size: Size,
-        expectedFrameRate: Range<Int>? = null,
-        autoCleanup: Boolean = true
+        dynamicRange: DynamicRange = DynamicRange.SDR,
+        expectedFrameRate: Range<Int> = SurfaceRequest.FRAME_RATE_RANGE_UNSPECIFIED,
+        autoCleanup: Boolean = true,
+        onInvalidated: () -> Unit = {},
     ): SurfaceRequest {
-        val request = SurfaceRequest(size, FakeCamera(), false, expectedFrameRate)
+        val request = SurfaceRequest(
+            size,
+            FakeCamera(),
+            dynamicRange,
+            expectedFrameRate,
+            onInvalidated
+        )
         if (autoCleanup) {
             surfaceRequests.add(request)
         }
@@ -343,7 +407,9 @@ class SurfaceRequestTest {
     companion object {
         private val FAKE_SIZE: Size by lazy { Size(0, 0) }
         private val FAKE_INFO: SurfaceRequest.TransformationInfo by lazy {
-            SurfaceRequest.TransformationInfo.of(Rect(), 0, Surface.ROTATION_0)
+            SurfaceRequest.TransformationInfo.of(Rect(), 0, Surface.ROTATION_0,
+                /*hasCameraTransform=*/true
+            )
         }
         private val NO_OP_RESULT_LISTENER = Consumer { _: SurfaceRequest.Result? -> }
         private val MOCK_SURFACE = Mockito.mock(

@@ -17,6 +17,8 @@
 package androidx.build.metalava
 
 import androidx.build.checkapi.ApiLocation
+import java.io.File
+import java.util.concurrent.TimeUnit
 import org.apache.commons.io.FileUtils
 import org.gradle.api.DefaultTask
 import org.gradle.api.GradleException
@@ -28,8 +30,6 @@ import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
 import org.gradle.work.DisableCachingByDefault
-import java.io.File
-import java.util.concurrent.TimeUnit
 
 /** Compares two API txt files against each other. */
 @DisableCachingByDefault(because = "Doesn't benefit from caching")
@@ -53,7 +53,6 @@ abstract class CheckApiEquivalenceTask : DefaultTask() {
             listOf(
                 checkedInApiLocation.publicApiFile,
                 checkedInApiLocation.removedApiFile,
-                checkedInApiLocation.experimentalApiFile,
                 checkedInApiLocation.restrictedApiFile
             )
         }
@@ -62,7 +61,6 @@ abstract class CheckApiEquivalenceTask : DefaultTask() {
         val builtApiFiles = listOf(
             builtApiLocation.publicApiFile,
             builtApiLocation.removedApiFile,
-            builtApiLocation.experimentalApiFile,
             builtApiLocation.restrictedApiFile
         )
 
@@ -75,13 +73,16 @@ abstract class CheckApiEquivalenceTask : DefaultTask() {
         for (checkedInApi in checkedInApis.get()) {
             checkEqual(checkedInApi.publicApiFile, builtApiLocation.publicApiFile)
             checkEqual(checkedInApi.removedApiFile, builtApiLocation.removedApiFile)
-            checkEqual(checkedInApi.experimentalApiFile, builtApiLocation.experimentalApiFile)
             checkEqual(checkedInApi.restrictedApiFile, builtApiLocation.restrictedApiFile)
         }
     }
 }
 
-private fun summarizeDiff(a: File, b: File): String {
+/**
+ * Returns the output of running the `diff` command-line tool on files [a] and [b], truncated to
+ * [maxSummaryLines] lines.
+ */
+fun summarizeDiff(a: File, b: File, maxSummaryLines: Int = 50): String {
     if (!a.exists()) {
         return "$a does not exist"
     }
@@ -93,7 +94,6 @@ private fun summarizeDiff(a: File, b: File): String {
         .start()
     process.waitFor(5, TimeUnit.SECONDS)
     var diffLines = process.inputStream.bufferedReader().readLines().toMutableList()
-    val maxSummaryLines = 50
     if (diffLines.size > maxSummaryLines) {
         diffLines = diffLines.subList(0, maxSummaryLines)
         diffLines.plusAssign("[long diff was truncated]")

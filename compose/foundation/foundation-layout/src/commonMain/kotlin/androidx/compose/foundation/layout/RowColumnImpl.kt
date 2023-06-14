@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.LayoutOrientation.Vertical
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.AlignmentLine
 import androidx.compose.ui.layout.IntrinsicMeasurable
 import androidx.compose.ui.layout.IntrinsicMeasureScope
@@ -29,10 +30,10 @@ import androidx.compose.ui.layout.MeasurePolicy
 import androidx.compose.ui.layout.MeasureResult
 import androidx.compose.ui.layout.MeasureScope
 import androidx.compose.ui.layout.Measured
-import androidx.compose.ui.layout.ParentDataModifier
 import androidx.compose.ui.layout.Placeable
+import androidx.compose.ui.node.ModifierNodeElement
+import androidx.compose.ui.node.ParentDataModifierNode
 import androidx.compose.ui.platform.InspectorInfo
-import androidx.compose.ui.platform.InspectorValueInfo
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
@@ -41,224 +42,53 @@ import androidx.compose.ui.util.fastForEach
 import kotlin.math.max
 import kotlin.math.min
 import kotlin.math.roundToInt
-import kotlin.math.sign
 
 internal fun rowColumnMeasurePolicy(
     orientation: LayoutOrientation,
+    @Suppress("PrimitiveInLambda")
     arrangement: (Int, IntArray, LayoutDirection, Density, IntArray) -> Unit,
     arrangementSpacing: Dp,
     crossAxisSize: SizeMode,
     crossAxisAlignment: CrossAxisAlignment
 ): MeasurePolicy {
-    fun Placeable.mainAxisSize() =
-        if (orientation == LayoutOrientation.Horizontal) width else height
-
-    fun Placeable.crossAxisSize() =
-        if (orientation == LayoutOrientation.Horizontal) height else width
-
     return object : MeasurePolicy {
         override fun MeasureScope.measure(
             measurables: List<Measurable>,
             constraints: Constraints
         ): MeasureResult {
-            @Suppress("NAME_SHADOWING")
-            val constraints = OrientationIndependentConstraints(constraints, orientation)
-            val arrangementSpacingPx = arrangementSpacing.roundToPx()
-
-            var totalWeight = 0f
-            var fixedSpace = 0
-            var crossAxisSpace = 0
-            var weightChildrenCount = 0
-
-            var anyAlignBy = false
-            val placeables = arrayOfNulls<Placeable>(measurables.size)
-            val rowColumnParentData = Array(measurables.size) { measurables[it].data }
-
-            // First measure children with zero weight.
-            var spaceAfterLastNoWeight = 0
-            for (i in measurables.indices) {
-                val child = measurables[i]
-                val parentData = rowColumnParentData[i]
-                val weight = parentData.weight
-
-                if (weight > 0f) {
-                    totalWeight += weight
-                    ++weightChildrenCount
-                } else {
-                    val mainAxisMax = constraints.mainAxisMax
-                    val placeable = child.measure(
-                        // Ask for preferred main axis size.
-                        constraints.copy(
-                            mainAxisMin = 0,
-                            mainAxisMax = if (mainAxisMax == Constraints.Infinity) {
-                                Constraints.Infinity
-                            } else {
-                                mainAxisMax - fixedSpace
-                            },
-                            crossAxisMin = 0
-                        ).toBoxConstraints(orientation)
-                    )
-                    spaceAfterLastNoWeight = min(
-                        arrangementSpacingPx,
-                        mainAxisMax - fixedSpace - placeable.mainAxisSize()
-                    )
-                    fixedSpace += placeable.mainAxisSize() + spaceAfterLastNoWeight
-                    crossAxisSpace = max(crossAxisSpace, placeable.crossAxisSize())
-                    anyAlignBy = anyAlignBy || parentData.isRelative
-                    placeables[i] = placeable
-                }
-            }
-
-            var weightedSpace = 0
-            if (weightChildrenCount == 0) {
-                // fixedSpace contains an extra spacing after the last non-weight child.
-                fixedSpace -= spaceAfterLastNoWeight
-            } else {
-                // Measure the rest according to their weights in the remaining main axis space.
-                val targetSpace =
-                    if (totalWeight > 0f && constraints.mainAxisMax != Constraints.Infinity) {
-                        constraints.mainAxisMax
-                    } else {
-                        constraints.mainAxisMin
-                    }
-                val remainingToTarget =
-                    targetSpace - fixedSpace - arrangementSpacingPx * (weightChildrenCount - 1)
-
-                val weightUnitSpace = if (totalWeight > 0) remainingToTarget / totalWeight else 0f
-                var remainder = remainingToTarget - rowColumnParentData.sumOf {
-                    (weightUnitSpace * it.weight).roundToInt()
-                }
-
-                for (i in measurables.indices) {
-                    if (placeables[i] == null) {
-                        val child = measurables[i]
-                        val parentData = rowColumnParentData[i]
-                        val weight = parentData.weight
-                        check(weight > 0) { "All weights <= 0 should have placeables" }
-                        // After the weightUnitSpace rounding, the total space going to be occupied
-                        // can be smaller or larger than remainingToTarget. Here we distribute the
-                        // loss or gain remainder evenly to the first children.
-                        val remainderUnit = remainder.sign
-                        remainder -= remainderUnit
-                        val childMainAxisSize = max(
-                            0,
-                            (weightUnitSpace * weight).roundToInt() + remainderUnit
-                        )
-                        val placeable = child.measure(
-                            OrientationIndependentConstraints(
-                                if (parentData.fill && childMainAxisSize != Constraints.Infinity) {
-                                    childMainAxisSize
-                                } else {
-                                    0
-                                },
-                                childMainAxisSize,
-                                0,
-                                constraints.crossAxisMax
-                            ).toBoxConstraints(orientation)
-                        )
-                        weightedSpace += placeable.mainAxisSize()
-                        crossAxisSpace = max(crossAxisSpace, placeable.crossAxisSize())
-                        anyAlignBy = anyAlignBy || parentData.isRelative
-                        placeables[i] = placeable
-                    }
-                }
-                weightedSpace = (weightedSpace + arrangementSpacingPx * (weightChildrenCount - 1))
-                    .coerceAtMost(constraints.mainAxisMax - fixedSpace)
-            }
-
-            var beforeCrossAxisAlignmentLine = 0
-            var afterCrossAxisAlignmentLine = 0
-            if (anyAlignBy) {
-                for (i in placeables.indices) {
-                    val placeable = placeables[i]!!
-                    val parentData = rowColumnParentData[i]
-                    val alignmentLinePosition = parentData.crossAxisAlignment
-                        ?.calculateAlignmentLinePosition(placeable)
-                    if (alignmentLinePosition != null) {
-                        beforeCrossAxisAlignmentLine = max(
-                            beforeCrossAxisAlignmentLine,
-                            alignmentLinePosition.let {
-                                if (it != AlignmentLine.Unspecified) it else 0
-                            }
-                        )
-                        afterCrossAxisAlignmentLine = max(
-                            afterCrossAxisAlignmentLine,
-                            placeable.crossAxisSize() -
-                                (
-                                    alignmentLinePosition.let {
-                                        if (it != AlignmentLine.Unspecified) {
-                                            it
-                                        } else {
-                                            placeable.crossAxisSize()
-                                        }
-                                    }
-                                    )
-                        )
-                    }
-                }
-            }
-
-            // Compute the Row or Column size and position the children.
-            val mainAxisLayoutSize = max(fixedSpace + weightedSpace, constraints.mainAxisMin)
-            val crossAxisLayoutSize = if (constraints.crossAxisMax != Constraints.Infinity &&
-                crossAxisSize == SizeMode.Expand
-            ) {
-                constraints.crossAxisMax
-            } else {
-                max(
-                    crossAxisSpace,
-                    max(
-                        constraints.crossAxisMin,
-                        beforeCrossAxisAlignmentLine + afterCrossAxisAlignmentLine
-                    )
+            val placeables = arrayOfNulls<Placeable?>(measurables.size)
+            val rowColumnMeasureHelper =
+                RowColumnMeasurementHelper(
+                    orientation,
+                    arrangement,
+                    arrangementSpacing,
+                    crossAxisSize,
+                    crossAxisAlignment,
+                    measurables,
+                    placeables
                 )
-            }
-            val layoutWidth = if (orientation == Horizontal) {
-                mainAxisLayoutSize
-            } else {
-                crossAxisLayoutSize
-            }
-            val layoutHeight = if (orientation == Horizontal) {
-                crossAxisLayoutSize
-            } else {
-                mainAxisLayoutSize
-            }
 
-            val mainAxisPositions = IntArray(measurables.size) { 0 }
+            val measureResult = rowColumnMeasureHelper
+                .measureWithoutPlacing(this,
+                    constraints, 0, measurables.size
+                )
+
+            val layoutWidth: Int
+            val layoutHeight: Int
+            if (orientation == LayoutOrientation.Horizontal) {
+                layoutWidth = measureResult.mainAxisSize
+                layoutHeight = measureResult.crossAxisSize
+            } else {
+                layoutWidth = measureResult.crossAxisSize
+                layoutHeight = measureResult.mainAxisSize
+            }
             return layout(layoutWidth, layoutHeight) {
-                val childrenMainAxisSize = IntArray(measurables.size) { index ->
-                    placeables[index]!!.mainAxisSize()
-                }
-                arrangement(
-                    mainAxisLayoutSize,
-                    childrenMainAxisSize,
-                    layoutDirection,
-                    this@measure,
-                    mainAxisPositions
+                rowColumnMeasureHelper.placeHelper(
+                    this,
+                    measureResult,
+                    0,
+                    layoutDirection
                 )
-
-                placeables.forEachIndexed { index, placeable ->
-                    placeable!!
-                    val parentData = rowColumnParentData[index]
-                    val childCrossAlignment = parentData.crossAxisAlignment ?: crossAxisAlignment
-
-                    val crossAxis = childCrossAlignment.align(
-                        size = crossAxisLayoutSize - placeable.crossAxisSize(),
-                        layoutDirection = if (orientation == Horizontal) {
-                            LayoutDirection.Ltr
-                        } else {
-                            layoutDirection
-                        },
-                        placeable = placeable,
-                        beforeCrossAxisAlignmentLine = beforeCrossAxisAlignmentLine
-                    )
-
-                    if (orientation == Horizontal) {
-                        placeable.place(mainAxisPositions[index], crossAxis)
-                    } else {
-                        placeable.place(crossAxis, mainAxisPositions[index])
-                    }
-                }
             }
         }
 
@@ -349,12 +179,14 @@ internal sealed class CrossAxisAlignment {
          */
         @Stable
         val Center: CrossAxisAlignment = CenterCrossAxisAlignment
+
         /**
          * Place children such that their start edge is aligned to the start edge of the cross
          * axis. TODO(popam): Consider rtl directionality.
          */
         @Stable
         val Start: CrossAxisAlignment = StartCrossAxisAlignment
+
         /**
          * Place children such that their end edge is aligned to the end edge of the cross
          * axis. TODO(popam): Consider rtl directionality.
@@ -482,12 +314,29 @@ internal sealed class CrossAxisAlignment {
 /**
  * Box [Constraints], but which abstract away width and height in favor of main axis and cross axis.
  */
-internal data class OrientationIndependentConstraints(
-    val mainAxisMin: Int,
-    val mainAxisMax: Int,
-    val crossAxisMin: Int,
-    val crossAxisMax: Int
+@JvmInline
+internal value class OrientationIndependentConstraints private constructor(
+    private val value: Constraints
 ) {
+    inline val mainAxisMin: Int get() = value.minWidth
+    inline val mainAxisMax: Int get() = value.maxWidth
+    inline val crossAxisMin: Int get() = value.minHeight
+    inline val crossAxisMax: Int get() = value.maxHeight
+
+    constructor(
+        mainAxisMin: Int,
+        mainAxisMax: Int,
+        crossAxisMin: Int,
+        crossAxisMax: Int
+    ) : this(
+        Constraints(
+            minWidth = mainAxisMin,
+            maxWidth = mainAxisMax,
+            minHeight = crossAxisMin,
+            maxHeight = crossAxisMax
+        )
+    )
+
     constructor(c: Constraints, orientation: LayoutOrientation) : this(
         if (orientation === LayoutOrientation.Horizontal) c.minWidth else c.minHeight,
         if (orientation === LayoutOrientation.Horizontal) c.maxWidth else c.maxHeight,
@@ -526,23 +375,37 @@ internal data class OrientationIndependentConstraints(
         } else {
             mainAxisMax
         }
+
+    fun copy(
+        mainAxisMin: Int = this.mainAxisMin,
+        mainAxisMax: Int = this.mainAxisMax,
+        crossAxisMin: Int = this.crossAxisMin,
+        crossAxisMax: Int = this.crossAxisMax
+    ): OrientationIndependentConstraints =
+        OrientationIndependentConstraints(
+            mainAxisMin,
+            mainAxisMax,
+            crossAxisMin,
+            crossAxisMax
+        )
 }
 
-private val IntrinsicMeasurable.data: RowColumnParentData?
+internal val IntrinsicMeasurable.rowColumnParentData: RowColumnParentData?
     get() = parentData as? RowColumnParentData
 
-private val RowColumnParentData?.weight: Float
+internal val RowColumnParentData?.weight: Float
     get() = this?.weight ?: 0f
 
-private val RowColumnParentData?.fill: Boolean
+internal val RowColumnParentData?.fill: Boolean
     get() = this?.fill ?: true
 
-private val RowColumnParentData?.crossAxisAlignment: CrossAxisAlignment?
+internal val RowColumnParentData?.crossAxisAlignment: CrossAxisAlignment?
     get() = this?.crossAxisAlignment
 
-private val RowColumnParentData?.isRelative: Boolean
+internal val RowColumnParentData?.isRelative: Boolean
     get() = this.crossAxisAlignment?.isRelative ?: false
 
+@Suppress("PrimitiveInLambda")
 private fun MinIntrinsicWidthMeasureBlock(orientation: LayoutOrientation) =
     if (orientation == LayoutOrientation.Horizontal) {
         IntrinsicMeasureBlocks.HorizontalMinWidth
@@ -550,6 +413,7 @@ private fun MinIntrinsicWidthMeasureBlock(orientation: LayoutOrientation) =
         IntrinsicMeasureBlocks.VerticalMinWidth
     }
 
+@Suppress("PrimitiveInLambda")
 private fun MinIntrinsicHeightMeasureBlock(orientation: LayoutOrientation) =
     if (orientation == LayoutOrientation.Horizontal) {
         IntrinsicMeasureBlocks.HorizontalMinHeight
@@ -557,6 +421,7 @@ private fun MinIntrinsicHeightMeasureBlock(orientation: LayoutOrientation) =
         IntrinsicMeasureBlocks.VerticalMinHeight
     }
 
+@Suppress("PrimitiveInLambda")
 private fun MaxIntrinsicWidthMeasureBlock(orientation: LayoutOrientation) =
     if (orientation == LayoutOrientation.Horizontal) {
         IntrinsicMeasureBlocks.HorizontalMaxWidth
@@ -564,6 +429,7 @@ private fun MaxIntrinsicWidthMeasureBlock(orientation: LayoutOrientation) =
         IntrinsicMeasureBlocks.VerticalMaxWidth
     }
 
+@Suppress("PrimitiveInLambda")
 private fun MaxIntrinsicHeightMeasureBlock(orientation: LayoutOrientation) =
     if (orientation == LayoutOrientation.Horizontal) {
         IntrinsicMeasureBlocks.HorizontalMaxHeight
@@ -572,6 +438,7 @@ private fun MaxIntrinsicHeightMeasureBlock(orientation: LayoutOrientation) =
     }
 
 private object IntrinsicMeasureBlocks {
+    @Suppress("PrimitiveInLambda")
     val HorizontalMinWidth: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableHeight, mainAxisSpacing ->
             intrinsicSize(
@@ -584,6 +451,7 @@ private object IntrinsicMeasureBlocks {
                 LayoutOrientation.Horizontal
             )
         }
+    @Suppress("PrimitiveInLambda")
     val VerticalMinWidth: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableHeight, mainAxisSpacing ->
             intrinsicSize(
@@ -596,6 +464,7 @@ private object IntrinsicMeasureBlocks {
                 LayoutOrientation.Horizontal
             )
         }
+    @Suppress("PrimitiveInLambda")
     val HorizontalMinHeight: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableWidth, mainAxisSpacing ->
             intrinsicSize(
@@ -608,6 +477,7 @@ private object IntrinsicMeasureBlocks {
                 LayoutOrientation.Vertical
             )
         }
+    @Suppress("PrimitiveInLambda")
     val VerticalMinHeight: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableWidth, mainAxisSpacing ->
             intrinsicSize(
@@ -620,6 +490,7 @@ private object IntrinsicMeasureBlocks {
                 LayoutOrientation.Vertical
             )
         }
+    @Suppress("PrimitiveInLambda")
     val HorizontalMaxWidth: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableHeight, mainAxisSpacing ->
             intrinsicSize(
@@ -632,6 +503,7 @@ private object IntrinsicMeasureBlocks {
                 LayoutOrientation.Horizontal
             )
         }
+    @Suppress("PrimitiveInLambda")
     val VerticalMaxWidth: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableHeight, mainAxisSpacing ->
             intrinsicSize(
@@ -644,6 +516,7 @@ private object IntrinsicMeasureBlocks {
                 LayoutOrientation.Horizontal
             )
         }
+    @Suppress("PrimitiveInLambda")
     val HorizontalMaxHeight: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableWidth, mainAxisSpacing ->
             intrinsicSize(
@@ -656,6 +529,7 @@ private object IntrinsicMeasureBlocks {
                 LayoutOrientation.Vertical
             )
         }
+    @Suppress("PrimitiveInLambda")
     val VerticalMaxHeight: (List<IntrinsicMeasurable>, Int, Int) -> Int =
         { measurables, availableWidth, mainAxisSpacing ->
             intrinsicSize(
@@ -672,7 +546,9 @@ private object IntrinsicMeasureBlocks {
 
 private fun intrinsicSize(
     children: List<IntrinsicMeasurable>,
+    @Suppress("PrimitiveInLambda")
     intrinsicMainSize: IntrinsicMeasurable.(Int) -> Int,
+    @Suppress("PrimitiveInLambda")
     intrinsicCrossSize: IntrinsicMeasurable.(Int) -> Int,
     crossAxisAvailable: Int,
     mainAxisSpacing: Int,
@@ -692,6 +568,7 @@ private fun intrinsicSize(
 
 private fun intrinsicMainAxisSize(
     children: List<IntrinsicMeasurable>,
+    @Suppress("PrimitiveInLambda")
     mainAxisSize: IntrinsicMeasurable.(Int) -> Int,
     crossAxisAvailable: Int,
     mainAxisSpacing: Int
@@ -700,7 +577,7 @@ private fun intrinsicMainAxisSize(
     var fixedSpace = 0
     var totalWeight = 0f
     children.fastForEach { child ->
-        val weight = child.data.weight
+        val weight = child.rowColumnParentData.weight
         val size = child.mainAxisSize(crossAxisAvailable)
         if (weight == 0f) {
             fixedSpace += size
@@ -715,7 +592,9 @@ private fun intrinsicMainAxisSize(
 
 private fun intrinsicCrossAxisSize(
     children: List<IntrinsicMeasurable>,
+    @Suppress("PrimitiveInLambda")
     mainAxisSize: IntrinsicMeasurable.(Int) -> Int,
+    @Suppress("PrimitiveInLambda")
     crossAxisSize: IntrinsicMeasurable.(Int) -> Int,
     mainAxisAvailable: Int,
     mainAxisSpacing: Int
@@ -724,7 +603,7 @@ private fun intrinsicCrossAxisSize(
     var crossAxisMax = 0
     var totalWeight = 0f
     children.fastForEach { child ->
-        val weight = child.data.weight
+        val weight = child.rowColumnParentData.weight
         if (weight == 0f) {
             // Ask the child how much main axis space it wants to occupy. This cannot be more
             // than the remaining available space.
@@ -750,7 +629,7 @@ private fun intrinsicCrossAxisSize(
     }
 
     children.fastForEach { child ->
-        val weight = child.data.weight
+        val weight = child.rowColumnParentData.weight
         // Now the main axis for weighted children is known, so ask about the cross axis space.
         if (weight > 0f) {
             crossAxisMax = max(
@@ -768,22 +647,24 @@ private fun intrinsicCrossAxisSize(
     return crossAxisMax
 }
 
-internal class LayoutWeightImpl(
+internal class LayoutWeightElement(
     val weight: Float,
     val fill: Boolean,
-    inspectorInfo: InspectorInfo.() -> Unit
-) : ParentDataModifier, InspectorValueInfo(inspectorInfo) {
-    override fun Density.modifyParentData(parentData: Any?) =
-        ((parentData as? RowColumnParentData) ?: RowColumnParentData()).also {
-            it.weight = weight
-            it.fill = fill
-        }
+) : ModifierNodeElement<LayoutWeightNode>() {
+    override fun create(): LayoutWeightNode {
+        return LayoutWeightNode(weight, fill)
+    }
 
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        val otherModifier = other as? LayoutWeightImpl ?: return false
-        return weight == otherModifier.weight &&
-            fill == otherModifier.fill
+    override fun update(node: LayoutWeightNode) {
+        node.weight = weight
+        node.fill = fill
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "weight"
+        value = weight
+        properties["weight"] = weight
+        properties["fill"] = fill
     }
 
     override fun hashCode(): Int {
@@ -792,101 +673,170 @@ internal class LayoutWeightImpl(
         return result
     }
 
-    override fun toString(): String =
-        "LayoutWeightImpl(weight=$weight, fill=$fill)"
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        val otherModifier = other as? LayoutWeightElement ?: return false
+        return weight == otherModifier.weight &&
+            fill == otherModifier.fill
+    }
 }
 
-internal sealed class SiblingsAlignedModifier(
-    inspectorInfo: InspectorInfo.() -> Unit
-) : ParentDataModifier, InspectorValueInfo(inspectorInfo) {
+internal class LayoutWeightNode(
+    var weight: Float,
+    var fill: Boolean,
+) : ParentDataModifierNode, Modifier.Node() {
+    override fun Density.modifyParentData(parentData: Any?) =
+        ((parentData as? RowColumnParentData) ?: RowColumnParentData()).also {
+            it.weight = weight
+            it.fill = fill
+        }
+}
+
+internal class WithAlignmentLineBlockElement(
+    @Suppress("PrimitiveInLambda")
+    val block: (Measured) -> Int
+) : ModifierNodeElement<SiblingsAlignedNode.WithAlignmentLineBlockNode>() {
+    override fun create(): SiblingsAlignedNode.WithAlignmentLineBlockNode {
+        return SiblingsAlignedNode.WithAlignmentLineBlockNode(block)
+    }
+
+    override fun update(node: SiblingsAlignedNode.WithAlignmentLineBlockNode) {
+        node.block = block
+    }
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        val otherModifier = other as? WithAlignmentLineBlockElement ?: return false
+        return block == otherModifier.block
+    }
+
+    override fun hashCode(): Int = block.hashCode()
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "alignBy"
+        value = block
+    }
+}
+
+internal class WithAlignmentLineElement(
+    val alignmentLine: AlignmentLine
+) : ModifierNodeElement<SiblingsAlignedNode.WithAlignmentLineNode>() {
+    override fun create(): SiblingsAlignedNode.WithAlignmentLineNode {
+        return SiblingsAlignedNode.WithAlignmentLineNode(alignmentLine)
+    }
+
+    override fun update(node: SiblingsAlignedNode.WithAlignmentLineNode) {
+        node.alignmentLine = alignmentLine
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "alignBy"
+        value = alignmentLine
+    }
+
+    override fun hashCode(): Int = alignmentLine.hashCode()
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        val otherModifier = other as? WithAlignmentLineElement ?: return false
+        return alignmentLine == otherModifier.alignmentLine
+    }
+}
+
+internal sealed class SiblingsAlignedNode : ParentDataModifierNode, Modifier.Node() {
     abstract override fun Density.modifyParentData(parentData: Any?): Any?
 
-    internal class WithAlignmentLineBlock(
-        val block: (Measured) -> Int,
-        inspectorInfo: InspectorInfo.() -> Unit
-    ) : SiblingsAlignedModifier(inspectorInfo) {
+    internal class WithAlignmentLineBlockNode(
+        @Suppress("PrimitiveInLambda")
+        var block: (Measured) -> Int,
+    ) : SiblingsAlignedNode() {
         override fun Density.modifyParentData(parentData: Any?): Any {
             return ((parentData as? RowColumnParentData) ?: RowColumnParentData()).also {
                 it.crossAxisAlignment =
                     CrossAxisAlignment.Relative(AlignmentLineProvider.Block(block))
             }
         }
-
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            val otherModifier = other as? WithAlignmentLineBlock ?: return false
-            return block == otherModifier.block
-        }
-
-        override fun hashCode(): Int = block.hashCode()
-
-        override fun toString(): String = "WithAlignmentLineBlock(block=$block)"
     }
 
-    internal class WithAlignmentLine(
-        val alignmentLine: AlignmentLine,
-        inspectorInfo: InspectorInfo.() -> Unit
-    ) : SiblingsAlignedModifier(inspectorInfo) {
+    internal class WithAlignmentLineNode(
+        var alignmentLine: AlignmentLine,
+    ) : SiblingsAlignedNode() {
         override fun Density.modifyParentData(parentData: Any?): Any {
             return ((parentData as? RowColumnParentData) ?: RowColumnParentData()).also {
                 it.crossAxisAlignment =
                     CrossAxisAlignment.Relative(AlignmentLineProvider.Value(alignmentLine))
             }
         }
-
-        override fun equals(other: Any?): Boolean {
-            if (this === other) return true
-            val otherModifier = other as? WithAlignmentLine ?: return false
-            return alignmentLine == otherModifier.alignmentLine
-        }
-
-        override fun hashCode(): Int = alignmentLine.hashCode()
-
-        override fun toString(): String = "WithAlignmentLine(line=$alignmentLine)"
     }
 }
 
-internal class HorizontalAlignModifier(
-    val horizontal: Alignment.Horizontal,
-    inspectorInfo: InspectorInfo.() -> Unit
-) : ParentDataModifier, InspectorValueInfo(inspectorInfo) {
+internal class HorizontalAlignElement(
+    val horizontal: Alignment.Horizontal
+) : ModifierNodeElement<HorizontalAlignNode>() {
+    override fun create(): HorizontalAlignNode {
+        return HorizontalAlignNode(horizontal)
+    }
+
+    override fun update(node: HorizontalAlignNode) {
+        node.horizontal = horizontal
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "align"
+        value = horizontal
+    }
+    override fun hashCode(): Int = horizontal.hashCode()
+
+    override fun equals(other: Any?): Boolean {
+        if (this === other) return true
+        val otherModifier = other as? HorizontalAlignElement ?: return false
+        return horizontal == otherModifier.horizontal
+    }
+}
+
+internal class HorizontalAlignNode(
+    var horizontal: Alignment.Horizontal
+) : ParentDataModifierNode, Modifier.Node() {
     override fun Density.modifyParentData(parentData: Any?): RowColumnParentData {
         return ((parentData as? RowColumnParentData) ?: RowColumnParentData()).also {
             it.crossAxisAlignment = CrossAxisAlignment.horizontal(horizontal)
         }
     }
+}
+
+internal class VerticalAlignElement(
+    val alignment: Alignment.Vertical,
+) : ModifierNodeElement<VerticalAlignNode>() {
+    override fun create(): VerticalAlignNode {
+        return VerticalAlignNode(alignment)
+    }
+
+    override fun update(node: VerticalAlignNode) {
+        node.vertical = alignment
+    }
+
+    override fun InspectorInfo.inspectableProperties() {
+        name = "align"
+        value = alignment
+    }
+
+    override fun hashCode(): Int = alignment.hashCode()
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        val otherModifier = other as? HorizontalAlignModifier ?: return false
-        return horizontal == otherModifier.horizontal
+        val otherModifier = other as? VerticalAlignElement ?: return false
+        return alignment == otherModifier.alignment
     }
-
-    override fun hashCode(): Int = horizontal.hashCode()
-
-    override fun toString(): String =
-        "HorizontalAlignModifier(horizontal=$horizontal)"
 }
 
-internal class VerticalAlignModifier(
-    val vertical: Alignment.Vertical,
-    inspectorInfo: InspectorInfo.() -> Unit
-) : ParentDataModifier, InspectorValueInfo(inspectorInfo) {
+internal class VerticalAlignNode(
+    var vertical: Alignment.Vertical
+) : ParentDataModifierNode, Modifier.Node() {
     override fun Density.modifyParentData(parentData: Any?): RowColumnParentData {
         return ((parentData as? RowColumnParentData) ?: RowColumnParentData()).also {
             it.crossAxisAlignment = CrossAxisAlignment.vertical(vertical)
         }
     }
-    override fun equals(other: Any?): Boolean {
-        if (this === other) return true
-        val otherModifier = other as? VerticalAlignModifier ?: return false
-        return vertical == otherModifier.vertical
-    }
-
-    override fun hashCode(): Int = vertical.hashCode()
-
-    override fun toString(): String =
-        "VerticalAlignModifier(vertical=$vertical)"
 }
 
 /**
@@ -903,7 +853,10 @@ internal data class RowColumnParentData(
  */
 internal sealed class AlignmentLineProvider {
     abstract fun calculateAlignmentLinePosition(placeable: Placeable): Int
-    data class Block(val lineProviderBlock: (Measured) -> Int) : AlignmentLineProvider() {
+    data class Block(
+        @Suppress("PrimitiveInLambda")
+        val lineProviderBlock: (Measured) -> Int
+    ) : AlignmentLineProvider() {
         override fun calculateAlignmentLinePosition(
             placeable: Placeable
         ): Int {
@@ -928,6 +881,7 @@ internal enum class SizeMode {
      * subject to the incoming layout constraints.
      */
     Wrap,
+
     /**
      * Maximize the amount of free space by expanding to fill the available space,
      * subject to the incoming layout constraints.

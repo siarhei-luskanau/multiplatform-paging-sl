@@ -17,23 +17,24 @@
 package androidx.room.compiler.processing.javac.kotlin
 
 import androidx.room.compiler.processing.XNullability
+import androidx.room.compiler.processing.XProcessingEnvConfig
 import androidx.room.compiler.processing.javac.JavacProcessingEnv
-import androidx.room.compiler.processing.javac.nullability
 import androidx.room.compiler.processing.util.Source
+import androidx.room.compiler.processing.util.XTestInvocation
 import androidx.room.compiler.processing.util.compileFiles
 import androidx.room.compiler.processing.util.runJavaProcessorTest
 import androidx.room.compiler.processing.util.runKaptTest
 import androidx.room.compiler.processing.util.sanitizeAsJavaParameterName
 import com.google.common.truth.Truth.assertThat
 import com.google.common.truth.Truth.assertWithMessage
-import org.junit.AssumptionViolatedException
-import org.junit.Test
-import org.junit.runner.RunWith
-import org.junit.runners.Parameterized
 import javax.annotation.processing.ProcessingEnvironment
 import javax.lang.model.element.ExecutableElement
 import javax.lang.model.element.TypeElement
 import javax.lang.model.util.ElementFilter
+import org.junit.AssumptionViolatedException
+import org.junit.Test
+import org.junit.runner.RunWith
+import org.junit.runners.Parameterized
 
 @RunWith(Parameterized::class)
 class KotlinMetadataElementTest(
@@ -164,7 +165,7 @@ class KotlinMetadataElementTest(
             assertThat(
                 testClassElement.getConstructors().map {
                     val desc = it.descriptor()
-                    desc to (desc == metadataElement.findPrimaryConstructorSignature())
+                    desc to (desc == metadataElement.primaryConstructorSignature)
                 }
             ).containsExactly(
                 "<init>(Ljava/lang/String;)V" to true,
@@ -347,7 +348,7 @@ class KotlinMetadataElementTest(
             )
 
             fun assertSetter(
-                kmFunction: KmFunction?,
+                kmFunction: KmFunctionContainer?,
                 name: String,
                 jvmName: String,
                 paramNullable: Boolean
@@ -366,7 +367,7 @@ class KotlinMetadataElementTest(
             }
 
             fun assertSetter(
-                metadata: KotlinMetadataElement,
+                metadata: KmClassContainer,
                 method: ExecutableElement,
                 name: String,
                 jvmName: String,
@@ -391,7 +392,7 @@ class KotlinMetadataElementTest(
             }
 
             fun assertGetter(
-                kmFunction: KmFunction?,
+                kmFunction: KmFunctionContainer?,
                 name: String,
                 jvmName: String,
                 returnsNullable: Boolean
@@ -582,7 +583,7 @@ class KotlinMetadataElementTest(
                 invocation,
                 "Subject"
             )
-            fun assertParams(params: List<KmValueParameter>?) {
+            fun assertParams(params: List<KmValueParameterContainer>?) {
                 assertThat(
                     params?.map {
                         Triple(
@@ -670,19 +671,23 @@ class KotlinMetadataElementTest(
         )
         simpleRun(listOf(src)) { invocation ->
             val (_, simple) = getMetadataElement(invocation, "Simple")
-            assertThat(simple.kmType.isNullable()).isFalse()
-            assertThat(simple.kmType.typeArguments).isEmpty()
+            assertThat(simple.type.isNullable()).isFalse()
+            assertThat(simple.type.typeArguments).isEmpty()
 
             val (_, twoArgGeneric) = getMetadataElement(invocation, "TwoArgGeneric")
-            assertThat(twoArgGeneric.kmType.isNullable()).isFalse()
-            assertThat(twoArgGeneric.kmType.typeArguments).hasSize(2)
-            assertThat(twoArgGeneric.kmType.typeArguments[0].isNullable()).isFalse()
-            assertThat(twoArgGeneric.kmType.typeArguments[1].isNullable()).isFalse()
+            assertThat(twoArgGeneric.type.isNullable()).isFalse()
+            assertThat(twoArgGeneric.type.typeArguments).hasSize(2)
+            assertThat(twoArgGeneric.type.typeArguments[0].isNullable()).isFalse()
+            assertThat(twoArgGeneric.type.typeArguments[1].isNullable()).isFalse()
 
             val (_, withUpperBounds) = getMetadataElement(invocation, "WithUpperBounds")
-            assertThat(withUpperBounds.kmType.typeArguments).hasSize(2)
-            assertThat(withUpperBounds.kmType.typeArguments[0].extendsBound?.isNullable()).isFalse()
-            assertThat(withUpperBounds.kmType.typeArguments[1].extendsBound?.isNullable()).isTrue()
+            assertThat(withUpperBounds.type.typeArguments).hasSize(2)
+            assertThat(withUpperBounds.type.typeArguments[0].upperBounds).hasSize(1)
+            assertThat(withUpperBounds.type.typeArguments[0].upperBounds!![0].isNullable())
+                .isFalse()
+            assertThat(withUpperBounds.type.typeArguments[1].upperBounds).hasSize(1)
+            assertThat(withUpperBounds.type.typeArguments[1].upperBounds!![0].isNullable())
+                .isTrue()
 
             val (_, withSuperType) = getMetadataElement(invocation, "WithSuperType")
             assertThat(withSuperType.superType?.typeArguments?.get(0)?.isNullable()).isFalse()
@@ -788,6 +793,111 @@ class KotlinMetadataElementTest(
         }
     }
 
+    @Test
+    fun ignore_syntheticMetadata_defaultImpls() {
+        val src = Source.kotlin(
+            "Subject.kt",
+            """
+            interface Subject {
+              fun instance(): String = "Hello"
+            }
+            """.trimIndent()
+        )
+        simpleRun(
+            sources = listOf(src),
+            kotlincArgs = listOf("-Xjvm-default=disable")
+        ) {
+            val subjectElement = processingEnv.requireTypeElement("Subject.DefaultImpls")
+            // Call metadata derived API causing it to be read
+            assertThat(subjectElement.isKotlinObject()).isFalse()
+            assertCompilationResult {
+                hasNoWarnings()
+            }
+        }
+    }
+
+    @Test
+    fun ignore_syntheticMetadata_whenMappings() {
+        val src = Source.kotlin(
+            "Subject.kt",
+            """
+            class Subject {
+              enum class Fruit {
+                APPLE,
+                STRAWBERRY
+              }
+
+              fun printName(fruit: Fruit) {
+                println(
+                  when(fruit) {
+                    Fruit.APPLE -> "manzana"
+                    Fruit.STRAWBERRY -> "fresa"
+                  }
+                )
+              }
+            }
+            """.trimIndent()
+        )
+        simpleRun(
+            sources = listOf(src),
+        ) {
+            assertThat(processingEnv.findTypeElement("Subject.Fruit")).isNotNull()
+            val subjectElement = processingEnv.findTypeElement("Subject.WhenMappings")
+                // Currently $WhenMapping has the ACC_SYNTHETIC flag making it unreadable by
+                // annotation processors making it impossible to verify synthetic metadata is
+                // ignored.
+                ?: throw AssumptionViolatedException("No test if WhenMappings is not found")
+            // Call metadata derived API causing it to be read
+            assertThat(subjectElement.isKotlinObject()).isFalse()
+            assertCompilationResult {
+                hasNoWarnings()
+            }
+        }
+    }
+
+    @Test
+    fun ignore_fileFacadeMetadata() {
+        val aSrc = Source.kotlin(
+            "A.kt",
+            """
+            @file:JvmMultifileClass
+            @file:JvmName("Subject")
+
+            fun a() { }
+            """.trimIndent()
+        )
+        val bSrc = Source.kotlin(
+            "B.kt",
+            """
+            @file:JvmMultifileClass
+            @file:JvmName("Subject")
+
+            fun b() { }
+            """.trimIndent()
+        )
+        simpleRun(
+            sources = listOf(aSrc, bSrc),
+        ) {
+            // Find the multi file class facade element
+            val facadeElement = processingEnv.requireTypeElement("Subject")
+            // Call metadata derived API causing it to be read
+            assertThat(facadeElement.isKotlinObject()).isFalse()
+
+            // Try to find the multi file class part elements, currently these classes have the
+            // ACC_SYNTHETIC flag making them unreadable by annotation processors and impossible to
+            // verify that multi file metadata is ignored.
+            val facadePartOne = processingEnv.findTypeElement("Subject__AKt")
+                ?: throw AssumptionViolatedException("No test if MultiFileClassPart is not found")
+            assertThat(facadePartOne.isKotlinObject()).isFalse()
+            val facadePartTwo = processingEnv.findTypeElement("Subject__BKt")
+                ?: throw AssumptionViolatedException("No test if MultiFileClassPart is not found")
+            assertThat(facadePartTwo.isKotlinObject()).isFalse()
+            assertCompilationResult {
+                hasNoWarnings()
+            }
+        }
+    }
+
     private fun TypeElement.getDeclaredMethods() = ElementFilter.methodsIn(enclosedElements)
 
     private fun TypeElement.getDeclaredMethod(name: String) = getDeclaredMethods().first {
@@ -799,25 +909,31 @@ class KotlinMetadataElementTest(
     @Suppress("NAME_SHADOWING") // intentional
     private fun simpleRun(
         sources: List<Source> = emptyList(),
-        handler: (ProcessingEnvironment) -> Unit
+        kotlincArgs: List<String> = emptyList(),
+        handler: XTestInvocation.(ProcessingEnvironment) -> Unit
     ) {
         val (sources, classpath) = if (preCompiled) {
             emptyList<Source>() to compileFiles(sources)
         } else {
             sources to emptyList()
         }
-        runKaptTest(sources = sources, classpath = classpath) {
+        runKaptTest(
+            sources = sources,
+            classpath = classpath,
+            kotlincArguments = kotlincArgs
+        ) {
             val processingEnv = it.processingEnv
             if (processingEnv !is JavacProcessingEnv) {
                 throw AssumptionViolatedException("This test only works for java/kapt compilation")
             }
-            handler(processingEnv.delegate)
+            it.handler(processingEnv.delegate)
         }
     }
 
     private fun getMetadataElement(processingEnv: ProcessingEnvironment, qName: String) =
         processingEnv.elementUtils.getTypeElement(qName).let {
-            it to KotlinMetadataElement.createFor(it)!!
+            it to KmClassContainer.createFor(
+                JavacProcessingEnv(processingEnv, XProcessingEnvConfig.DEFAULT), it)!!
         }
 
     companion object {

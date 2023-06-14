@@ -17,26 +17,36 @@
 package androidx.tv.foundation.lazy.grid
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.lazy.layout.LazyLayoutIntervalContent
 import androidx.compose.foundation.lazy.layout.MutableIntervalList
 import androidx.compose.runtime.Composable
 
 @Suppress("IllegalExperimentalApiUsage") // TODO (b/233188423): Address before moving to beta
 @OptIn(ExperimentalFoundationApi::class)
-internal class TvLazyGridScopeImpl : TvLazyGridScope {
-    internal val intervals = MutableIntervalList<LazyGridIntervalContent>()
+internal class LazyGridIntervalContent(
+    content: TvLazyGridScope.() -> Unit
+) : TvLazyGridScope, LazyLayoutIntervalContent<LazyGridInterval>() {
+    internal val spanLayoutProvider: LazyGridSpanLayoutProvider = LazyGridSpanLayoutProvider(this)
+
+    override val intervals = MutableIntervalList<LazyGridInterval>()
+
     internal var hasCustomSpans = false
 
-    private val DefaultSpan: TvLazyGridItemSpanScope.(Int) -> TvGridItemSpan = { TvGridItemSpan(1) }
+    init {
+        apply(content)
+    }
 
+    @Suppress("PrimitiveInLambda")
     override fun item(
         key: Any?,
+        @Suppress("PrimitiveInLambda")
         span: (TvLazyGridItemSpanScope.() -> TvGridItemSpan)?,
         contentType: Any?,
         content: @Composable TvLazyGridItemScope.() -> Unit
     ) {
         intervals.addInterval(
             1,
-            LazyGridIntervalContent(
+            LazyGridInterval(
                 key = key?.let { { key } },
                 span = span?.let { { span() } } ?: DefaultSpan,
                 type = { contentType },
@@ -53,9 +63,10 @@ internal class TvLazyGridScopeImpl : TvLazyGridScope {
         contentType: (index: Int) -> Any?,
         itemContent: @Composable TvLazyGridItemScope.(index: Int) -> Unit
     ) {
+        @Suppress("PrimitiveInLambda")
         intervals.addInterval(
             count,
-            LazyGridIntervalContent(
+            LazyGridInterval(
                 key = key,
                 span = span ?: DefaultSpan,
                 type = contentType,
@@ -64,11 +75,21 @@ internal class TvLazyGridScopeImpl : TvLazyGridScope {
         )
         if (span != null) hasCustomSpans = true
     }
+
+    private companion object {
+        @Suppress("PrimitiveInLambda")
+        val DefaultSpan: TvLazyGridItemSpanScope.(Int) -> TvGridItemSpan = { TvGridItemSpan(1) }
+    }
 }
 
-internal class LazyGridIntervalContent(
-    val key: ((index: Int) -> Any)?,
+@OptIn(ExperimentalFoundationApi::class)
+internal class LazyGridInterval(
+    @Suppress("PrimitiveInLambda")
+    override val key: ((index: Int) -> Any)?,
+    @Suppress("PrimitiveInLambda")
     val span: TvLazyGridItemSpanScope.(Int) -> TvGridItemSpan,
-    val type: ((index: Int) -> Any?),
+    @Suppress("PrimitiveInLambda")
+    override val type: ((index: Int) -> Any?),
+    @Suppress("PrimitiveInLambda")
     val item: @Composable TvLazyGridItemScope.(Int) -> Unit
-)
+) : LazyLayoutIntervalContent.Interval

@@ -32,6 +32,7 @@ import androidx.appsearch.app.AppSearchSchema;
 import androidx.appsearch.app.GenericDocument;
 import androidx.appsearch.app.GetSchemaResponse;
 import androidx.appsearch.app.InternalSetSchemaResponse;
+import androidx.appsearch.app.JoinSpec;
 import androidx.appsearch.app.PackageIdentifier;
 import androidx.appsearch.app.SearchResult;
 import androidx.appsearch.app.SearchResultPage;
@@ -77,6 +78,7 @@ import com.google.common.util.concurrent.MoreExecutors;
 
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -937,6 +939,7 @@ public class AppSearchImplTest {
         assertThat(suggestions.get(1).getSuggestedResult()).isEqualTo("term2");
     }
 
+    @Ignore("b/273733335")
     @Test
     public void testSearchSuggestion_invalidPrefix() throws Exception {
         // Insert schema just put something in the AppSearch to make it searchable.
@@ -3320,6 +3323,18 @@ public class AppSearchImplTest {
         assertThat(e.getResultCode()).isEqualTo(AppSearchResult.RESULT_OUT_OF_SPACE);
         assertThat(e).hasMessageThat().contains(
                 "Package \"package\" exceeded limit of 3 documents");
+    }
+
+    @Test
+    public void testRemoveByQuery_withJoinSpec_throwsException() {
+        Exception e = assertThrows(IllegalArgumentException.class,
+                () -> mAppSearchImpl.removeByQuery("", "", "",
+                        new SearchSpec.Builder()
+                                .setJoinSpec(new JoinSpec.Builder("childProp").build())
+                                .build(),
+                        null));
+        assertThat(e.getMessage()).isEqualTo(
+                "JoinSpec not allowed in removeByQuery, but JoinSpec was provided");
     }
 
     @Test

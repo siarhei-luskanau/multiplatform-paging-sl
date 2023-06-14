@@ -27,7 +27,6 @@ import androidx.compose.foundation.interaction.collectIsFocusedAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.material.Strings.Companion.DefaultErrorMessage
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.ComposableOpenTarget
 import androidx.compose.runtime.CompositionLocalProvider
@@ -131,8 +130,10 @@ internal fun CommonDecorationBox(
             }
         }
 
+        // Transparent components interfere with Talkback (b/261061240), so if the placeholder has
+        // alpha == 0, we set the component to null instead.
         val decoratedPlaceholder: @Composable ((Modifier) -> Unit)? =
-            if (placeholder != null && transformedText.isEmpty()) {
+            if (placeholder != null && transformedText.isEmpty() && placeholderAlphaProgress > 0f) {
                 @Composable { modifier ->
                     Box(modifier.alpha(placeholderAlphaProgress)) {
                         Decoration(
@@ -143,12 +144,6 @@ internal fun CommonDecorationBox(
                     }
                 }
             } else null
-
-        // Developers need to handle invalid input manually. But since we don't provide error
-        // message slot API, we can set the default error message in case developers forget about
-        // it.
-        val defaultErrorMessage = getString(DefaultErrorMessage)
-        val decorationBoxModifier = Modifier.semantics { if (isError) error(defaultErrorMessage) }
 
         val leadingIconColor = if (colors is TextFieldColorsWithIcons) {
             colors.leadingIconColor(enabled, isError, interactionSource).value
@@ -175,7 +170,7 @@ internal fun CommonDecorationBox(
         when (type) {
             TextFieldType.Filled -> {
                 TextFieldLayout(
-                    modifier = decorationBoxModifier,
+                    modifier = Modifier,
                     textField = innerTextField,
                     placeholder = decoratedPlaceholder,
                     label = decoratedLabel,
@@ -199,7 +194,7 @@ internal fun CommonDecorationBox(
                 }
 
                 OutlinedTextFieldLayout(
-                    modifier = decorationBoxModifier,
+                    modifier = Modifier,
                     textField = innerTextField,
                     placeholder = decoratedPlaceholder,
                     label = decoratedLabel,
@@ -253,6 +248,13 @@ internal fun Decoration(
     if (typography != null) ProvideTextStyle(typography, colorAndEmphasis) else colorAndEmphasis()
 }
 
+// Developers need to handle invalid input manually. But since we don't provide an error message
+// slot API, we can set the default error message in case developers forget about it.
+internal fun Modifier.defaultErrorSemantics(
+    isError: Boolean,
+    defaultErrorMessage: String,
+): Modifier = if (isError) semantics { error(defaultErrorMessage) } else this
+
 internal fun widthOrZero(placeable: Placeable?) = placeable?.width ?: 0
 internal fun heightOrZero(placeable: Placeable?) = placeable?.height ?: 0
 
@@ -264,6 +266,7 @@ private object TextFieldTransitionScope {
         unfocusedTextStyleColor: Color,
         contentColor: @Composable (InputPhase) -> Color,
         showLabel: Boolean,
+        @Suppress("PrimitiveInLambda")
         content: @Composable (
             labelProgress: Float,
             labelTextStyleColor: Color,
