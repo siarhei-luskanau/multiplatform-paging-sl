@@ -38,7 +38,7 @@ import java.io.File
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 @RequiresApi(28)
-fun collectBaselineProfile(
+fun collect(
     uniqueName: String,
     packageName: String,
     stableIterations: Int,
@@ -159,7 +159,10 @@ private fun buildMacrobenchmarkScope(packageName: String): MacrobenchmarkScope {
             " device running API 28 or higher and rooted adb session (via `adb root`)."
     }
     getInstalledPackageInfo(packageName) // throws clearly if not installed
-    return MacrobenchmarkScope(packageName, launchWithClearTask = true)
+    return MacrobenchmarkScope(
+        packageName,
+        launchWithClearTask = true
+    )
 }
 
 /**

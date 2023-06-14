@@ -20,13 +20,11 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.UiThread;
 import androidx.annotation.VisibleForTesting;
-import androidx.concurrent.futures.CallbackToFutureAdapter;
-
-import com.google.common.util.concurrent.ListenableFuture;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
 
 /** Utility for time data source. */
 class EpochTimePlatformDataSource {
@@ -34,17 +32,20 @@ class EpochTimePlatformDataSource {
 
     @NonNull final List<DynamicTypeValueReceiverWithPreUpdate<Instant>> mConsumerToTimeCallback =
             new ArrayList<>();
+    @NonNull private final Supplier<Instant> mClock;
     @Nullable private final PlatformTimeUpdateNotifier mUpdateNotifier;
 
     EpochTimePlatformDataSource(
+            @NonNull Supplier<Instant> clock,
             @Nullable PlatformTimeUpdateNotifier platformTimeUpdateNotifier) {
+        this.mClock = clock;
         this.mUpdateNotifier = platformTimeUpdateNotifier;
     }
 
     @UiThread
     void registerForData(DynamicTypeValueReceiverWithPreUpdate<Instant> consumer) {
         if (mConsumerToTimeCallback.isEmpty() && mUpdateNotifier != null) {
-            mUpdateNotifier.setReceiver(this::tick);
+            mUpdateNotifier.setReceiver(mExecutor, this::tick);
         }
         mConsumerToTimeCallback.add(consumer);
     }
@@ -61,21 +62,11 @@ class EpochTimePlatformDataSource {
      * Updates all registered consumers with the new time.
      */
     @SuppressWarnings("NullAway")
-    private ListenableFuture<Void> tick() {
-        return CallbackToFutureAdapter.getFuture(completer -> {
-            mExecutor.execute(() -> {
-                try {
-                    mConsumerToTimeCallback.forEach(
-                            DynamicTypeValueReceiverWithPreUpdate::onPreUpdate);
-                    Instant currentTime = Instant.now();
-                    mConsumerToTimeCallback.forEach(c -> c.onData(currentTime));
-                    completer.set(null);
-                } catch (RuntimeException e) {
-                    completer.setException(e);
-                }
-            });
-            return "EpochTImePlatformDataSource#tick";
-        });
+    private void tick() {
+        mConsumerToTimeCallback.forEach(
+                DynamicTypeValueReceiverWithPreUpdate::onPreUpdate);
+        Instant currentTime = mClock.get();
+        mConsumerToTimeCallback.forEach(c -> c.onData(currentTime));
     }
 
     @VisibleForTesting

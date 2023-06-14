@@ -806,8 +806,7 @@ public final class LayoutElementBuilders {
             @SuppressLint("MissingGetterMatchingBuilder")
             @NonNull
             public Builder setItalic(boolean italic) {
-                mImpl.setItalic(TypesProto.BoolProp.newBuilder().setValue(italic));
-                return this;
+                return setItalic(new BoolProp.Builder().setValue(italic).build());
             }
             /**
              * Sets whether the text should be rendered with an underline. If not specified,
@@ -829,8 +828,7 @@ public final class LayoutElementBuilders {
             @SuppressLint("MissingGetterMatchingBuilder")
             @NonNull
             public Builder setUnderline(boolean underline) {
-                mImpl.setUnderline(TypesProto.BoolProp.newBuilder().setValue(underline));
-                return this;
+                return setUnderline(new BoolProp.Builder().setValue(underline).build());
             }
 
             /**
@@ -873,11 +871,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setWeight(@FontWeight int weight) {
-                mImpl.setWeight(
-                        LayoutElementProto.FontWeightProp.newBuilder()
-                                .setValue(LayoutElementProto.FontWeight.forNumber(weight)));
-                mFingerprint.recordPropertyUpdate(5, weight);
-                return this;
+                return setWeight(new FontWeightProp.Builder().setValue(weight).build());
             }
 
             /**
@@ -1479,8 +1473,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setText(@NonNull String text) {
-                mImpl.setText(TypesProto.StringProp.newBuilder().setValue(text));
-                return this;
+                return setText(new StringProp.Builder(text).build());
             }
 
             /**
@@ -1529,8 +1522,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setMaxLines(@IntRange(from = 1) int maxLines) {
-                mImpl.setMaxLines(TypesProto.Int32Prop.newBuilder().setValue(maxLines));
-                return this;
+                return setMaxLines(new Int32Prop.Builder().setValue(maxLines).build());
             }
 
             /**
@@ -1561,12 +1553,8 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setMultilineAlignment(@TextAlignment int multilineAlignment) {
-                mImpl.setMultilineAlignment(
-                        AlignmentProto.TextAlignmentProp.newBuilder()
-                                .setValue(
-                                        AlignmentProto.TextAlignment.forNumber(
-                                                multilineAlignment)));
-                return this;
+                return setMultilineAlignment(
+                        new TextAlignmentProp.Builder().setValue(multilineAlignment).build());
             }
 
             /**
@@ -1597,10 +1585,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setOverflow(@TextOverflow int overflow) {
-                mImpl.setOverflow(
-                        LayoutElementProto.TextOverflowProp.newBuilder()
-                                .setValue(LayoutElementProto.TextOverflow.forNumber(overflow)));
-                return this;
+                return setOverflow(new TextOverflowProp.Builder().setValue(overflow).build());
             }
 
             /**
@@ -2048,8 +2033,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setResourceId(@NonNull String resourceId) {
-                mImpl.setResourceId(TypesProto.StringProp.newBuilder().setValue(resourceId));
-                return this;
+                return setResourceId(new StringProp.Builder(resourceId).build());
             }
 
             /**
@@ -2100,13 +2084,8 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setContentScaleMode(@ContentScaleMode int contentScaleMode) {
-                mImpl.setContentScaleMode(
-                        LayoutElementProto.ContentScaleModeProp.newBuilder()
-                                .setValue(
-                                        LayoutElementProto.ContentScaleMode.forNumber(
-                                                contentScaleMode)));
-                mFingerprint.recordPropertyUpdate(4, contentScaleMode);
-                return this;
+                return setContentScaleMode(
+                       new ContentScaleModeProp.Builder().setValue(contentScaleMode).build());
             }
 
             /**
@@ -2640,13 +2619,9 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setHorizontalAlignment(@HorizontalAlignment int horizontalAlignment) {
-                mImpl.setHorizontalAlignment(
-                        AlignmentProto.HorizontalAlignmentProp.newBuilder()
-                                .setValue(
-                                        AlignmentProto.HorizontalAlignment.forNumber(
-                                                horizontalAlignment)));
-                mFingerprint.recordPropertyUpdate(4, horizontalAlignment);
-                return this;
+                return setHorizontalAlignment(
+                        new HorizontalAlignmentProp.Builder()
+                                .setValue(horizontalAlignment).build());
             }
 
             /**
@@ -2671,13 +2646,8 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setVerticalAlignment(@VerticalAlignment int verticalAlignment) {
-                mImpl.setVerticalAlignment(
-                        AlignmentProto.VerticalAlignmentProp.newBuilder()
-                                .setValue(
-                                        AlignmentProto.VerticalAlignment.forNumber(
-                                                verticalAlignment)));
-                mFingerprint.recordPropertyUpdate(5, verticalAlignment);
-                return this;
+                return setVerticalAlignment(
+                        new VerticalAlignmentProp.Builder().setValue(verticalAlignment).build());
             }
 
             /**
@@ -2859,8 +2829,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setText(@NonNull String text) {
-                mImpl.setText(TypesProto.StringProp.newBuilder().setValue(text));
-                return this;
+                return setText(new StringProp.Builder(text).build());
             }
 
             /**
@@ -3085,8 +3054,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setResourceId(@NonNull String resourceId) {
-                mImpl.setResourceId(TypesProto.StringProp.newBuilder().setValue(resourceId));
-                return this;
+                return setResourceId(new StringProp.Builder(resourceId).build());
             }
 
             /**
@@ -3160,13 +3128,8 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setAlignment(@SpanVerticalAlignment int alignment) {
-                mImpl.setAlignment(
-                        LayoutElementProto.SpanVerticalAlignmentProp.newBuilder()
-                                .setValue(
-                                        LayoutElementProto.SpanVerticalAlignment.forNumber(
-                                                alignment)));
-                mFingerprint.recordPropertyUpdate(5, alignment);
-                return this;
+                return setAlignment(
+                        new SpanVerticalAlignmentProp.Builder().setValue(alignment).build());
             }
 
             @Override
@@ -3457,8 +3420,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setMaxLines(@IntRange(from = 1) int maxLines) {
-                mImpl.setMaxLines(TypesProto.Int32Prop.newBuilder().setValue(maxLines));
-                return this;
+                return setMaxLines(new Int32Prop.Builder().setValue(maxLines).build());
             }
 
             /**
@@ -3490,13 +3452,8 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setMultilineAlignment(@HorizontalAlignment int multilineAlignment) {
-                mImpl.setMultilineAlignment(
-                        AlignmentProto.HorizontalAlignmentProp.newBuilder()
-                                .setValue(
-                                        AlignmentProto.HorizontalAlignment.forNumber(
-                                                multilineAlignment)));
-                mFingerprint.recordPropertyUpdate(4, multilineAlignment);
-                return this;
+                return setMultilineAlignment(
+                        new HorizontalAlignmentProp.Builder().setValue(multilineAlignment).build());
             }
 
             /**
@@ -3527,11 +3484,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setOverflow(@TextOverflow int overflow) {
-                mImpl.setOverflow(
-                        LayoutElementProto.TextOverflowProp.newBuilder()
-                                .setValue(LayoutElementProto.TextOverflow.forNumber(overflow)));
-                mFingerprint.recordPropertyUpdate(5, overflow);
-                return this;
+                return setOverflow(new TextOverflowProp.Builder().setValue(overflow).build());
             }
 
             /**
@@ -3765,13 +3718,9 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setHorizontalAlignment(@HorizontalAlignment int horizontalAlignment) {
-                mImpl.setHorizontalAlignment(
-                        AlignmentProto.HorizontalAlignmentProp.newBuilder()
-                                .setValue(
-                                        AlignmentProto.HorizontalAlignment.forNumber(
-                                                horizontalAlignment)));
-                mFingerprint.recordPropertyUpdate(2, horizontalAlignment);
-                return this;
+                return setHorizontalAlignment(
+                        new HorizontalAlignmentProp.Builder()
+                                .setValue(horizontalAlignment).build());
             }
 
             /**
@@ -4314,11 +4263,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setAnchorType(@ArcAnchorType int anchorType) {
-                mImpl.setAnchorType(
-                        AlignmentProto.ArcAnchorTypeProp.newBuilder()
-                                .setValue(AlignmentProto.ArcAnchorType.forNumber(anchorType)));
-                mFingerprint.recordPropertyUpdate(3, anchorType);
-                return this;
+                return setAnchorType(new ArcAnchorTypeProp.Builder().setValue(anchorType).build());
             }
 
             /**
@@ -4347,12 +4292,8 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setVerticalAlign(@VerticalAlignment int verticalAlign) {
-                mImpl.setVerticalAlign(
-                        AlignmentProto.VerticalAlignmentProp.newBuilder()
-                                .setValue(
-                                        AlignmentProto.VerticalAlignment.forNumber(verticalAlign)));
-                mFingerprint.recordPropertyUpdate(4, verticalAlign);
-                return this;
+                return setVerticalAlign(
+                        new VerticalAlignmentProp.Builder().setValue(verticalAlign).build());
             }
 
             /**
@@ -4515,8 +4456,7 @@ public final class LayoutElementBuilders {
             /** Sets the text to render. */
             @NonNull
             public Builder setText(@NonNull String text) {
-                mImpl.setText(TypesProto.StringProp.newBuilder().setValue(text));
-                return this;
+                return setText(new StringProp.Builder(text).build());
             }
 
             /**
@@ -4819,11 +4759,7 @@ public final class LayoutElementBuilders {
              */
             @NonNull
             public Builder setStrokeCap(@StrokeCap int strokeCap) {
-                mImpl.setStrokeCap(
-                        LayoutElementProto.StrokeCapProp.newBuilder()
-                                .setValue(LayoutElementProto.StrokeCap.forNumber(strokeCap)));
-                mFingerprint.recordPropertyUpdate(6, strokeCap);
-                return this;
+                return setStrokeCap(new StrokeCapProp.Builder().setValue(strokeCap).build());
             }
 
             @Override
@@ -5236,8 +5172,7 @@ public final class LayoutElementBuilders {
             @SuppressLint("MissingGetterMatchingBuilder")
             @NonNull
             public Builder setRotateContents(boolean rotateContents) {
-                mImpl.setRotateContents(TypesProto.BoolProp.newBuilder().setValue(rotateContents));
-                return this;
+                return setRotateContents(new BoolProp.Builder().setValue(rotateContents).build());
             }
 
             @Override

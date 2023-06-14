@@ -21,11 +21,14 @@ import androidx.compose.foundation.gestures.detectTapAndPress
 import androidx.compose.foundation.text.KeyboardActionScope
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.selection.isPrecisePointer
 import androidx.compose.foundation.text2.BasicTextField2
 import androidx.compose.foundation.text2.input.TextEditFilter
 import androidx.compose.foundation.text2.input.TextFieldCharSequence
 import androidx.compose.foundation.text2.input.TextFieldState
 import androidx.compose.foundation.text2.input.deselect
+import androidx.compose.foundation.text2.input.selectCharsIn
+import androidx.compose.foundation.text2.selection.TextFieldSelectionState
 import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusEventModifierNode
 import androidx.compose.ui.focus.FocusManager
@@ -63,6 +66,8 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.IntSize
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 
 /**
  * Modifier element for most of the functionality of [BasicTextField2] that is attached to the
@@ -75,6 +80,7 @@ import androidx.compose.ui.unit.IntSize
 internal data class TextFieldDecoratorModifier(
     private val textFieldState: TextFieldState,
     private val textLayoutState: TextLayoutState,
+    private val textFieldSelectionState: TextFieldSelectionState,
     private val textInputAdapter: AndroidTextInputAdapter?,
     private val filter: TextEditFilter?,
     private val enabled: Boolean,
@@ -86,6 +92,7 @@ internal data class TextFieldDecoratorModifier(
     override fun create(): TextFieldDecoratorModifierNode = TextFieldDecoratorModifierNode(
         textFieldState = textFieldState,
         textLayoutState = textLayoutState,
+        textFieldSelectionState = textFieldSelectionState,
         textInputAdapter = textInputAdapter,
         filter = filter,
         enabled = enabled,
@@ -99,6 +106,7 @@ internal data class TextFieldDecoratorModifier(
         node.updateNode(
             textFieldState = textFieldState,
             textLayoutState = textLayoutState,
+            textFieldSelectionState = textFieldSelectionState,
             textInputAdapter = textInputAdapter,
             filter = filter,
             enabled = enabled,
@@ -119,6 +127,7 @@ internal data class TextFieldDecoratorModifier(
 internal class TextFieldDecoratorModifierNode(
     var textFieldState: TextFieldState,
     var textLayoutState: TextLayoutState,
+    var textFieldSelectionState: TextFieldSelectionState,
     var textInputAdapter: AndroidTextInputAdapter?,
     var filter: TextEditFilter?,
     var enabled: Boolean,
@@ -136,11 +145,32 @@ internal class TextFieldDecoratorModifierNode(
     CompositionLocalConsumerModifierNode {
 
     private val pointerInputNode = delegate(SuspendingPointerInputModifierNode {
-        detectTapAndPress(onTap = {
+        coroutineScope.launch {
+            awaitPointerEventScope {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    textFieldSelectionState.isInTouchMode = !event.isPrecisePointer
+                }
+            }
+        }
+        detectTapAndPress(onTap = { offset ->
             if (!isFocused) {
                 requestFocus()
-            } else if (enabled && !readOnly) {
+            }
+
+            if (enabled && !readOnly && isFocused) {
                 textInputSession?.showSoftwareKeyboard()
+
+                if (textFieldState.text.isNotEmpty()) {
+                    textFieldSelectionState.showHandles = true
+                }
+
+                // find the cursor position
+                val cursorIndex = textLayoutState.getOffsetForPosition(offset)
+                // update the state
+                if (cursorIndex >= 0) {
+                    textFieldState.edit { selectCharsIn(TextRange(cursorIndex)) }
+                }
             }
         })
     })
@@ -196,11 +226,18 @@ internal class TextFieldDecoratorModifierNode(
     }
 
     /**
+     * A coroutine job that observes only text changes to hide selection and cursor handles when
+     * content changes.
+     */
+    private var textChangesObserverJob: Job? = null
+
+    /**
      * Updates all the related properties and invalidates internal state based on the changes.
      */
     fun updateNode(
         textFieldState: TextFieldState,
         textLayoutState: TextLayoutState,
+        textFieldSelectionState: TextFieldSelectionState,
         textInputAdapter: AndroidTextInputAdapter?,
         filter: TextEditFilter?,
         enabled: Boolean,
@@ -214,10 +251,12 @@ internal class TextFieldDecoratorModifierNode(
         val writeable = enabled && !readOnly
         val previousTextFieldState = this.textFieldState
         val previousKeyboardOptions = this.keyboardOptions
+        val previousTextFieldSelectionState = this.textFieldSelectionState
 
         // Apply the diff.
         this.textFieldState = textFieldState
         this.textLayoutState = textLayoutState
+        this.textFieldSelectionState = textFieldSelectionState
         this.textInputAdapter = textInputAdapter
         this.filter = filter
         this.enabled = enabled
@@ -246,8 +285,13 @@ internal class TextFieldDecoratorModifierNode(
                 disposeInputSession()
             }
         }
+
         textInputSession?.setFilter(filter)
         textFieldKeyEventHandler.setFilter(filter)
+
+        if (textFieldSelectionState != previousTextFieldSelectionState) {
+            pointerInputNode.resetPointerInputHandler()
+        }
     }
 
     override val shouldMergeDescendantSemantics: Boolean
@@ -338,8 +382,15 @@ internal class TextFieldDecoratorModifierNode(
                 filter,
                 onImeActionPerformed
             )
+
+            textChangesObserverJob?.cancel()
+            textChangesObserverJob = coroutineScope.launch {
+                textFieldSelectionState.observeTextChanges()
+            }
             // TODO(halilibo): bringIntoView
         } else {
+            textChangesObserverJob?.cancel()
+            textChangesObserverJob = null
             textFieldState.deselect()
         }
     }
@@ -351,7 +402,7 @@ internal class TextFieldDecoratorModifierNode(
     }
 
     override fun onGloballyPositioned(coordinates: LayoutCoordinates) {
-        textLayoutState.proxy?.decorationBoxCoordinates = coordinates
+        textLayoutState.decorationBoxCoordinates = coordinates
     }
 
     override fun onPointerEvent(
