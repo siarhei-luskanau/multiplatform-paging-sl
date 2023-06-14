@@ -18,11 +18,14 @@
 
 package androidx.compose.ui.platform
 
+import androidx.compose.runtime.collection.mutableVectorOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.DefaultPointerButtons
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.PrimaryPressedPointerButtons
 import androidx.compose.ui.autofill.Autofill
 import androidx.compose.ui.autofill.AutofillTree
 import androidx.compose.ui.focus.FocusDirection
@@ -47,17 +50,17 @@ import androidx.compose.ui.input.key.KeyInputModifier
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.type
-import androidx.compose.ui.input.mouse.MouseScrollEvent
-import androidx.compose.ui.input.mouse.MouseScrollEventFilter
 import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerIcon
+import androidx.compose.ui.input.pointer.PointerIconDefaults
+import androidx.compose.ui.input.pointer.PointerIconService
 import androidx.compose.ui.input.pointer.PointerInputEvent
 import androidx.compose.ui.input.pointer.PointerInputEventProcessor
-import androidx.compose.ui.input.pointer.PointerInputFilter
 import androidx.compose.ui.input.pointer.PositionCalculator
 import androidx.compose.ui.input.pointer.ProcessResult
 import androidx.compose.ui.input.pointer.TestPointerInputEventData
 import androidx.compose.ui.layout.RootMeasurePolicy
-import androidx.compose.ui.node.HitTestResult
+import androidx.compose.ui.modifier.ModifierLocalManager
 import androidx.compose.ui.node.InternalCoreApi
 import androidx.compose.ui.node.LayoutNode
 import androidx.compose.ui.node.LayoutNodeDrawScope
@@ -68,6 +71,7 @@ import androidx.compose.ui.node.RootForTest
 import androidx.compose.ui.semantics.SemanticsModifierCore
 import androidx.compose.ui.semantics.SemanticsOwner
 import androidx.compose.ui.text.input.TextInputService
+import androidx.compose.ui.text.font.createFontFamilyResolver
 import androidx.compose.ui.text.platform.FontLoader
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
@@ -75,6 +79,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.input.pointer.PointerKeyboardModifiers
 
 private typealias Command = () -> Unit
 
@@ -85,6 +90,7 @@ private typealias Command = () -> Unit
 )
 internal class SkiaBasedOwner(
     private val platformInputService: PlatformInput,
+    private val component: PlatformComponent,
     density: Density = Density(1f, 1f),
     val isPopup: Boolean = false,
     val isFocusable: Boolean = true,
@@ -98,6 +104,8 @@ internal class SkiaBasedOwner(
         return bounds.contains(intOffset)
     }
 
+    internal var accessibilityController: AccessibilityController? = null
+
     internal var bounds by mutableStateOf(IntRect.Zero)
 
     override var density by mutableStateOf(density)
@@ -108,7 +116,6 @@ internal class SkiaBasedOwner(
     override val sharedDrawScope = LayoutNodeDrawScope()
 
     private val semanticsModifier = SemanticsModifierCore(
-        id = SemanticsModifierCore.generateSemanticsId(),
         mergeDescendants = false,
         clearAndSetSemantics = false,
         properties = {}
@@ -133,6 +140,8 @@ internal class SkiaBasedOwner(
     override val inputModeManager: InputModeManager
         get() = _inputModeManager
 
+    override val modifierLocalManager: ModifierLocalManager = ModifierLocalManager(this)
+
     // TODO: set/clear _windowInfo.isWindowFocused when the window gains/loses focus.
     private val _windowInfo: WindowInfoImpl = WindowInfoImpl()
     override val windowInfo: WindowInfo
@@ -150,6 +159,11 @@ internal class SkiaBasedOwner(
         },
         onPreviewKeyEvent = null
     )
+
+    @Suppress("unused") // to be used in JB fork (not all prerequisite changes added yet)
+    internal fun setCurrentKeyboardModifiers(modifiers: PointerKeyboardModifiers) {
+        _windowInfo.keyboardModifiers = modifiers
+    }
 
     var constraints: Constraints = Constraints()
         set(value) {
@@ -184,6 +198,8 @@ internal class SkiaBasedOwner(
     private val pointerInputEventProcessor = PointerInputEventProcessor(root)
     private val measureAndLayoutDelegate = MeasureAndLayoutDelegate(root)
 
+    private val endApplyChangesListeners = mutableVectorOf<(() -> Unit)?>()
+
     init {
         snapshotObserver.startObserving()
         root.attach(this)
@@ -197,7 +213,13 @@ internal class SkiaBasedOwner(
 
     override val textInputService = TextInputService(platformInputService)
 
+    @Deprecated(
+        "fontLoader is deprecated, use fontFamilyResolver",
+        replaceWith = ReplaceWith("fontFamilyResolver")
+    )
     override val fontLoader = FontLoader()
+
+    override val fontFamilyResolver = createFontFamilyResolver()
 
     override val hapticFeedBack = DefaultHapticFeedback()
 
@@ -232,17 +254,18 @@ internal class SkiaBasedOwner(
 
     override val measureIteration: Long get() = measureAndLayoutDelegate.measureIteration
 
-    private var needsLayout = true
-    private var needsDraw = true
+    private var needLayout = true
+    private var needDraw = true
 
-    val needsRender get() = needsLayout || needsDraw
-    var onNeedsRender: (() -> Unit)? = null
+    val needRender get() = needLayout || needDraw || needSendSyntheticEvents
+    var onNeedRender: (() -> Unit)? = null
     var onDispatchCommand: ((Command) -> Unit)? = null
 
     fun render(canvas: org.jetbrains.skia.Canvas) {
-        needsLayout = false
+        needLayout = false
         measureAndLayout()
-        needsDraw = false
+        sendSyntheticEvents()
+        needDraw = false
         draw(canvas)
         clearInvalidObservations()
     }
@@ -257,34 +280,77 @@ internal class SkiaBasedOwner(
     }
 
     private fun requestLayout() {
-        needsLayout = true
-        needsDraw = true
-        onNeedsRender?.invoke()
+        needLayout = true
+        needDraw = true
+        onNeedRender?.invoke()
     }
 
     private fun requestDraw() {
-        needsDraw = true
-        onNeedsRender?.invoke()
+        needDraw = true
+        onNeedRender?.invoke()
     }
 
-    override fun measureAndLayout() {
+    var contentSize = IntSize.Zero
+        private set
+
+    override fun measureAndLayout(sendPointerUpdate: Boolean) {
         measureAndLayoutDelegate.updateRootConstraints(constraints)
-        if (measureAndLayoutDelegate.measureAndLayout()) {
+        if (
+            measureAndLayoutDelegate.measureAndLayout(
+                scheduleSyntheticEvents.takeIf { sendPointerUpdate }
+            )
+        ) {
             requestDraw()
         }
         measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+
+        // Don't use mainOwner.root.width here, as it strictly coerced by [constraints]
+        contentSize = IntSize(
+            root.children.maxOfOrNull { it.outerCoordinator.measuredWidth } ?: 0,
+            root.children.maxOfOrNull { it.outerCoordinator.measuredHeight } ?: 0,
+        )
     }
 
-    override fun onRequestMeasure(layoutNode: LayoutNode) {
-        if (measureAndLayoutDelegate.requestRemeasure(layoutNode)) {
+    override fun measureAndLayout(layoutNode: LayoutNode, constraints: Constraints) {
+        measureAndLayoutDelegate.measureAndLayout(layoutNode, constraints)
+        measureAndLayoutDelegate.dispatchOnPositionedCallbacks()
+    }
+
+    override fun forceMeasureTheSubtree(layoutNode: LayoutNode) {
+        measureAndLayoutDelegate.forceMeasureTheSubtree(layoutNode)
+    }
+
+    override fun onRequestMeasure(
+        layoutNode: LayoutNode,
+        affectsLookahead: Boolean,
+        forceRequest: Boolean
+    ) {
+        if (affectsLookahead) {
+            if (measureAndLayoutDelegate.requestLookaheadRemeasure(layoutNode, forceRequest)) {
+                requestLayout()
+            }
+        } else if (measureAndLayoutDelegate.requestRemeasure(layoutNode, forceRequest)) {
             requestLayout()
         }
     }
 
-    override fun onRequestRelayout(layoutNode: LayoutNode) {
-        if (measureAndLayoutDelegate.requestRelayout(layoutNode)) {
+    override fun onRequestRelayout(
+        layoutNode: LayoutNode,
+        affectsLookahead: Boolean,
+        forceRequest: Boolean
+    ) {
+        if (affectsLookahead) {
+            if (measureAndLayoutDelegate.requestLookaheadRelayout(layoutNode, forceRequest)) {
+                requestLayout()
+            }
+        } else if (measureAndLayoutDelegate.requestRelayout(layoutNode, forceRequest)) {
             requestLayout()
         }
+    }
+
+    override fun requestOnPositionedCallback(layoutNode: LayoutNode) {
+        measureAndLayoutDelegate.requestOnPositionedCallback(layoutNode)
+        requestLayout()
     }
 
     override fun createLayer(
@@ -300,9 +366,13 @@ internal class SkiaBasedOwner(
         onDestroy = { needClearObservations = true }
     )
 
-    override fun onSemanticsChange() = Unit
+    override fun onSemanticsChange() {
+        accessibilityController?.onSemanticsChange()
+    }
 
-    override fun onLayoutChange(layoutNode: LayoutNode) = Unit
+    override fun onLayoutChange(layoutNode: LayoutNode) {
+        accessibilityController?.onLayoutChange(layoutNode)
+    }
 
     override fun getFocusDirection(keyEvent: KeyEvent): FocusDirection? {
         return when (keyEvent.key) {
@@ -325,8 +395,53 @@ internal class SkiaBasedOwner(
         root.draw(canvas.asComposeCanvas())
     }
 
+    private var desiredPointerIcon: PointerIcon? = null
+
+    private var needSendSyntheticEvents = false
+    private var lastPointerEvent: PointerInputEvent? = null
+
+    private val scheduleSyntheticEvents: () -> Unit = {
+        // we can't send event synchronously, as we can have call of `measureAndLayout`
+        // inside the event handler. So we can have a situation when we call event handler inside
+        // event handler. And that can lead to unpredictable behaviour.
+        // Nature of synthetic events doesn't require that they should be fired
+        // synchronously on layout change.
+        needSendSyntheticEvents = true
+        onNeedRender?.invoke()
+    }
+
+    // TODO(demin) should we repeat all events, or only which are make sense?
+    //  For example, touch Move after touch Release doesn't make sense,
+    //  and an application can handle it in a wrong way
+    //  Desktop doesn't support touch at the moment, but when it will, we should resolve this.
+    private fun sendSyntheticEvents() {
+        if (needSendSyntheticEvents) {
+            needSendSyntheticEvents = false
+            val lastPointerEvent = lastPointerEvent
+            if (lastPointerEvent != null) {
+                doProcessPointerInput(
+                    PointerInputEvent(
+                        PointerEventType.Move,
+                        lastPointerEvent.uptime,
+                        lastPointerEvent.pointers,
+                        lastPointerEvent.buttons,
+                        lastPointerEvent.keyboardModifiers,
+                        lastPointerEvent.mouseEvent
+                    )
+                )
+            }
+        }
+    }
+
     internal fun processPointerInput(event: PointerInputEvent): ProcessResult {
         measureAndLayout()
+        sendSyntheticEvents()
+        desiredPointerIcon = null
+        lastPointerEvent = event
+        return doProcessPointerInput(event)
+    }
+
+    private fun doProcessPointerInput(event: PointerInputEvent): ProcessResult {
         return pointerInputEventProcessor.process(
             event,
             this,
@@ -334,37 +449,61 @@ internal class SkiaBasedOwner(
                 it.position.x in 0f..root.width.toFloat() &&
                     it.position.y in 0f..root.height.toFloat()
             }
-        )
+        ).also {
+            if (it.dispatchedToAPointerInputModifier) {
+                setPointerIcon(component, desiredPointerIcon)
+            }
+        }
     }
 
     override fun processPointerInput(timeMillis: Long, pointers: List<TestPointerInputEventData>) {
+        val isPressed = pointers.any { it.down }
         processPointerInput(
             PointerInputEvent(
                 PointerEventType.Unknown,
                 timeMillis,
-                pointers.map { it.toPointerInputEventData() }
+                pointers.map { it.toPointerInputEventData() },
+                if (isPressed) PrimaryPressedPointerButtons else DefaultPointerButtons
             )
         )
     }
 
-    // TODO(demin): This is likely temporary. After PointerInputEvent can handle mouse events
-    //  (scroll in particular), we can replace it with processPointerInput. see b/166105940
-    internal fun onMouseScroll(position: Offset, event: MouseScrollEvent) {
-        measureAndLayout()
-
-        val inputFilters = HitTestResult<PointerInputFilter>()
-        root.hitTest(position, inputFilters)
-
-        for (
-            filter in inputFilters
-                .asReversed()
-                .asSequence()
-                .filterIsInstance<MouseScrollEventFilter>()
-        ) {
-            val isConsumed = filter.onMouseScroll(event)
-            if (isConsumed) break
+    override fun onEndApplyChanges() {
+        // Listeners can add more items to the list and we want to ensure that they
+        // are executed after being added, so loop until the list is empty
+        while (endApplyChangesListeners.isNotEmpty()) {
+            val size = endApplyChangesListeners.size
+            for (i in 0 until size) {
+                val listener = endApplyChangesListeners[i]
+                // null out the item so that if the listener is re-added then we execute it again.
+                endApplyChangesListeners[i] = null
+                listener?.invoke()
+            }
+            // Remove all the items that were visited. Removing items shifts all items after
+            // to the front of the list, so removing in a chunk is cheaper than removing one-by-one
+            endApplyChangesListeners.removeRange(0, size)
         }
     }
+
+    override fun registerOnEndApplyChangesListener(listener: () -> Unit) {
+        if (listener !in endApplyChangesListeners) {
+            endApplyChangesListeners += listener
+        }
+    }
+
+    override fun registerOnLayoutCompletedListener(listener: Owner.OnLayoutCompletedListener) {
+        measureAndLayoutDelegate.registerOnLayoutCompletedListener(listener)
+        requestLayout()
+    }
+
+    override val pointerIconService: PointerIconService =
+        object : PointerIconService {
+            override var current: PointerIcon
+                get() = desiredPointerIcon ?: PointerIconDefaults.Default
+                set(value) {
+                    desiredPointerIcon = value
+                }
+        }
 }
 
 internal expect fun sendKeyEvent(
@@ -372,3 +511,8 @@ internal expect fun sendKeyEvent(
     keyInputModifier: KeyInputModifier,
     keyEvent: KeyEvent
 ): Boolean
+
+internal expect fun setPointerIcon(
+    containerCursor: PlatformComponentWithCursor?,
+    icon: PointerIcon?
+)

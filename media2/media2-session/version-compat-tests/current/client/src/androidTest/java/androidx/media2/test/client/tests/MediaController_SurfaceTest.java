@@ -23,6 +23,7 @@ import static androidx.media2.test.common.CommonConstants.DEFAULT_TEST_NAME;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 import android.app.Instrumentation;
 import android.app.KeyguardManager;
@@ -35,6 +36,7 @@ import androidx.media2.session.SessionResult;
 import androidx.media2.test.client.RemoteMediaSession;
 import androidx.media2.test.client.SurfaceActivity;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.test.filters.FlakyTest;
 import androidx.test.filters.LargeTest;
 import androidx.test.platform.app.InstrumentationRegistry;
 import androidx.test.rule.ActivityTestRule;
@@ -50,6 +52,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Tests {@link MediaController#setSurface(Surface)}.
  */
+@FlakyTest(bugId = 202942942)
 @RunWith(AndroidJUnit4.class)
 @LargeTest
 public class MediaController_SurfaceTest extends MediaSessionTestBase {
@@ -66,6 +69,9 @@ public class MediaController_SurfaceTest extends MediaSessionTestBase {
     @Before
     @Override
     public void setUp() throws Exception {
+        // b/230354064
+        assumeTrue(Build.VERSION.SDK_INT != 17);
+
         super.setUp();
 
         mInstrumentation = InstrumentationRegistry.getInstrumentation();
@@ -80,8 +86,9 @@ public class MediaController_SurfaceTest extends MediaSessionTestBase {
     @Override
     public void cleanUp() throws Exception {
         super.cleanUp();
-
-        mRemoteSession.cleanUp();
+        if (mRemoteSession != null) {
+            mRemoteSession.cleanUp();
+        }
     }
 
     @Test

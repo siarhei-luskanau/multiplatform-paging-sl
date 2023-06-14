@@ -21,8 +21,13 @@ import android.os.Build;
 import android.os.Build.VERSION_CODES;
 import android.util.AttributeSet;
 import android.util.TypedValue;
+import android.view.View;
 import android.widget.TextView;
 
+import androidx.annotation.DoNotInline;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.annotation.RequiresApi;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.res.TypedArrayUtils;
 
@@ -39,20 +44,22 @@ import androidx.core.content.res.TypedArrayUtils;
 public class PreferenceCategory extends PreferenceGroup {
 
     public PreferenceCategory(
-            Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
+            @NonNull Context context, @Nullable AttributeSet attrs, int defStyleAttr,
+            int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
     }
 
-    public PreferenceCategory(Context context, AttributeSet attrs, int defStyleAttr) {
+    public PreferenceCategory(@NonNull Context context, @Nullable AttributeSet attrs,
+            int defStyleAttr) {
         this(context, attrs, defStyleAttr, 0);
     }
 
-    public PreferenceCategory(Context context, AttributeSet attrs) {
+    public PreferenceCategory(@NonNull Context context, @Nullable AttributeSet attrs) {
         this(context, attrs, TypedArrayUtils.getAttr(context, R.attr.preferenceCategoryStyle,
                 android.R.attr.preferenceCategoryStyle));
     }
 
-    public PreferenceCategory(Context context) {
+    public PreferenceCategory(@NonNull Context context) {
         this(context, null);
     }
 
@@ -67,10 +74,10 @@ public class PreferenceCategory extends PreferenceGroup {
     }
 
     @Override
-    public void onBindViewHolder(PreferenceViewHolder holder) {
+    public void onBindViewHolder(@NonNull PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
         if (Build.VERSION.SDK_INT >= VERSION_CODES.P) {
-            holder.itemView.setAccessibilityHeading(true);
+            Api28Impl.setAccessibilityHeading(holder.itemView, true);
         } else if (Build.VERSION.SDK_INT < VERSION_CODES.LOLLIPOP) {
             // We can't safely look for colorAccent in the category layout XML below Lollipop, as it
             // only exists within AppCompat, and will crash if using a platform theme. We should
@@ -96,6 +103,14 @@ public class PreferenceCategory extends PreferenceGroup {
                 return;
             }
             titleView.setTextColor(value.data);
+        }
+    }
+
+    @RequiresApi(28)
+    private static class Api28Impl {
+        @DoNotInline
+        static void setAccessibilityHeading(@NonNull View view, boolean isHeading) {
+            view.setAccessibilityHeading(isHeading);
         }
     }
 }

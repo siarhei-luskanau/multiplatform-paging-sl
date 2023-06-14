@@ -23,44 +23,44 @@ import androidx.annotation.ColorRes
 import androidx.annotation.DoNotInline
 import androidx.annotation.RequiresApi
 import androidx.annotation.RestrictTo
+import androidx.compose.ui.graphics.Color
 
 /** Provider of colors for a glance composable's attributes. */
-public interface ColorProvider
+interface ColorProvider {
+    /**
+     * Returns the color the provider would use in the given [context].
+     */
+    fun getColor(context: Context): Color
+}
 
 /** Returns a [ColorProvider] that always resolves to the [Color]. */
-public fun ColorProvider(color: Color): ColorProvider {
+fun ColorProvider(color: Color): ColorProvider {
     return FixedColorProvider(color)
 }
 
 /** Returns a [ColorProvider] that resolves to the color resource. */
-public fun ColorProvider(@ColorRes resId: Int): ColorProvider {
+fun ColorProvider(@ColorRes resId: Int): ColorProvider {
     return ResourceColorProvider(resId)
 }
 
 /** @suppress */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-public class FixedColorProvider(val color: Color) : ColorProvider
+data class FixedColorProvider(val color: Color) : ColorProvider {
+    override fun getColor(context: Context) = color
+}
 
 /** @suppress */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-public class ResourceColorProvider(@ColorRes val resId: Int) : ColorProvider
-
-/** @suppress */
-@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
-@Suppress("INLINE_CLASS_DEPRECATED")
-public fun ResourceColorProvider.resolve(context: Context): Color {
-    val androidColor = if (Build.VERSION.SDK_INT >= 23) {
-        ColorProviderApi23Impl.getColor(context.applicationContext, resId)
-    } else {
-        @Suppress("DEPRECATION") // Resources.getColor must be used on < 23.
-        context.applicationContext.resources.getColor(resId)
+data class ResourceColorProvider(@ColorRes val resId: Int) : ColorProvider {
+    override fun getColor(context: Context): Color {
+        val androidColor = if (Build.VERSION.SDK_INT >= 23) {
+            ColorProviderApi23Impl.getColor(context, resId)
+        } else {
+            @Suppress("DEPRECATION") // Resources.getColor must be used on < 23.
+            context.resources.getColor(resId)
+        }
+        return Color(androidColor)
     }
-    return Color(
-        red = android.graphics.Color.red(androidColor) / 255f,
-        green = android.graphics.Color.green(androidColor) / 255f,
-        blue = android.graphics.Color.blue(androidColor) / 255f,
-        alpha = android.graphics.Color.alpha(androidColor) / 255f
-    )
 }
 
 @RequiresApi(23)

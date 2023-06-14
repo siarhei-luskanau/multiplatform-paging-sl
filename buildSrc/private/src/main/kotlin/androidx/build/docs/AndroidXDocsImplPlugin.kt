@@ -18,20 +18,26 @@ package androidx.build.docs
 
 import androidx.build.SupportConfig
 import androidx.build.dackka.DackkaTask
+import androidx.build.dackka.GenerateMetadataTask
 import androidx.build.dependencies.KOTLIN_VERSION
 import androidx.build.doclava.DacOptions
 import androidx.build.doclava.DoclavaTask
 import androidx.build.doclava.GENERATE_DOCS_CONFIG
 import androidx.build.doclava.createGenerateSdkApiTask
 import androidx.build.dokka.Dokka
+import androidx.build.enforceKtlintVersion
 import androidx.build.getAndroidJar
 import androidx.build.getBuildId
 import androidx.build.getCheckoutRoot
 import androidx.build.getDistributionDirectory
 import androidx.build.getKeystore
+import androidx.build.getLibraryByName
 import com.android.build.api.attributes.BuildTypeAttr
 import com.android.build.gradle.LibraryExtension
 import com.android.build.gradle.LibraryPlugin
+import java.io.File
+import java.io.FileNotFoundException
+import javax.inject.Inject
 import org.gradle.api.DefaultTask
 import org.gradle.api.Plugin
 import org.gradle.api.Project
@@ -39,17 +45,24 @@ import org.gradle.api.Task
 import org.gradle.api.artifacts.ComponentMetadataContext
 import org.gradle.api.artifacts.ComponentMetadataRule
 import org.gradle.api.artifacts.Configuration
+import org.gradle.api.artifacts.component.ComponentArtifactIdentifier
+import org.gradle.api.artifacts.result.ResolvedArtifactResult
 import org.gradle.api.attributes.Attribute
 import org.gradle.api.attributes.Category
 import org.gradle.api.attributes.DocsType
+import org.gradle.api.attributes.LibraryElements
 import org.gradle.api.attributes.Usage
 import org.gradle.api.file.ArchiveOperations
 import org.gradle.api.file.DuplicatesStrategy
 import org.gradle.api.file.FileCollection
+import org.gradle.api.file.RegularFile
 import org.gradle.api.model.ObjectFactory
 import org.gradle.api.plugins.JavaBasePlugin
+import org.gradle.api.provider.Provider
 import org.gradle.api.tasks.InputFiles
 import org.gradle.api.tasks.Internal
+import org.gradle.api.tasks.PathSensitive
+import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.Sync
 import org.gradle.api.tasks.TaskAction
 import org.gradle.api.tasks.TaskProvider
@@ -59,11 +72,9 @@ import org.gradle.kotlin.dsl.all
 import org.gradle.kotlin.dsl.getByType
 import org.gradle.kotlin.dsl.named
 import org.gradle.kotlin.dsl.register
+import org.gradle.work.DisableCachingByDefault
 import org.jetbrains.dokka.gradle.DokkaAndroidTask
 import org.jetbrains.dokka.gradle.PackageOptions
-import java.io.File
-import java.io.FileNotFoundException
-import javax.inject.Inject
 
 /**
  * Plugin that allows to build documentation for a given set of prebuilt and tip of tree projects.
@@ -74,7 +85,7 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
     lateinit var samplesSourcesConfiguration: Configuration
     lateinit var dependencyClasspath: FileCollection
 
-    @get:javax.inject.Inject
+    @get:Inject
     abstract val archiveOperations: ArchiveOperations
 
     override fun apply(project: Project) {
@@ -111,7 +122,7 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
             unzippedSamplesSources,
             samplesSourcesConfiguration
         )
-        val unzippedDocsSources = File(project.buildDir, "unzippedDocsSources")
+        val unzippedDocsSources = File(project.buildDir, "srcs")
         val unzipDocsTask = configureUnzipTask(
             project,
             "unzipDocsSources",
@@ -133,7 +144,8 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
             unzippedSamplesSources,
             unzipSamplesTask,
             dependencyClasspath,
-            buildOnServer
+            buildOnServer,
+            docsSourcesConfiguration,
         )
         configureDokka(
             project,
@@ -169,10 +181,13 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
             Sync::class.java
         ) { task ->
             val sources = docsConfiguration.incoming.artifactView { }.files
+            // Store archiveOperations into a local variable to prevent access to the plugin
+            // during the task execution, as that breaks configuration caching.
+            val localVar = archiveOperations
             task.from(
                 sources.elements.map { jars ->
-                    jars.map {
-                        archiveOperations.zipTree(it).matching {
+                    jars.map { jar ->
+                        localVar.zipTree(jar).matching {
                             // Filter out files that documentation tools cannot process.
                             it.exclude("**/*.MF")
                             it.exclude("**/*.aidl")
@@ -206,13 +221,15 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
         docsConfiguration: Configuration
     ): TaskProvider<Sync> {
         return project.tasks.register("unzipSourcesForDackka", Sync::class.java) { task ->
-
             val sources = docsConfiguration.incoming.artifactView { }.files
 
+            // Store archiveOperations into a local variable to prevent access to the plugin
+            // during the task execution, as that breaks configuration caching.
+            val localVar = archiveOperations
             task.from(
                 sources.elements.map { jars ->
                     jars.map {
-                        archiveOperations.zipTree(it)
+                        localVar.zipTree(it)
                     }
                 }
             )
@@ -230,6 +247,9 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
      * - stubs(project(":foo:foo-stubs")) - stubs needed for a documented library
      */
     private fun createConfigurations(project: Project) {
+        project.configurations.all {
+            project.enforceKtlintVersion(it)
+        }
         project.dependencies.components.all<SourcesVariantRule>()
         val docsConfiguration = project.configurations.create("docs") {
             it.isCanBeResolved = false
@@ -248,11 +268,22 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
             isTransitive = false
             isCanBeConsumed = false
             attributes {
-                it.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(Usage.JAVA_RUNTIME))
                 it.attribute(
-                    Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.DOCUMENTATION)
+                    Usage.USAGE_ATTRIBUTE,
+                    project.objects.named<Usage>(Usage.JAVA_RUNTIME)
                 )
-                it.attribute(DocsType.DOCS_TYPE_ATTRIBUTE, project.objects.named(DocsType.SOURCES))
+                it.attribute(
+                    Category.CATEGORY_ATTRIBUTE,
+                    project.objects.named<Category>(Category.DOCUMENTATION)
+                )
+                it.attribute(
+                    DocsType.DOCS_TYPE_ATTRIBUTE,
+                    project.objects.named<DocsType>(DocsType.SOURCES)
+                )
+                it.attribute(
+                    LibraryElements.LIBRARY_ELEMENTS_ATTRIBUTE,
+                    project.objects.named<LibraryElements>(LibraryElements.JAR)
+                )
             }
         }
         docsSourcesConfiguration = project.configurations.create("docs-sources") {
@@ -267,11 +298,18 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
         fun Configuration.setResolveClasspathForUsage(usage: String) {
             isCanBeConsumed = false
             attributes {
-                it.attribute(Usage.USAGE_ATTRIBUTE, project.objects.named(usage))
                 it.attribute(
-                    Category.CATEGORY_ATTRIBUTE, project.objects.named(Category.LIBRARY)
+                    Usage.USAGE_ATTRIBUTE,
+                    project.objects.named<Usage>(usage)
                 )
-                it.attribute(BuildTypeAttr.ATTRIBUTE, project.objects.named("release"))
+                it.attribute(
+                    Category.CATEGORY_ATTRIBUTE,
+                    project.objects.named<Category>(Category.LIBRARY)
+                )
+                it.attribute(
+                    BuildTypeAttr.ATTRIBUTE,
+                    project.objects.named<BuildTypeAttr>("release")
+                )
             }
             extendsFrom(docsConfiguration, samplesConfiguration, stubsConfiguration)
         }
@@ -313,19 +351,42 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
         unzippedSamplesSources: File,
         unzipSamplesTask: TaskProvider<Sync>,
         dependencyClasspath: FileCollection,
-        buildOnServer: TaskProvider<*>
+        buildOnServer: TaskProvider<*>,
+        docsConfiguration: Configuration
     ) {
         val generatedDocsDir = project.file("${project.buildDir}/dackkaDocs")
 
         val dackkaConfiguration = project.configurations.create("dackka").apply {
-            dependencies.add(project.dependencies.create(DACKKA_DEPENDENCY))
+            dependencies.add(project.dependencies.create(project.getLibraryByName("dackka")))
+        }
+
+        val generateMetadataTask = project.tasks.register(
+            "generateMetadata",
+            GenerateMetadataTask::class.java
+        ) { task ->
+
+            @Suppress("UnstableApiUsage") // getResolvedArtifacts() is marked @Incubating
+            val artifacts = docsConfiguration.incoming.artifacts.resolvedArtifacts
+            task.getArtifactIds().set(
+
+                /**
+                 * Transforms the Set of [ResolvedArtifactResult] objects to a List of
+                 * [ComponentArtifactIdentifier] objects.
+                 *
+                 * This follows the guidance from
+                 * https://docs.gradle.org/7.5/userguide/more_about_tasks.html.
+                 */
+                artifacts.map { result -> result.map { it.id } }
+            )
+            task.destinationFile.set(getMetadataRegularFile(project))
+            task.prebuiltsRoot.set(File(project.getCheckoutRoot(), "prebuilts").absolutePath)
         }
 
         val dackkaTask = project.tasks.register("dackkaDocs", DackkaTask::class.java) { task ->
             task.apply {
-                dependsOn(dackkaConfiguration)
                 dependsOn(unzipDocsTask)
                 dependsOn(unzipSamplesTask)
+                dependsOn(generateMetadataTask)
 
                 description = "Generates reference documentation using a Google devsite Dokka" +
                     " plugin. Places docs in $generatedDocsDir"
@@ -341,6 +402,10 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
                 excludedPackages = hiddenPackages.toSet()
                 excludedPackagesForJava = hiddenPackagesJava
                 excludedPackagesForKotlin = emptySet()
+                libraryMetadataFile.set(getMetadataRegularFile(project))
+
+                // TODO(b/223712700): change to `true` once bug is resolved
+                showLibraryMetadata = false
             }
         }
 
@@ -389,9 +454,9 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
             task.dependsOn(unzipSamplesTask)
 
             val androidJar = project.getAndroidJar()
-            val dokkaClasspath = project.provider({
+            val dokkaClasspath = project.provider {
                 project.files(androidJar).plus(dependencyClasspath)
-            })
+            }
             // DokkaTask tries to resolve DokkaTask#classpath right away for jars that might not
             // be there yet. Delay the setting of this property to before we run the task.
             task.inputs.files(androidJar, dependencyClasspath)
@@ -549,6 +614,8 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
         project.tasks.whenTaskAdded { task ->
             if (task is Test || task.name.startsWith("assemble") ||
                 task.name == "lint" ||
+                task.name == "lintDebug" ||
+                task.name == "lintAnalyzeDebug" ||
                 task.name == "transformDexArchiveWithExternalLibsDexMergerForPublicDebug" ||
                 task.name == "transformResourcesWithMergeJavaResForPublicDebug" ||
                 task.name == "checkPublicDebugDuplicateClasses"
@@ -566,6 +633,7 @@ abstract class AndroidXDocsImplPlugin : Plugin<Project> {
     }
 }
 
+@DisableCachingByDefault(because = "Doesn't benefit from caching")
 open class DocsBuildOnServer : DefaultTask() {
     @Internal
     lateinit var docsType: String
@@ -574,7 +642,7 @@ open class DocsBuildOnServer : DefaultTask() {
     @Internal
     lateinit var distributionDirectory: File
 
-    @InputFiles
+    @[InputFiles PathSensitive(PathSensitivity.RELATIVE)]
     fun getRequiredFiles(): List<File> {
         return listOf(
             File(distributionDirectory, "dackka-$docsType-docs-$buildId.zip"),
@@ -622,118 +690,28 @@ abstract class SourcesVariantRule : ComponentMetadataRule {
     }
 }
 
-private const val DACKKA_DEPENDENCY = "com.google.devsite:dackka:0.0.12"
+/**
+ * Location of the library metadata JSON file that's used by Dackka, represented as a [RegularFile]
+ */
+private fun getMetadataRegularFile(project: Project): Provider<RegularFile> =
+    project.layout.buildDirectory.file("SampleLibraryMetadata.json")
+
 private const val DOCLAVA_DEPENDENCY = "com.android:doclava:1.0.6"
 
 // List of packages to exclude from both Java and Kotlin refdoc generation
 private val hiddenPackages = listOf(
     "androidx.camera.camera2.impl",
-    "androidx.camera.camera2.internal",
-    "androidx.camera.camera2.internal.compat",
-    "androidx.camera.camera2.internal.compat.params",
-    "androidx.camera.core.impl",
-    "androidx.camera.core.impl.annotation",
-    "androidx.camera.core.impl.utils",
-    "androidx.camera.core.impl.utils.executor",
-    "androidx.camera.core.impl.utils.futures",
-    "androidx.camera.core.internal",
-    "androidx.camera.core.internal.utils",
+    "androidx.camera.camera2.internal.*",
+    "androidx.camera.core.impl.*",
+    "androidx.camera.core.internal.*",
     "androidx.core.internal",
     "androidx.preference.internal",
     "androidx.wear.internal.widget.drawer",
     "androidx.webkit.internal",
-    "androidx.work.impl",
-    "androidx.work.impl.background",
-    "androidx.work.impl.background.gcm",
-    "androidx.work.impl.background.systemalarm",
-    "androidx.work.impl.background.systemjob",
-    "androidx.work.impl.constraints",
-    "androidx.work.impl.constraints.controllers",
-    "androidx.work.impl.constraints.trackers",
-    "androidx.work.impl.model",
-    "androidx.work.impl.utils",
-    "androidx.work.impl.utils.futures",
-    "androidx.work.impl.utils.taskexecutor"
+    "androidx.work.impl.*"
 )
 
 // Set of packages to exclude from Java refdoc generation
 private val hiddenPackagesJava = setOf(
-    "androidx.compose.animation",
-    "androidx.compose.animation.core",
-    "androidx.compose.animation.graphics",
-    "androidx.compose.animation.graphics.res",
-    "androidx.compose.animation.graphics.vector",
-    "androidx.compose.animation.graphics.vector.compat",
-    "androidx.compose.foundation",
-    "androidx.compose.foundation.gestures",
-    "androidx.compose.foundation.interaction",
-    "androidx.compose.foundation.layout",
-    "androidx.compose.foundation.lazy",
-    "androidx.compose.foundation.selection",
-    "androidx.compose.foundation.shape",
-    "androidx.compose.foundation.text",
-    "androidx.compose.foundation.text.selection",
-    "androidx.compose.material",
-    "androidx.compose.material.icons",
-    "androidx.compose.material.icons.filled",
-    "androidx.compose.material.icons.outlined",
-    "androidx.compose.material.icons.rounded",
-    "androidx.compose.material.icons.sharp",
-    "androidx.compose.material.icons.twotone",
-    "androidx.compose.material.ripple",
-    "androidx.compose.runtime",
-    "androidx.compose.runtime.collection",
-    "androidx.compose.runtime.internal",
-    "androidx.compose.runtime.livedata",
-    "androidx.compose.runtime.rxjava2",
-    "androidx.compose.runtime.rxjava3",
-    "androidx.compose.runtime.saveable",
-    "androidx.compose.runtime.snapshots",
-    "androidx.compose.runtime.tooling",
-    "androidx.compose.ui",
-    "androidx.compose.ui.autofill",
-    "androidx.compose.ui.draw",
-    "androidx.compose.ui.focus",
-    "androidx.compose.ui.geometry",
-    "androidx.compose.ui.graphics",
-    "androidx.compose.ui.graphics.colorspace",
-    "androidx.compose.ui.graphics.drawscope",
-    "androidx.compose.ui.graphics.painter",
-    "androidx.compose.ui.graphics.vector",
-    "androidx.compose.ui.hapticfeedback",
-    "androidx.compose.ui.input.key",
-    "androidx.compose.ui.input.nestedscroll",
-    "androidx.compose.ui.input.pointer",
-    "androidx.compose.ui.input.pointer.util",
-    "androidx.compose.ui.layout",
-    "androidx.compose.ui.node",
-    "androidx.compose.ui.platform",
-    "androidx.compose.ui.res",
-    "androidx.compose.ui.semantics",
-    "androidx.compose.ui.state",
-    "androidx.compose.ui.test",
-    "androidx.compose.ui.test.junit4",
-    "androidx.compose.ui.test.junit4.android",
-    "androidx.compose.ui.text",
-    "androidx.compose.ui.text.android",
-    "androidx.compose.ui.text.font",
-    "androidx.compose.ui.text.input",
-    "androidx.compose.ui.text.intl",
-    "androidx.compose.ui.text.platform.extensions",
-    "androidx.compose.ui.text.style",
-    "androidx.compose.ui.tooling",
-    "androidx.compose.ui.tooling.data",
-    "androidx.compose.ui.tooling.preview",
-    "androidx.compose.ui.tooling.preview.datasource",
-    "androidx.compose.ui.unit",
-    "androidx.compose.ui.util",
-    "androidx.compose.ui.viewinterop",
-    "androidx.compose.ui.window",
-    "androidx.activity.compose",
-    "androidx.hilt.navigation.compose",
-    "androidx.navigation.compose",
-    "androidx.paging.compose",
-    "androidx.wear.compose",
-    "androidx.wear.compose.foundation",
-    "androidx.wear.compose.material",
+    "androidx.*compose.*"
 )

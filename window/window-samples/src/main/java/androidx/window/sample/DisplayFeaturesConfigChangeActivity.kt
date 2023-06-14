@@ -18,6 +18,8 @@ package androidx.window.sample
 
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.FrameLayout
 import androidx.appcompat.app.AppCompatActivity
@@ -25,11 +27,12 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import androidx.recyclerview.widget.RecyclerView
-import androidx.window.layout.WindowInfoRepository.Companion.windowInfoRepository
+import androidx.window.layout.WindowInfoTracker
 import androidx.window.layout.WindowLayoutInfo
 import androidx.window.sample.infolog.InfoLogAdapter
+import androidx.window.sample.util.PictureInPictureUtil.appendPictureInPictureMenu
+import androidx.window.sample.util.PictureInPictureUtil.handlePictureInPictureMenuItem
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -47,8 +50,6 @@ class DisplayFeaturesConfigChangeActivity : AppCompatActivity() {
         val recyclerView = findViewById<RecyclerView>(R.id.infoLogRecyclerView)
         recyclerView.adapter = infoLogAdapter
 
-        val windowInfoRepo = windowInfoRepository()
-
         lifecycleScope.launch(Dispatchers.Main) {
             // The block passed to repeatOnLifecycle is executed when the lifecycle
             // is at least STARTED and is cancelled when the lifecycle is STOPPED.
@@ -56,13 +57,26 @@ class DisplayFeaturesConfigChangeActivity : AppCompatActivity() {
             lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 // Safely collect from windowInfoRepo when the lifecycle is STARTED
                 // and stops collection when the lifecycle is STOPPED
-                windowInfoRepo.windowLayoutInfo
+                WindowInfoTracker.getOrCreate(this@DisplayFeaturesConfigChangeActivity)
+                    .windowLayoutInfo(this@DisplayFeaturesConfigChangeActivity)
                     .collect { newLayoutInfo ->
                         // New posture information
                         updateStateLog(newLayoutInfo)
                         updateCurrentState(newLayoutInfo)
                     }
             }
+        }
+    }
+
+    override fun onCreateOptionsMenu(menu: Menu): Boolean {
+        appendPictureInPictureMenu(menuInflater, menu)
+        return true
+    }
+
+    override fun onOptionsItemSelected(item: MenuItem): Boolean {
+        return when {
+            handlePictureInPictureMenuItem(this, item) -> true
+            else -> super.onOptionsItemSelected(item)
         }
     }
 
@@ -78,7 +92,6 @@ class DisplayFeaturesConfigChangeActivity : AppCompatActivity() {
         // Add views that represent display features
         for (displayFeature in windowLayoutInfo.displayFeatures) {
             val lp = getLayoutParamsForFeatureInFrameLayout(displayFeature, rootLayout)
-                ?: continue
 
             // Make sure that zero-wide and zero-high features are still shown
             if (lp.width == 0) {

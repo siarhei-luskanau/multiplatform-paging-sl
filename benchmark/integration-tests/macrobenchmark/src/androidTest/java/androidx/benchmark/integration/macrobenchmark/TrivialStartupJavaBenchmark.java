@@ -27,6 +27,8 @@ import org.junit.Test;
 
 import java.util.Collections;
 
+import kotlin.Unit;
+
 public class TrivialStartupJavaBenchmark {
     @Rule
     public MacrobenchmarkRule mBenchmarkRule = new MacrobenchmarkRule();
@@ -37,12 +39,17 @@ public class TrivialStartupJavaBenchmark {
         mBenchmarkRule.measureRepeated(
                 "androidx.benchmark.integration.macrobenchmark.target",
                 Collections.singletonList(new StartupTimingMetric()),
-                new CompilationMode.SpeedProfile(),
+                new CompilationMode.Partial(),
                 StartupMode.COLD,
                 3,
                 scope -> {
                     scope.pressHome();
+                    return Unit.INSTANCE;
+                },
+                scope -> {
+                    scope.pressHome();
                     scope.startActivityAndWait();
+                    return Unit.INSTANCE;
                 }
         );
     }

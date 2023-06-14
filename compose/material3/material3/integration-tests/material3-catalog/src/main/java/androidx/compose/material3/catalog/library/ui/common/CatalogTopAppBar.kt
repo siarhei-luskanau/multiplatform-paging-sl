@@ -16,42 +16,37 @@
 
 package androidx.compose.material3.catalog.library.ui.common
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
-import androidx.compose.material.AppBarDefaults
 import androidx.compose.material.Divider
 import androidx.compose.material.DropdownMenu
 import androidx.compose.material.DropdownMenuItem
-import androidx.compose.material.TopAppBar
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
+import androidx.compose.material3.SmallTopAppBar
 import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.material3.catalog.library.R
-import androidx.compose.material3.contentColorFor
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.dp
-import com.google.accompanist.insets.navigationBarsPadding
-import com.google.accompanist.insets.statusBarsPadding
 
-// TODO: Use components/values from Material3 when available
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CatalogTopAppBar(
     title: String,
     showBackNavigationIcon: Boolean = false,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
     onBackClick: () -> Unit = {},
     onThemeClick: () -> Unit = {},
     onGuidelinesClick: () -> Unit = {},
@@ -63,91 +58,76 @@ fun CatalogTopAppBar(
     onLicensesClick: () -> Unit = {}
 ) {
     var moreMenuExpanded by remember { mutableStateOf(false) }
-    val backgroundColor = MaterialTheme.colorScheme.background
-    // Wrapping in a Surface to handle window insets
-    // https://issuetracker.google.com/issues/183161866
-    Surface(
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = AppBarDefaults.TopAppBarElevation,
-    ) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = title,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-            },
-            actions = {
-                Box {
-                    Row {
-                        IconButton(onClick = onThemeClick) {
-                            Icon(
-                                painter = painterResource(id = R.drawable.ic_palette_24dp),
-                                contentDescription = null
-                            )
-                        }
-                        IconButton(onClick = { moreMenuExpanded = true }) {
-                            Icon(
-                                imageVector = Icons.Default.MoreVert,
-                                contentDescription = null
-                            )
-                        }
-                    }
-                    MoreMenu(
-                        expanded = moreMenuExpanded,
-                        onDismissRequest = { moreMenuExpanded = false },
-                        onGuidelinesClick = {
-                            onGuidelinesClick()
-                            moreMenuExpanded = false
-                        },
-                        onDocsClick = {
-                            onDocsClick()
-                            moreMenuExpanded = false
-                        },
-                        onSourceClick = {
-                            onSourceClick()
-                            moreMenuExpanded = false
-                        },
-                        onIssueClick = {
-                            onIssueClick()
-                            moreMenuExpanded = false
-                        },
-                        onTermsClick = {
-                            onTermsClick()
-                            moreMenuExpanded = false
-                        },
-                        onPrivacyClick = {
-                            onPrivacyClick()
-                            moreMenuExpanded = false
-                        },
-                        onLicensesClick = {
-                            onLicensesClick()
-                            moreMenuExpanded = false
-                        }
-                    )
-                }
-            },
-            navigationIcon = if (showBackNavigationIcon) {
-                {
-                    IconButton(onClick = onBackClick) {
+    SmallTopAppBar(
+        title = {
+            Text(
+                text = title,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        actions = {
+            Box {
+                Row {
+                    IconButton(onClick = onThemeClick) {
                         Icon(
-                            imageVector = Icons.Default.ArrowBack,
+                            painter = painterResource(id = R.drawable.ic_palette_24dp),
+                            contentDescription = null
+                        )
+                    }
+                    IconButton(onClick = { moreMenuExpanded = true }) {
+                        Icon(
+                            imageVector = Icons.Default.MoreVert,
                             contentDescription = null
                         )
                     }
                 }
-            } else {
-                null
-            },
-            backgroundColor = backgroundColor,
-            contentColor = contentColorFor(backgroundColor),
-            elevation = 0.dp,
-            modifier = Modifier
-                .statusBarsPadding()
-                .navigationBarsPadding(bottom = false)
-        )
-    }
+                MoreMenu(
+                    expanded = moreMenuExpanded,
+                    onDismissRequest = { moreMenuExpanded = false },
+                    onGuidelinesClick = {
+                        onGuidelinesClick()
+                        moreMenuExpanded = false
+                    },
+                    onDocsClick = {
+                        onDocsClick()
+                        moreMenuExpanded = false
+                    },
+                    onSourceClick = {
+                        onSourceClick()
+                        moreMenuExpanded = false
+                    },
+                    onIssueClick = {
+                        onIssueClick()
+                        moreMenuExpanded = false
+                    },
+                    onTermsClick = {
+                        onTermsClick()
+                        moreMenuExpanded = false
+                    },
+                    onPrivacyClick = {
+                        onPrivacyClick()
+                        moreMenuExpanded = false
+                    },
+                    onLicensesClick = {
+                        onLicensesClick()
+                        moreMenuExpanded = false
+                    }
+                )
+            }
+        },
+        navigationIcon = {
+            if (showBackNavigationIcon) {
+                IconButton(onClick = onBackClick) {
+                    Icon(
+                        imageVector = Icons.Default.ArrowBack,
+                        contentDescription = null
+                    )
+                }
+            }
+        },
+        scrollBehavior = scrollBehavior
+    )
 }
 
 @Composable
@@ -162,10 +142,10 @@ private fun MoreMenu(
     onPrivacyClick: () -> Unit,
     onLicensesClick: () -> Unit,
 ) {
+    // TODO: Replace with M3 DropdownMenu, DropdownMenuItem and Divider when available
     DropdownMenu(
         expanded = expanded,
-        onDismissRequest = onDismissRequest,
-        modifier = Modifier.background(MaterialTheme.colorScheme.background),
+        onDismissRequest = onDismissRequest
     ) {
         DropdownMenuItem(onClick = onGuidelinesClick) {
             Text(stringResource(id = R.string.view_design_guidelines))
@@ -176,11 +156,11 @@ private fun MoreMenu(
         DropdownMenuItem(onClick = onSourceClick) {
             Text(stringResource(id = R.string.view_source_code))
         }
-        Divider()
+        Divider(color = MaterialTheme.colorScheme.outline)
         DropdownMenuItem(onClick = onIssueClick) {
             Text(stringResource(id = R.string.report_an_issue))
         }
-        Divider()
+        Divider(color = MaterialTheme.colorScheme.outline)
         DropdownMenuItem(onClick = onTermsClick) {
             Text(stringResource(id = R.string.terms_of_service))
         }

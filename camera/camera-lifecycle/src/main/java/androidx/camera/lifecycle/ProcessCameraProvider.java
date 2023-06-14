@@ -20,6 +20,7 @@ import android.app.Application;
 import android.content.Context;
 import android.os.Handler;
 
+import androidx.annotation.GuardedBy;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -33,6 +34,7 @@ import androidx.camera.core.CameraInfoUnavailableException;
 import androidx.camera.core.CameraSelector;
 import androidx.camera.core.CameraX;
 import androidx.camera.core.CameraXConfig;
+import androidx.camera.core.EffectBundle;
 import androidx.camera.core.ImageAnalysis;
 import androidx.camera.core.ImageCapture;
 import androidx.camera.core.InitializationException;
@@ -46,8 +48,11 @@ import androidx.camera.core.impl.ExtendedCameraConfigProviderStore;
 import androidx.camera.core.impl.utils.ContextUtil;
 import androidx.camera.core.impl.utils.Threads;
 import androidx.camera.core.impl.utils.executor.CameraXExecutors;
+import androidx.camera.core.impl.utils.futures.FutureCallback;
+import androidx.camera.core.impl.utils.futures.FutureChain;
 import androidx.camera.core.impl.utils.futures.Futures;
 import androidx.camera.core.internal.CameraUseCaseAdapter;
+import androidx.concurrent.futures.CallbackToFutureAdapter;
 import androidx.core.util.Preconditions;
 import androidx.lifecycle.Lifecycle;
 import androidx.lifecycle.LifecycleOwner;
@@ -82,8 +87,16 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
 
     private static final ProcessCameraProvider sAppInstance = new ProcessCameraProvider();
 
-    private final LifecycleCameraRepository
-            mLifecycleCameraRepository = new LifecycleCameraRepository();
+    private final Object mLock = new Object();
+    @GuardedBy("mLock")
+    private CameraXConfig.Provider mCameraXConfigProvider = null;
+    @GuardedBy("mLock")
+    private ListenableFuture<CameraX> mCameraXInitializeFuture;
+    @GuardedBy("mLock")
+    private ListenableFuture<Void> mCameraXShutdownFuture = Futures.immediateFuture(null);
+
+    private final LifecycleCameraRepository mLifecycleCameraRepository =
+            new LifecycleCameraRepository();
     private CameraX mCameraX;
     private Context mContext;
 
@@ -150,14 +163,49 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
      * @see #configureInstance(CameraXConfig)
      */
     @NonNull
-    public static ListenableFuture<ProcessCameraProvider> getInstance(
-            @NonNull Context context) {
+    public static ListenableFuture<ProcessCameraProvider> getInstance(@NonNull Context context) {
         Preconditions.checkNotNull(context);
-        return Futures.transform(CameraX.getOrCreateInstance(context), cameraX -> {
-            sAppInstance.setCameraX(cameraX);
-            sAppInstance.setContext(ContextUtil.getApplicationContext(context));
-            return sAppInstance;
-        }, CameraXExecutors.directExecutor());
+        return Futures.transform(sAppInstance.getOrCreateCameraXInstance(context),
+                cameraX -> {
+                    sAppInstance.setCameraX(cameraX);
+                    sAppInstance.setContext(ContextUtil.getApplicationContext(context));
+                    return sAppInstance;
+                }, CameraXExecutors.directExecutor());
+    }
+
+    private ListenableFuture<CameraX> getOrCreateCameraXInstance(@NonNull Context context) {
+        synchronized (mLock) {
+            if (mCameraXInitializeFuture != null) {
+                return mCameraXInitializeFuture;
+            }
+
+            CameraX cameraX = new CameraX(context, mCameraXConfigProvider);
+
+            mCameraXInitializeFuture = CallbackToFutureAdapter.getFuture(completer -> {
+                synchronized (mLock) {
+                    ListenableFuture<Void> future =
+                            FutureChain.from(mCameraXShutdownFuture).transformAsync(
+                                    input -> cameraX.getInitializeFuture(),
+                                    CameraXExecutors.directExecutor());
+
+                    Futures.addCallback(future, new FutureCallback<Void>() {
+                        @Override
+                        public void onSuccess(@Nullable Void result) {
+                            completer.set(cameraX);
+                        }
+
+                        @Override
+                        public void onFailure(@NonNull Throwable t) {
+                            completer.setException(t);
+                        }
+                    }, CameraXExecutors.directExecutor());
+                }
+
+                return "ProcessCameraProvider-initializeCameraX";
+            });
+
+            return mCameraXInitializeFuture;
+        }
     }
 
     /**
@@ -192,7 +240,18 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
      */
     @ExperimentalCameraProviderConfiguration
     public static void configureInstance(@NonNull CameraXConfig cameraXConfig) {
-        CameraX.configureInstance(cameraXConfig);
+        sAppInstance.configureInstanceInternal(cameraXConfig);
+    }
+
+    private void configureInstanceInternal(@NonNull CameraXConfig cameraXConfig) {
+        synchronized (mLock) {
+            Preconditions.checkNotNull(cameraXConfig);
+            Preconditions.checkState(mCameraXConfigProvider == null, "CameraX has "
+                    + "already been configured. To use a different configuration, shutdown() must"
+                    + " be called.");
+
+            mCameraXConfigProvider = () -> cameraXConfig;
+        }
     }
 
     /**
@@ -214,7 +273,18 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
     @NonNull
     public ListenableFuture<Void> shutdown() {
         mLifecycleCameraRepository.clear();
-        return CameraX.shutdown();
+
+        ListenableFuture<Void> shutdownFuture = mCameraX != null ? mCameraX.shutdown() :
+                Futures.immediateFuture(null);
+
+        synchronized (mLock) {
+            mCameraXConfigProvider = null;
+            mCameraXInitializeFuture = null;
+            mCameraXShutdownFuture = shutdownFuture;
+        }
+        mCameraX = null;
+        mContext = null;
+        return shutdownFuture;
     }
 
     private void setCameraX(CameraX cameraX) {
@@ -288,7 +358,7 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
     public Camera bindToLifecycle(@NonNull LifecycleOwner lifecycleOwner,
             @NonNull CameraSelector cameraSelector,
             @NonNull UseCase... useCases) {
-        return bindToLifecycle(lifecycleOwner, cameraSelector, null, useCases);
+        return bindToLifecycle(lifecycleOwner, cameraSelector, null, null, useCases);
     }
 
     /**
@@ -310,7 +380,8 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
             @NonNull CameraSelector cameraSelector,
             @NonNull UseCaseGroup useCaseGroup) {
         return bindToLifecycle(lifecycleOwner, cameraSelector,
-                useCaseGroup.getViewPort(), useCaseGroup.getUseCases().toArray(new UseCase[0]));
+                useCaseGroup.getViewPort(), useCaseGroup.getEffectBundle(),
+                useCaseGroup.getUseCases().toArray(new UseCase[0]));
     }
 
     /**
@@ -362,6 +433,7 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
      * @param cameraSelector The camera selector which determines the camera to use for set of
      *                       use cases.
      * @param viewPort       The viewPort which represents the visible camera sensor rect.
+     * @param effectBundle   The effects applied to the camera outputs.
      * @param useCases       The use cases to bind to a lifecycle.
      * @return The {@link Camera} instance which is determined by the camera selector and
      * internal requirements.
@@ -376,6 +448,7 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
             @NonNull LifecycleOwner lifecycleOwner,
             @NonNull CameraSelector cameraSelector,
             @Nullable ViewPort viewPort,
+            @Nullable EffectBundle effectBundle,
             @NonNull UseCase... useCases) {
         Threads.checkMainThread();
         // TODO(b/153096869): override UseCase's target rotation.
@@ -461,7 +534,7 @@ public final class ProcessCameraProvider implements LifecycleCameraProvider {
         }
 
         mLifecycleCameraRepository.bindToLifecycleCamera(lifecycleCameraToBind, viewPort,
-                Arrays.asList(useCases));
+                effectBundle, Arrays.asList(useCases));
 
         return lifecycleCameraToBind;
     }

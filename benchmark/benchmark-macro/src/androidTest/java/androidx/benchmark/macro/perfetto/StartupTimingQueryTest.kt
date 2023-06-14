@@ -20,24 +20,24 @@ import androidx.benchmark.macro.StartupMode
 import androidx.benchmark.macro.createTempFileFromAsset
 import androidx.benchmark.perfetto.PerfettoHelper.Companion.isAbiSupported
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import androidx.test.filters.MediumTest
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.Locale
 import kotlin.test.assertEquals
 
+@MediumTest
 @RunWith(AndroidJUnit4::class)
 class StartupTimingQueryTest {
     private fun validateFixedTrace(
         @Suppress("SameParameterValue") api: Int,
         startupMode: StartupMode,
-        expectedMetrics: StartupTimingQuery.SubMetrics
+        expectedMetrics: StartupTimingQuery.SubMetrics?,
+        tracePrefix: String = "api${api}_startup_${startupMode.name.lowercase(Locale.getDefault())}"
     ) {
         assumeTrue(isAbiSupported())
-        val traceFile = createTempFileFromAsset(
-            prefix = "api${api}_startup_${startupMode.name.lowercase(Locale.getDefault())}",
-            suffix = ".perfetto-trace"
-        )
+        val traceFile = createTempFileFromAsset(prefix = tracePrefix, suffix = ".perfetto-trace")
 
         val startupSubMetrics = StartupTimingQuery.getFrameSubMetrics(
             absoluteTracePath = traceFile.absolutePath,
@@ -55,9 +55,9 @@ class StartupTimingQueryTest {
         api = 24,
         startupMode = StartupMode.COLD,
         StartupTimingQuery.SubMetrics(
-            timeToInitialDisplayNs = 358237760,
-            timeToFullDisplayNs = 784769167,
-            timelineRangeNs = 269543917431669..269544702200836
+            timeToInitialDisplayNs = 264869885,
+            timeToFullDisplayNs = 715406822,
+            timelineRangeNs = 791231114368..791946521190
         )
     )
 
@@ -66,9 +66,9 @@ class StartupTimingQueryTest {
         api = 24,
         startupMode = StartupMode.WARM,
         StartupTimingQuery.SubMetrics(
-            timeToInitialDisplayNs = 135008333,
-            timeToFullDisplayNs = 598500833,
-            timelineRangeNs = 268757401479247..268757999980080
+            timeToInitialDisplayNs = 108563770,
+            timeToFullDisplayNs = 581026583,
+            timelineRangeNs = 800868511677..801449538260
         )
     )
 
@@ -77,9 +77,9 @@ class StartupTimingQueryTest {
         api = 24,
         startupMode = StartupMode.HOT,
         StartupTimingQuery.SubMetrics(
-            timeToInitialDisplayNs = 54248802,
-            timeToFullDisplayNs = 529336511,
-            timelineRangeNs = 268727533977218..268728063313729
+            timeToInitialDisplayNs = 35039927,
+            timeToFullDisplayNs = 537343160,
+            timelineRangeNs = 780778904571..781316247731
         )
     )
 
@@ -88,7 +88,7 @@ class StartupTimingQueryTest {
         api = 31,
         startupMode = StartupMode.COLD,
         StartupTimingQuery.SubMetrics(
-            timeToInitialDisplayNs = 145792410,
+            timeToInitialDisplayNs = 143980066,
             timeToFullDisplayNs = 620815843,
             timelineRangeNs = 186974938196632..186975559012475
         )
@@ -99,7 +99,7 @@ class StartupTimingQueryTest {
         api = 31,
         startupMode = StartupMode.WARM,
         StartupTimingQuery.SubMetrics(
-            timeToInitialDisplayNs = 64748027,
+            timeToInitialDisplayNs = 62373965,
             timeToFullDisplayNs = 555968701,
             timelineRangeNs = 186982050780778..186982606749479
         )
@@ -110,9 +110,20 @@ class StartupTimingQueryTest {
         api = 31,
         startupMode = StartupMode.HOT,
         StartupTimingQuery.SubMetrics(
-            timeToInitialDisplayNs = 47329015,
+            timeToInitialDisplayNs = 40534066,
             timeToFullDisplayNs = 542222554,
             timelineRangeNs = 186969441973689..186969984196243
         )
+    )
+
+    /**
+     * Validate that StartupTimingQuery returns null and doesn't crash when process name truncated
+     */
+    @Test
+    fun fixedApi29ColdProcessNameTruncated() = validateFixedTrace(
+        api = 29,
+        startupMode = StartupMode.COLD,
+        tracePrefix = "api29_cold_startup_processname_truncated",
+        expectedMetrics = null // process name is truncated, and we currently don't handle this
     )
 }

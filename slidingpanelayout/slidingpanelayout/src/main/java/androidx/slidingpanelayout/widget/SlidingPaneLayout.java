@@ -57,7 +57,7 @@ import androidx.transition.ChangeBounds;
 import androidx.transition.Transition;
 import androidx.transition.TransitionManager;
 import androidx.window.layout.FoldingFeature;
-import androidx.window.layout.WindowInfoRepository;
+import androidx.window.layout.WindowInfoTracker;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -192,8 +192,6 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
     private boolean mFirstLayout = true;
 
     private final Rect mTmpRect = new Rect();
-
-    final ArrayList<DisableLayerRunnable> mPostedRunnables = new ArrayList<>();
 
     @LockMode
     private int mLockMode;
@@ -333,16 +331,11 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
         mDragHelper = ViewDragHelper.create(this, 0.5f, new DragHelperCallback());
         mDragHelper.setMinVelocity(MIN_FLING_VELOCITY * density);
 
-        try {
-            Activity activity = requireActivity(context);
-            WindowInfoRepository repo = WindowInfoRepository.getOrCreate(activity);
-            Executor mainExecutor = ContextCompat.getMainExecutor(activity);
-            FoldingFeatureObserver foldingFeatureObserver = new FoldingFeatureObserver(repo,
-                    mainExecutor);
-            setFoldingFeatureObserver(foldingFeatureObserver);
-        } catch (IllegalArgumentException exception) {
-            // Disable fold detection.
-        }
+        WindowInfoTracker repo = WindowInfoTracker.getOrCreate(context);
+        Executor mainExecutor = ContextCompat.getMainExecutor(context);
+        FoldingFeatureObserver foldingFeatureObserver =
+                new FoldingFeatureObserver(repo, mainExecutor);
+        setFoldingFeatureObserver(foldingFeatureObserver);
     }
 
     private void setFoldingFeatureObserver(
@@ -585,7 +578,10 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
         super.onAttachedToWindow();
         mFirstLayout = true;
         if (mFoldingFeatureObserver != null) {
-            mFoldingFeatureObserver.registerLayoutStateChangeCallback();
+            Activity activity = getActivityOrNull(getContext());
+            if (activity != null) {
+                mFoldingFeatureObserver.registerLayoutStateChangeCallback(activity);
+            }
         }
     }
 
@@ -596,11 +592,6 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
         if (mFoldingFeatureObserver != null) {
             mFoldingFeatureObserver.unregisterLayoutStateChangeCallback();
         }
-        for (int i = 0, count = mPostedRunnables.size(); i < count; i++) {
-            final DisableLayerRunnable dlr = mPostedRunnables.get(i);
-            dlr.run();
-        }
-        mPostedRunnables.clear();
     }
 
     @Override
@@ -1428,7 +1419,7 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
      * @param y      Y coordinate of the active touch point
      * @return true if child views of v can be scrolled by delta of dx.
      */
-    protected boolean canScroll(View v, boolean checkV, int dx, int x, int y) {
+    protected boolean canScroll(@NonNull View v, boolean checkV, int dx, int x, int y) {
         if (v instanceof ViewGroup) {
             final ViewGroup group = (ViewGroup) v;
             final int scrollX = v.getScrollX();
@@ -1481,6 +1472,7 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
         return new LayoutParams(getContext(), attrs);
     }
 
+    @NonNull
     @Override
     protected Parcelable onSaveInstanceState() {
         Parcelable superState = super.onSaveInstanceState();
@@ -1832,23 +1824,6 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
         }
     }
 
-    private class DisableLayerRunnable implements Runnable {
-        final View mChildView;
-
-        DisableLayerRunnable(View childView) {
-            mChildView = childView;
-        }
-
-        @Override
-        public void run() {
-            if (mChildView.getParent() == SlidingPaneLayout.this) {
-                mChildView.setLayerType(View.LAYER_TYPE_NONE, null);
-                invalidateChildRegion(mChildView);
-            }
-            mPostedRunnables.remove(this);
-        }
-    }
-
     boolean isLayoutRtlSupport() {
         return ViewCompat.getLayoutDirection(this) == ViewCompat.LAYOUT_DIRECTION_RTL;
     }
@@ -1901,7 +1876,8 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
         return foldRectInView;
     }
 
-    private static Activity requireActivity(Context context) {
+    @Nullable
+    private static Activity getActivityOrNull(Context context) {
         Context iterator = context;
         while (iterator instanceof ContextWrapper) {
             if (iterator instanceof Activity) {
@@ -1909,9 +1885,6 @@ public class SlidingPaneLayout extends ViewGroup implements Openable {
             }
             iterator = ((ContextWrapper) iterator).getBaseContext();
         }
-        throw new IllegalArgumentException("Used non-visual Context to obtain an instance of "
-                + "WindowManager. Please use an Activity or a ContextWrapper around one "
-                + "instead."
-        );
+        return null;
     }
 }

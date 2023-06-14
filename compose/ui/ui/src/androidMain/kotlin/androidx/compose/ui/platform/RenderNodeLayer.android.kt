@@ -24,12 +24,16 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Canvas
 import androidx.compose.ui.graphics.CanvasHolder
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Matrix
 import androidx.compose.ui.graphics.Paint
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.layout.GraphicLayerInfo
 import androidx.compose.ui.node.OwnedLayer
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
@@ -44,7 +48,7 @@ internal class RenderNodeLayer(
     val ownerView: AndroidComposeView,
     drawBlock: (Canvas) -> Unit,
     invalidateParentLayer: () -> Unit
-) : OwnedLayer {
+) : OwnedLayer, GraphicLayerInfo {
     private var drawBlock: ((Canvas) -> Unit)? = drawBlock
     private var invalidateParentLayer: (() -> Unit)? = invalidateParentLayer
 
@@ -96,12 +100,10 @@ internal class RenderNodeLayer(
         }
 
     @RequiresApi(29)
-    private class UniqueDrawingIdApi29 {
-        @RequiresApi(29)
-        companion object {
-            @JvmStatic
-            fun getUniqueDrawingId(view: View) = view.uniqueDrawingId
-        }
+    private object UniqueDrawingIdApi29 {
+        @JvmStatic
+        @androidx.annotation.DoNotInline
+        fun getUniqueDrawingId(view: View) = view.uniqueDrawingId
     }
 
     override fun updateLayerProperties(
@@ -119,17 +121,21 @@ internal class RenderNodeLayer(
         shape: Shape,
         clip: Boolean,
         renderEffect: RenderEffect?,
+        ambientShadowColor: Color,
+        spotShadowColor: Color,
         layoutDirection: LayoutDirection,
         density: Density
     ) {
         this.transformOrigin = transformOrigin
-        val wasClippingManually = renderNode.clipToOutline && outlineResolver.clipPath != null
+        val wasClippingManually = renderNode.clipToOutline && !outlineResolver.outlineClipSupported
         renderNode.scaleX = scaleX
         renderNode.scaleY = scaleY
         renderNode.alpha = alpha
         renderNode.translationX = translationX
         renderNode.translationY = translationY
         renderNode.elevation = shadowElevation
+        renderNode.ambientShadowColor = ambientShadowColor.toArgb()
+        renderNode.spotShadowColor = spotShadowColor.toArgb()
         renderNode.rotationZ = rotationZ
         renderNode.rotationX = rotationX
         renderNode.rotationY = rotationY
@@ -148,7 +154,7 @@ internal class RenderNodeLayer(
             density
         )
         renderNode.setOutline(outlineResolver.outline)
-        val isClippingManually = renderNode.clipToOutline && outlineResolver.clipPath != null
+        val isClippingManually = renderNode.clipToOutline && !outlineResolver.outlineClipSupported
         if (wasClippingManually != isClippingManually || (isClippingManually && shapeChanged)) {
             invalidate()
         } else {
@@ -263,17 +269,34 @@ internal class RenderNodeLayer(
             // in the move call which operates directly on the RenderNode
             canvas.translate(left, top)
             canvas.concat(matrixCache.calculateMatrix(renderNode))
+            clipRenderNode(canvas)
             drawBlock?.invoke(canvas)
             canvas.restore()
             isDirty = false
         }
     }
 
+    /**
+     * Manually clips the content of the RenderNodeLayer in the provided canvas.
+     * This is used only in software rendered use cases
+     */
+    private fun clipRenderNode(canvas: Canvas) {
+        if (renderNode.clipToOutline || renderNode.clipToBounds) {
+            outlineResolver.clipToOutline(canvas)
+        }
+    }
+
     override fun updateDisplayList() {
         if (isDirty || !renderNode.hasDisplayList) {
             isDirty = false
-            val clipPath = if (renderNode.clipToOutline) outlineResolver.clipPath else null
-            renderNode.record(canvasHolder, clipPath, drawBlock!!)
+            val clipPath = if (renderNode.clipToOutline && !outlineResolver.outlineClipSupported) {
+                outlineResolver.clipPath
+            } else {
+                null
+            }
+            drawBlock?.let {
+                renderNode.record(canvasHolder, clipPath, it)
+            }
         }
     }
 
@@ -317,6 +340,17 @@ internal class RenderNodeLayer(
         transformOrigin = TransformOrigin.Center
         this.drawBlock = drawBlock
         this.invalidateParentLayer = invalidateParentLayer
+    }
+
+    override fun transform(matrix: Matrix) {
+        matrix.timesAssign(matrixCache.calculateMatrix(renderNode))
+    }
+
+    override fun inverseTransform(matrix: Matrix) {
+        val inverse = matrixCache.calculateInverseMatrix(renderNode)
+        if (inverse != null) {
+            matrix.timesAssign(inverse)
+        }
     }
 
     companion object {
