@@ -21,7 +21,6 @@ import androidx.appactions.builtintypes.experimental.types.SuccessStatus
 import androidx.appactions.interaction.capabilities.core.BaseExecutionSession
 import androidx.appactions.interaction.capabilities.core.Capability
 import androidx.appactions.interaction.capabilities.core.CapabilityFactory
-import androidx.appactions.interaction.capabilities.core.impl.BuilderOf
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeConverters
 import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecBuilder
 import androidx.appactions.interaction.capabilities.core.properties.Property
@@ -100,7 +99,7 @@ class StartTimer private constructor() {
             return result
         }
 
-        class Builder : BuilderOf<Arguments> {
+        class Builder {
             private var identifier: String? = null
             private var name: String? = null
             private var duration: Duration? = null
@@ -111,7 +110,7 @@ class StartTimer private constructor() {
 
             fun setDuration(duration: Duration): Builder = apply { this.duration = duration }
 
-            override fun build(): Arguments = Arguments(identifier, name, duration)
+            fun build(): Arguments = Arguments(identifier, name, duration)
         }
     }
     class Output internal constructor(val executionStatus: ExecutionStatus?) {
@@ -180,7 +179,7 @@ class StartTimer private constructor() {
     companion object {
         private val ACTION_SPEC =
             ActionSpecBuilder.ofCapabilityNamed(CAPABILITY_NAME)
-                .setArguments(Arguments::class.java, Arguments::Builder)
+                .setArguments(Arguments::class.java, Arguments::Builder, Arguments.Builder::build)
                 .setOutput(Output::class.java)
                 .bindParameter(
                     SlotMetadata.IDENTIFIER.path,
