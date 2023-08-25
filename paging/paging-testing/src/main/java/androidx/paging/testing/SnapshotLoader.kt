@@ -41,7 +41,7 @@ import kotlinx.coroutines.flow.map
  */
 @VisibleForTesting
 public class SnapshotLoader<Value : Any> internal constructor(
-    private val differ: PagingDataDiffer<Value>,
+    private val differ: CompletablePagingDataDiffer<Value>,
     private val errorHandler: LoadErrorHandler,
 ) {
     internal val generations = MutableStateFlow(Generation())
@@ -455,7 +455,7 @@ internal data class Generation(
 
     /**
      * Tracks the last accessed(peeked) index on the differ for this generation
-      */
+     */
     var lastAccessedIndex: AtomicInteger = AtomicInteger()
 )
 
