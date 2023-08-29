@@ -24,6 +24,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.AndroidUiDispatcher
 import androidx.paging.CombinedLoadStates
 import androidx.paging.DifferCallback
 import androidx.paging.ItemSnapshotList
@@ -37,7 +38,6 @@ import androidx.paging.PagingData
 import androidx.paging.PagingDataDiffer
 import kotlin.coroutines.CoroutineContext
 import kotlin.coroutines.EmptyCoroutineContext
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.collectLatest
@@ -64,7 +64,7 @@ public class LazyPagingItems<T : Any> internal constructor(
      */
     private val flow: Flow<PagingData<T>>
 ) {
-    private val mainDispatcher = Dispatchers.Main
+    private val mainDispatcher = AndroidUiDispatcher.Main
 
     private val differCallback: DifferCallback = object : DifferCallback {
         override fun onChanged(position: Int, count: Int) {
