@@ -24,6 +24,7 @@ import androidx.appactions.interaction.capabilities.core.Capability
 import androidx.appactions.interaction.capabilities.core.CapabilityFactory
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeConverters
 import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecBuilder
+import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecRegistry
 import androidx.appactions.interaction.capabilities.safety.executionstatus.EmergencySharingInProgress
 import androidx.appactions.interaction.capabilities.safety.executionstatus.SafetyAccountNotLoggedIn
 import androidx.appactions.interaction.capabilities.safety.executionstatus.SafetyFeatureNotOnboarded
@@ -31,10 +32,8 @@ import androidx.appactions.interaction.proto.ParamValue
 import androidx.appactions.interaction.protobuf.Struct
 import androidx.appactions.interaction.protobuf.Value
 
-private const val CAPABILITY_NAME = "actions.intent.START_EMERGENCY_SHARING"
-
 /** A capability corresponding to actions.intent.START_EMERGENCY_SHARING */
-@CapabilityFactory(name = CAPABILITY_NAME)
+@CapabilityFactory(name = StartEmergencySharing.CAPABILITY_NAME)
 class StartEmergencySharing private constructor() {
     class CapabilityBuilder :
         Capability.Builder<
@@ -145,6 +144,8 @@ class StartEmergencySharing private constructor() {
     sealed interface ExecutionSession : BaseExecutionSession<Arguments, Output>
 
     companion object {
+        /** Canonical name for [StartEmergencySharing] capability */
+        const val CAPABILITY_NAME = "actions.intent.START_EMERGENCY_SHARING"
         private val ACTION_SPEC =
             ActionSpecBuilder.ofCapabilityNamed(CAPABILITY_NAME)
                 .setArguments(
@@ -159,5 +160,8 @@ class StartEmergencySharing private constructor() {
                     ExecutionStatus::toParamValue,
                 )
                 .build()
+        init {
+            ActionSpecRegistry.registerActionSpec(Arguments::class, Output::class, ACTION_SPEC)
+        }
     }
 }

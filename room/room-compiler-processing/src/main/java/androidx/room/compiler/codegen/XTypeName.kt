@@ -38,10 +38,12 @@ import com.squareup.kotlinpoet.asTypeName as asKTypeName
 import com.squareup.kotlinpoet.javapoet.JClassName
 import com.squareup.kotlinpoet.javapoet.JParameterizedTypeName
 import com.squareup.kotlinpoet.javapoet.JTypeName
+import com.squareup.kotlinpoet.javapoet.JTypeVariableName
 import com.squareup.kotlinpoet.javapoet.JWildcardTypeName
 import com.squareup.kotlinpoet.javapoet.KClassName
 import com.squareup.kotlinpoet.javapoet.KParameterizedTypeName
 import com.squareup.kotlinpoet.javapoet.KTypeName
+import com.squareup.kotlinpoet.javapoet.KTypeVariableName
 import com.squareup.kotlinpoet.javapoet.KWildcardTypeName
 import kotlin.reflect.KClass
 
@@ -191,6 +193,12 @@ open class XTypeName protected constructor(
          * respectively.
          */
         fun getArrayName(componentTypeName: XTypeName): XTypeName {
+            componentTypeName.java.let {
+                require(it !is JWildcardTypeName || it.lowerBounds.isEmpty()) {
+                    "Can't have contra-variant component types in Java arrays. Found '$it'."
+                }
+            }
+
             val (java, kotlin) = when (componentTypeName) {
                 PRIMITIVE_BOOLEAN ->
                     JArrayTypeName.of(JTypeName.BOOLEAN) to BOOLEAN_ARRAY
@@ -208,9 +216,16 @@ open class XTypeName protected constructor(
                     JArrayTypeName.of(JTypeName.FLOAT) to FLOAT_ARRAY
                 PRIMITIVE_DOUBLE ->
                     JArrayTypeName.of(JTypeName.DOUBLE) to DOUBLE_ARRAY
-                else ->
-                    JArrayTypeName.of(componentTypeName.java) to
-                        ARRAY.parameterizedBy(componentTypeName.kotlin)
+                else -> {
+                    componentTypeName.java.let {
+                        if (it is JWildcardTypeName) {
+                            JArrayTypeName.of(it.upperBounds.single())
+                        } else {
+                            JArrayTypeName.of(it)
+                        }
+                    } to
+                    ARRAY.parameterizedBy(componentTypeName.kotlin)
+                }
             }
             return XTypeName(
                 java = java,
@@ -255,6 +270,16 @@ open class XTypeName protected constructor(
                 } else {
                     UNAVAILABLE_KTYPE_NAME
                 }
+            )
+        }
+
+        /**
+         * Creates a type variable named with bounds.
+         */
+        fun getTypeVariableName(name: String, bounds: List<XTypeName> = emptyList()): XTypeName {
+            return XTypeName(
+                java = JTypeVariableName.get(name, *bounds.map { it.java }.toTypedArray()),
+                kotlin = KTypeVariableName(name, bounds.map { it.kotlin })
             )
         }
     }
@@ -441,3 +466,5 @@ fun XTypeName.unbox() = XTypeName(java.unbox(), kotlin.copy(nullable = false), X
 
 fun XTypeName.toJavaPoet(): JTypeName = this.java
 fun XClassName.toJavaPoet(): JClassName = this.java
+fun XTypeName.toKotlinPoet(): KTypeName = this.kotlin
+fun XClassName.toKotlinPoet(): KClassName = this.kotlin

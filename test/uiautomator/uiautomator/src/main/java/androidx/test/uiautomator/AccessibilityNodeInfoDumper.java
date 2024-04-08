@@ -19,7 +19,9 @@ package androidx.test.uiautomator;
 import android.os.Build;
 import android.util.Log;
 import android.util.Xml;
+import android.view.Display;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import androidx.annotation.DoNotInline;
 import androidx.annotation.RequiresApi;
@@ -85,8 +87,16 @@ class AccessibilityNodeInfoDumper {
         serializer.attribute("", "visible-to-user", Boolean.toString(node.isVisibleToUser()));
         serializer.attribute("", "bounds", AccessibilityNodeInfoHelper.getVisibleBoundsInScreen(
                 node, width, height, false).toShortString());
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            serializer.attribute("", "drawing-order",
+                    Integer.toString(Api24Impl.getDrawingOrder(node)));
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             serializer.attribute("", "hint", safeCharSeqToString(Api26Impl.getHintText(node)));
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            serializer.attribute("", "display-id",
+                    Integer.toString(Api30Impl.getDisplayId(node)));
         }
         int count = node.getChildCount();
         for (int i = 0; i < count; i++) {
@@ -162,13 +172,17 @@ class AccessibilityNodeInfoDumper {
         int childCount = node.getChildCount();
         for (int x = 0; x < childCount; x++) {
             AccessibilityNodeInfo childNode = node.getChild(x);
-
+            if (childNode == null) {
+                continue;
+            }
             if (!safeCharSeqToString(childNode.getContentDescription()).isEmpty()
-                    || !safeCharSeqToString(childNode.getText()).isEmpty())
+                    || !safeCharSeqToString(childNode.getText()).isEmpty()) {
                 return true;
+            }
 
-            if (childNafCheck(childNode))
+            if (childNafCheck(childNode)) {
                 return true;
+            }
         }
         return false;
     }
@@ -197,6 +211,17 @@ class AccessibilityNodeInfoDumper {
         return ret.toString();
     }
 
+    @RequiresApi(24)
+    static class Api24Impl {
+        private Api24Impl() {
+        }
+
+        @DoNotInline
+        static int getDrawingOrder(AccessibilityNodeInfo accessibilityNodeInfo) {
+            return accessibilityNodeInfo.getDrawingOrder();
+        }
+    }
+
     @RequiresApi(26)
     static class Api26Impl {
         private Api26Impl() {
@@ -206,6 +231,19 @@ class AccessibilityNodeInfoDumper {
         static String getHintText(AccessibilityNodeInfo accessibilityNodeInfo) {
             CharSequence chars = accessibilityNodeInfo.getHintText();
             return chars != null ? chars.toString() : null;
+        }
+    }
+
+    @RequiresApi(30)
+    static class Api30Impl {
+        private Api30Impl() {
+        }
+
+        @DoNotInline
+        static int getDisplayId(AccessibilityNodeInfo accessibilityNodeInfo) {
+            AccessibilityWindowInfo accessibilityWindowInfo = accessibilityNodeInfo.getWindow();
+            return accessibilityWindowInfo == null ? Display.DEFAULT_DISPLAY :
+                    accessibilityWindowInfo.getDisplayId();
         }
     }
 }

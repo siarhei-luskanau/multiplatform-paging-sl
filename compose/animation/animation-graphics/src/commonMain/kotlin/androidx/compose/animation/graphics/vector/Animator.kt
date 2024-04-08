@@ -16,6 +16,8 @@
 
 package androidx.compose.animation.graphics.vector
 
+import androidx.collection.MutableScatterMap
+import androidx.collection.mutableScatterMapOf
 import androidx.compose.animation.animateColor
 import androidx.compose.animation.core.Easing
 import androidx.compose.animation.core.FiniteAnimationSpec
@@ -36,9 +38,12 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.vector.PathNode
 import androidx.compose.ui.graphics.vector.VectorConfig
 import androidx.compose.ui.graphics.vector.VectorProperty
+import androidx.compose.ui.util.fastCoerceIn
 import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.util.fastMap
 import androidx.compose.ui.util.fastMaxBy
 import androidx.compose.ui.util.fastSumBy
+import androidx.compose.ui.util.fastZip
 import androidx.compose.ui.util.lerp
 
 internal const val RepeatCountInfinite = -1
@@ -50,7 +55,7 @@ internal sealed class Animator {
     fun createVectorConfig(
         transition: Transition<Boolean>,
         overallDuration: Int
-    ): VectorConfig {
+    ): StateVectorConfig {
         return remember { StateVectorConfig() }.also { config ->
             Configure(transition, config, overallDuration)
         }
@@ -63,11 +68,11 @@ internal sealed class Animator {
         overallDuration: Int
     ) {
         val propertyValuesMap = remember(overallDuration) {
-            mutableMapOf<String, PropertyValues<*>>().also {
+            mutableScatterMapOf<String, PropertyValues<*>>().also {
                 collectPropertyValues(it, overallDuration, 0)
             }
         }
-        for ((propertyName, values) in propertyValuesMap) {
+        propertyValuesMap.forEach { propertyName, values ->
             values.timestamps.sortBy { it.timeMillis }
             val state = values.createState(transition, propertyName, overallDuration)
             @Suppress("UNCHECKED_CAST")
@@ -94,7 +99,7 @@ internal sealed class Animator {
     }
 
     abstract fun collectPropertyValues(
-        propertyValuesMap: MutableMap<String, PropertyValues<*>>,
+        propertyValuesMap: MutableScatterMap<String, PropertyValues<*>>,
         overallDuration: Int,
         parentDelay: Int
     )
@@ -131,7 +136,6 @@ internal class Timestamp<T>(
 }
 
 internal sealed class PropertyValues<T> {
-
     val timestamps = mutableListOf<Timestamp<T>>()
 
     @Composable
@@ -145,8 +149,7 @@ internal sealed class PropertyValues<T> {
         overallDuration: Int
     ): @Composable Transition.Segment<Boolean>.() -> FiniteAnimationSpec<T> {
         return {
-            @Suppress("UNCHECKED_CAST")
-            val spec = combined(timestamps.map { timestamp ->
+            val spec = combined(timestamps.fastMap { timestamp ->
                 timestamp.timeMillis to timestamp.asAnimationSpec()
             })
             if (targetState) spec else spec.reversed(overallDuration)
@@ -255,7 +258,7 @@ internal data class ObjectAnimator(
     }
 
     override fun collectPropertyValues(
-        propertyValuesMap: MutableMap<String, PropertyValues<*>>,
+        propertyValuesMap: MutableScatterMap<String, PropertyValues<*>>,
         overallDuration: Int,
         parentDelay: Int
     ) {
@@ -328,7 +331,7 @@ internal data class AnimatorSet(
     }
 
     override fun collectPropertyValues(
-        propertyValuesMap: MutableMap<String, PropertyValues<*>>,
+        propertyValuesMap: MutableScatterMap<String, PropertyValues<*>>,
         overallDuration: Int,
         parentDelay: Int
     ) {
@@ -381,8 +384,8 @@ internal class PropertyValuesHolderFloat(
     fun asKeyframeSpec(duration: Int): KeyframesSpec<Float> {
         return keyframes {
             durationMillis = duration
-            for (keyframe in animatorKeyframes) {
-                keyframe.value at (duration * keyframe.fraction).toInt() with keyframe.interpolator
+            animatorKeyframes.fastForEach { keyframe ->
+                keyframe.value at (duration * keyframe.fraction).toInt() using keyframe.interpolator
             }
         }
     }
@@ -401,8 +404,8 @@ internal class PropertyValuesHolderColor(
     fun asKeyframeSpec(duration: Int): KeyframesSpec<Color> {
         return keyframes {
             durationMillis = duration
-            for (keyframe in animatorKeyframes) {
-                keyframe.value at (duration * keyframe.fraction).toInt() with keyframe.interpolator
+            animatorKeyframes.fastForEach { keyframe ->
+                keyframe.value at (duration * keyframe.fraction).toInt() using keyframe.interpolator
             }
         }
     }
@@ -420,7 +423,7 @@ internal class PropertyValuesHolderPath(
         val innerFraction = easing.transform(
             ((fraction - animatorKeyframes[index].fraction) /
                 (animatorKeyframes[index + 1].fraction - animatorKeyframes[index].fraction))
-                .coerceIn(0f, 1f)
+                .fastCoerceIn(0f, 1f)
         )
         return lerp(
             animatorKeyframes[index].value,
@@ -485,10 +488,29 @@ internal class StateVectorConfig : VectorConfig {
             is VectorProperty.TrimPathOffset -> trimPathOffsetState?.value ?: defaultValue
         } as T
     }
+
+    fun merge(config: StateVectorConfig) {
+        if (config.rotationState != null) rotationState = config.rotationState
+        if (config.pivotXState != null) pivotXState = config.pivotXState
+        if (config.pivotYState != null) pivotYState = config.pivotYState
+        if (config.scaleXState != null) scaleXState = config.scaleXState
+        if (config.scaleYState != null) scaleYState = config.scaleYState
+        if (config.translateXState != null) translateXState = config.translateXState
+        if (config.translateYState != null) translateYState = config.translateYState
+        if (config.pathDataState != null) pathDataState = config.pathDataState
+        if (config.fillColorState != null) fillColorState = config.fillColorState
+        if (config.strokeColorState != null) strokeColorState = config.strokeColorState
+        if (config.strokeWidthState != null) strokeWidthState = config.strokeWidthState
+        if (config.strokeAlphaState != null) strokeAlphaState = config.strokeAlphaState
+        if (config.fillAlphaState != null) fillAlphaState = config.fillAlphaState
+        if (config.trimPathStartState != null) trimPathStartState = config.trimPathStartState
+        if (config.trimPathEndState != null) trimPathEndState = config.trimPathEndState
+        if (config.trimPathOffsetState != null) trimPathOffsetState = config.trimPathOffsetState
+    }
 }
 
 private fun lerp(start: List<PathNode>, stop: List<PathNode>, fraction: Float): List<PathNode> {
-    return start.zip(stop) { a, b -> lerp(a, b, fraction) }
+    return start.fastZip(stop) { a, b -> lerp(a, b, fraction) }
 }
 
 private const val DifferentStartAndStopPathNodes = "start and stop path nodes have different types"

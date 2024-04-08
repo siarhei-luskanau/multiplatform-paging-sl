@@ -88,6 +88,7 @@ internal class InteractiveWatchFaceImpl(
                 ?: Log.w(TAG, "removeWatchFaceListener ignored due to null engine")
         }
 
+    @Suppress("Deprecation")
     override fun getWatchFaceOverlayStyle(): WatchFaceOverlayStyleWireFormat? =
         aidlMethod(TAG, "getWatchFaceOverlayStyle") {
             WatchFaceService.awaitDeferredWatchFaceThenRunOnUiThread(
@@ -278,6 +279,17 @@ internal class InteractiveWatchFaceImpl(
                 it.complicationSlotsManager.getComplicationSlotAt(xPos, yPos)?.id?.toLong()
             }
                 ?: Long.MIN_VALUE
+        }
+
+    override fun getUserStyleFlavors() =
+        aidlMethod(TAG, "getUserStyleFlavors") {
+            WatchFaceService.awaitDeferredEarlyInitDetailsThenRunOnThread(
+                engine,
+                "InteractiveWatchFaceImpl.getUserStyleFlavors",
+                WatchFaceService.Companion.ExecutionThread.CURRENT
+            ) {
+                it.userStyleFlavors.toWireFormat()
+            }
         }
 
     fun onDestroy() {

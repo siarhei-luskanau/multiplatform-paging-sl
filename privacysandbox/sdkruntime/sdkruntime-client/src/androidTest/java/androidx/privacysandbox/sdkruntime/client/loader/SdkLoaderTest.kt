@@ -17,10 +17,9 @@ package androidx.privacysandbox.sdkruntime.client.loader
 
 import android.content.Context
 import android.os.Build
+import androidx.privacysandbox.sdkruntime.client.TestSdkConfigs
 import androidx.privacysandbox.sdkruntime.client.config.LocalSdkConfig
-import androidx.privacysandbox.sdkruntime.client.config.ResourceRemappingConfig
 import androidx.privacysandbox.sdkruntime.core.LoadSdkCompatException
-import androidx.privacysandbox.sdkruntime.core.SandboxedSdkCompat
 import androidx.privacysandbox.sdkruntime.core.Versions
 import androidx.privacysandbox.sdkruntime.core.controller.SdkSandboxControllerCompat
 import androidx.test.core.app.ApplicationProvider
@@ -30,6 +29,7 @@ import androidx.test.filters.SmallTest
 import androidx.testutils.assertThrows
 import com.google.common.truth.Truth.assertThat
 import java.io.File
+import java.lang.reflect.Proxy
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -47,24 +47,13 @@ class SdkLoaderTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         sdkLoader = SdkLoader.create(
             context = context,
-            controller = NoOpImpl(),
+            controllerFactory = NoOpFactory,
         )
-        testSdkConfig = LocalSdkConfig(
-            packageName = "androidx.privacysandbox.sdkruntime.test.v1",
-            dexPaths = listOf(
-                "RuntimeEnabledSdks/V1/classes.dex",
-                "RuntimeEnabledSdks/RPackage.dex"
-            ),
-            entryPoint = "androidx.privacysandbox.sdkruntime.test.v1.CompatProvider",
-            javaResourcesRoot = "RuntimeEnabledSdks/V1/javaresources",
-            resourceRemapping = ResourceRemappingConfig(
-                rPackageClassName = "androidx.privacysandbox.sdkruntime.test.RPackage",
-                packageId = 42
-            )
-        )
+        testSdkConfig = TestSdkConfigs.CURRENT_WITH_RESOURCES
 
         // Clean extracted SDKs between tests
-        File(context.cacheDir, "RuntimeEnabledSdk").deleteRecursively()
+        val codeCacheDir = File(context.applicationInfo.dataDir, "code_cache")
+        File(codeCacheDir, "RuntimeEnabledSdk").deleteRecursively()
     }
 
     @Test
@@ -76,6 +65,17 @@ class SdkLoaderTest {
     }
 
     @Test
+    fun loadSdk_withCustomVersionHandshake_performsCustomHandShake() {
+        val customVersionHandshake = VersionHandshake(
+            overrideApiVersion = Int.MAX_VALUE
+        )
+        val loadedSdk = sdkLoader.loadSdk(testSdkConfig, customVersionHandshake)
+
+        assertThat(loadedSdk.extractClientVersion())
+            .isEqualTo(Int.MAX_VALUE)
+    }
+
+    @Test
     fun testContextClassloader() {
         val loadedSdk = sdkLoader.loadSdk(testSdkConfig)
 
@@ -84,6 +84,21 @@ class SdkLoaderTest {
 
         assertThat(sdkContext.classLoader)
             .isSameInstanceAs(classLoader)
+    }
+
+    @Test
+    fun testContextFilesDir() {
+        val loadedSdk = sdkLoader.loadSdk(testSdkConfig)
+
+        val sdkContext = loadedSdk.extractSdkContext()
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val expectedSdksRoot = context.getDir("RuntimeEnabledSdksData", Context.MODE_PRIVATE)
+        val expectedSdkData = File(expectedSdksRoot, testSdkConfig.packageName)
+        val expectedSdkFilesDir = File(expectedSdkData, "files")
+
+        assertThat(sdkContext.filesDir)
+            .isEqualTo(expectedSdkFilesDir)
     }
 
     @Test
@@ -111,7 +126,8 @@ class SdkLoaderTest {
         val packageIdField = rPackageClass.getDeclaredField("packageId")
         val value = packageIdField.get(null)
 
-        assertThat(value).isEqualTo(42)
+        // 42 (0x2A) -> (0x2A000000)
+        assertThat(value).isEqualTo(0x2A000000)
     }
 
     @Test
@@ -120,13 +136,13 @@ class SdkLoaderTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val sdkLoaderWithLowSpaceMode = SdkLoader.create(
             context = context,
-            controller = NoOpImpl(),
+            controllerFactory = NoOpFactory,
             lowSpaceThreshold = Long.MAX_VALUE
         )
 
         assertThrows(LoadSdkCompatException::class.java) {
             sdkLoaderWithLowSpaceMode.loadSdk(testSdkConfig)
-        }.hasMessageThat().isEqualTo("Can't use InMemoryDexClassLoader")
+        }.hasMessageThat().startsWith("Can't use InMemoryDexClassLoader")
     }
 
     @Test
@@ -134,7 +150,7 @@ class SdkLoaderTest {
     fun testLowSpace_notFailApi27() {
         val sdkLoaderWithLowSpaceMode = SdkLoader.create(
             context = ApplicationProvider.getApplicationContext(),
-            controller = NoOpImpl(),
+            controllerFactory = NoOpFactory,
             lowSpaceThreshold = Long.MAX_VALUE
         )
 
@@ -145,9 +161,19 @@ class SdkLoaderTest {
         assertThat(entryPointClass).isNotNull()
     }
 
-    private class NoOpImpl : SdkSandboxControllerCompat.SandboxControllerImpl {
-        override fun getSandboxedSdks(): List<SandboxedSdkCompat> {
-            throw UnsupportedOperationException("NoOp")
-        }
+    private object NoOpFactory : SdkLoader.ControllerFactory {
+
+        val controllerImplClass = SdkSandboxControllerCompat.SandboxControllerImpl::class.java
+
+        val noOpProxy = Proxy.newProxyInstance(
+            controllerImplClass.classLoader,
+            arrayOf(controllerImplClass)
+        ) { proxy, method, args ->
+            throw UnsupportedOperationException(
+                "Unexpected method call (NoOp) object:$proxy, method: $method, args: $args"
+            )
+        } as SdkSandboxControllerCompat.SandboxControllerImpl
+
+        override fun createControllerFor(sdkConfig: LocalSdkConfig) = noOpProxy
     }
 }

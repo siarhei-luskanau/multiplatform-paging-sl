@@ -26,13 +26,14 @@ import androidx.compose.foundation.lazy.layout.LazyLayoutMeasureScope
 import androidx.compose.foundation.lazy.layout.calculateLazyLayoutPinnedIndices
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.ui.unit.Constraints
-import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
+import kotlinx.coroutines.CoroutineScope
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -44,7 +45,8 @@ internal fun rememberStaggeredGridMeasurePolicy(
     orientation: Orientation,
     mainAxisSpacing: Dp,
     crossAxisSpacing: Dp,
-    slots: Density.(Constraints) -> LazyStaggeredGridSlots
+    coroutineScope: CoroutineScope,
+    slots: LazyGridStaggeredGridSlotsProvider
 ): LazyLayoutMeasureScope.(Constraints) -> LazyStaggeredGridMeasureResult = remember(
     state,
     itemProviderLambda,
@@ -56,18 +58,14 @@ internal fun rememberStaggeredGridMeasurePolicy(
     slots
 ) {
     { constraints ->
+        state.measurementScopeInvalidator.attachToScope()
         checkScrollableContainerConstraints(
             constraints,
             orientation
         )
-        val resolvedSlots = slots(this, constraints)
+        val resolvedSlots = slots.invoke(density = this, constraints = constraints)
         val isVertical = orientation == Orientation.Vertical
         val itemProvider = itemProviderLambda()
-
-        // setup information for prefetch
-        state.slots = resolvedSlots
-        state.isVertical = isVertical
-        state.spanProvider = itemProvider.spanProvider
 
         // setup measure
         val beforeContentPadding = contentPadding.beforePadding(
@@ -100,25 +98,28 @@ internal fun rememberStaggeredGridMeasurePolicy(
             state.beyondBoundsInfo
         )
 
-        measureStaggeredGrid(
-            state = state,
-            pinnedItems = pinnedItems,
-            itemProvider = itemProvider,
-            resolvedSlots = resolvedSlots,
-            constraints = constraints.copy(
-                minWidth = constraints.constrainWidth(horizontalPadding),
-                minHeight = constraints.constrainHeight(verticalPadding)
-            ),
-            mainAxisSpacing = mainAxisSpacing.roundToPx(),
-            contentOffset = contentOffset,
-            mainAxisAvailableSize = mainAxisAvailableSize,
-            isVertical = isVertical,
-            reverseLayout = reverseLayout,
-            beforeContentPadding = beforeContentPadding,
-            afterContentPadding = afterContentPadding,
-        ).also {
-            state.applyMeasureResult(it)
+        val measureResult = Snapshot.withMutableSnapshot {
+            measureStaggeredGrid(
+                state = state,
+                pinnedItems = pinnedItems,
+                itemProvider = itemProvider,
+                resolvedSlots = resolvedSlots,
+                constraints = constraints.copy(
+                    minWidth = constraints.constrainWidth(horizontalPadding),
+                    minHeight = constraints.constrainHeight(verticalPadding)
+                ),
+                mainAxisSpacing = mainAxisSpacing.roundToPx(),
+                contentOffset = contentOffset,
+                mainAxisAvailableSize = mainAxisAvailableSize,
+                isVertical = isVertical,
+                reverseLayout = reverseLayout,
+                beforeContentPadding = beforeContentPadding,
+                afterContentPadding = afterContentPadding,
+                coroutineScope = coroutineScope
+            )
         }
+        state.applyMeasureResult(measureResult)
+        measureResult
     }
 }
 

@@ -16,9 +16,11 @@
 
 package androidx.glance.appwidget
 
+import androidx.annotation.RestrictTo
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.glance.Emittable
+import androidx.glance.EmittableCheckable
 import androidx.glance.ExperimentalGlanceApi
 import androidx.glance.GlanceModifier
 import androidx.glance.GlanceNode
@@ -52,6 +54,9 @@ internal data class CheckBoxColorsImpl(
  * checked is provided to this action in its ActionParameters, and can be retrieved using the
  * [ToggleableStateKey]. If this action launches an activity, the current value of checked will be
  * passed as an intent extra with the name [RemoteViews.EXTRA_CHECKED].
+ * In order to allow the Launcher to provide this extra on Android version S and later, we use a
+ * mutable PendingIntent ([android.app.PendingIntent.FLAG_MUTABLE]) when this action is not a
+ * lambda. Before S, and for lambda actions, this will be an immutable PendingIntent.
  * @param modifier the modifier to apply to the check box
  * @param text the text to display to the end of the check box
  * @param style the style to apply to [text]
@@ -181,6 +186,12 @@ object CheckboxDefaults {
     fun colors(
         checkedColor: ColorProvider,
         uncheckedColor: ColorProvider
+    ): CheckBoxColors = checkBoxColors(checkedColor, uncheckedColor)
+
+    @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+    fun checkBoxColors(
+        checkedColor: ColorProvider,
+        uncheckedColor: ColorProvider
     ): CheckBoxColors =
         CheckBoxColorsImpl(
             createCheckableColorProvider(
@@ -227,14 +238,11 @@ object CheckboxDefaults {
     }
 }
 
-internal class EmittableCheckBox(
+@RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
+class EmittableCheckBox(
     var colors: CheckBoxColors
-) : Emittable {
+) : EmittableCheckable() {
     override var modifier: GlanceModifier = GlanceModifier
-    var checked: Boolean = false
-    var text: String = ""
-    var style: TextStyle? = null
-    var maxLines: Int = Int.MAX_VALUE
 
     override fun copy(): Emittable = EmittableCheckBox(colors = colors).also {
         it.modifier = modifier

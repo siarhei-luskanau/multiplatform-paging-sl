@@ -22,7 +22,6 @@ import androidx.compose.foundation.lazy.layout.MutableIntervalList
 import androidx.compose.runtime.Composable
 import androidx.tv.foundation.ExperimentalTvFoundationApi
 
-@Suppress("IllegalExperimentalApiUsage") // TODO (b/233188423): Address before moving to beta
 @OptIn(ExperimentalFoundationApi::class)
 internal class TvLazyListIntervalContent(
     content: TvLazyListScope.() -> Unit,
@@ -30,7 +29,9 @@ internal class TvLazyListIntervalContent(
     override val intervals: MutableIntervalList<TvLazyListInterval> = MutableIntervalList()
 
     private var _headerIndexes: MutableList<Int>? = null
-    val headerIndexes: List<Int> get() = _headerIndexes ?: emptyList()
+    val headerIndexes: List<Int>
+        @SuppressWarnings("PrimitiveInCollection") // List<Int>
+        get() = _headerIndexes ?: emptyList()
 
     init {
         apply(content)
@@ -38,11 +39,8 @@ internal class TvLazyListIntervalContent(
 
     override fun items(
         count: Int,
-        @Suppress("PrimitiveInLambda")
         key: ((index: Int) -> Any)?,
-        @Suppress("PrimitiveInLambda")
         contentType: (index: Int) -> Any?,
-        @Suppress("PrimitiveInLambda")
         itemContent: @Composable TvLazyListItemScope.(index: Int) -> Unit
     ) {
         intervals.addInterval(
@@ -70,6 +68,7 @@ internal class TvLazyListIntervalContent(
         )
     }
 
+    @SuppressWarnings("PrimitiveInCollection") // mutableListOf<Int>
     @ExperimentalTvFoundationApi
     override fun stickyHeader(
         key: Any?,
@@ -87,10 +86,7 @@ internal class TvLazyListIntervalContent(
 
 @OptIn(ExperimentalFoundationApi::class)
 internal class TvLazyListInterval(
-    @Suppress("PrimitiveInLambda")
     override val key: ((index: Int) -> Any)?,
-    @Suppress("PrimitiveInLambda")
     override val type: ((index: Int) -> Any?),
-    @Suppress("PrimitiveInLambda")
     val item: @Composable TvLazyListItemScope.(index: Int) -> Unit
 ) : LazyLayoutIntervalContent.Interval

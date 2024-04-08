@@ -49,9 +49,14 @@ internal sealed class JavacTypeElement(
     override val name: String
         get() = element.simpleName.toString()
 
+    override val packageName: String by lazy {
+        packageElement.qualifiedName
+    }
+
     @Suppress("UnstableApiUsage")
-    override val packageName: String
-        get() = MoreElements.getPackage(element).qualifiedName.toString()
+    override val packageElement: JavacPackageElement by lazy {
+        JavacPackageElement(env, MoreElements.getPackage(element))
+    }
 
     override val kotlinMetadata by lazy {
         KmClassContainer.createFor(env, element)
@@ -108,6 +113,8 @@ internal sealed class JavacTypeElement(
                     element = it,
                 )
             }
+            // To be consistent with KSP consider delegates to not have a backing field.
+            .filterNot { it.kotlinMetadata?.isDelegated() == true }
     }
 
     private val allMethods = MemoizedSequence {
@@ -149,6 +156,10 @@ internal sealed class JavacTypeElement(
 
     override fun isInterface(): Boolean {
         return kotlinMetadata?.isInterface() ?: (element.kind == ElementKind.INTERFACE)
+    }
+
+    override fun isRecordClass(): Boolean {
+        return element.kind == ElementKind.RECORD
     }
 
     override fun findPrimaryConstructor(): JavacConstructorElement? {
@@ -196,7 +207,15 @@ internal sealed class JavacTypeElement(
     }
 
     override fun getDeclaredMethods(): List<JavacMethodElement> {
+        // TODO(b/290800523): Remove the synthetic annotations method from the list
+        //  of declared methods so that KAPT matches KSP.
         return _declaredMethods
+    }
+
+    fun getSyntheticMethodsForAnnotations(): List<JavacMethodElement> {
+        return _declaredMethods.filter {
+            it.kotlinMetadata?.isSyntheticMethodForAnnotations() == true
+        }
     }
 
     override fun getConstructors(): List<JavacConstructorElement> {
@@ -259,6 +278,14 @@ internal sealed class JavacTypeElement(
                 elementNullability = element.nullability
             )
         }
+    }
+
+    override fun isFromJava(): Boolean {
+        return element.asType().kind != TypeKind.ERROR && !hasAnnotation(Metadata::class)
+    }
+
+    override fun isFromKotlin(): Boolean {
+        return element.asType().kind != TypeKind.ERROR && hasAnnotation(Metadata::class)
     }
 
     class DefaultJavacTypeElement(

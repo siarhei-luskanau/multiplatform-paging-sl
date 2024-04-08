@@ -22,7 +22,7 @@ import androidx.compose.runtime.snapshots.AutoboxingStateValueProperty
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotMutableState
 import androidx.compose.runtime.snapshots.StateFactoryMarker
-import androidx.compose.runtime.snapshots.StateObject
+import androidx.compose.runtime.snapshots.StateObjectImpl
 import androidx.compose.runtime.snapshots.StateRecord
 import androidx.compose.runtime.snapshots.overwritable
 import androidx.compose.runtime.snapshots.readable
@@ -61,7 +61,7 @@ fun mutableIntStateOf(
 @Stable
 @JvmDefaultWithCompatibility
 interface IntState : State<Int> {
-    @AutoboxingStateValueProperty("intValue")
+    @get:AutoboxingStateValueProperty("intValue")
     override val value: Int
         @Suppress("AutoBoxing") get() = intValue
 
@@ -87,7 +87,8 @@ inline operator fun IntState.getValue(thisObj: Any?, property: KProperty<*>): In
 @Stable
 @JvmDefaultWithCompatibility
 interface MutableIntState : IntState, MutableState<Int> {
-    @AutoboxingStateValueProperty("intValue")
+    @get:AutoboxingStateValueProperty("intValue")
+    @set:AutoboxingStateValueProperty("intValue")
     override var value: Int
         @Suppress("AutoBoxing") get() = intValue
         set(value) { intValue = value }
@@ -126,9 +127,15 @@ internal expect fun createSnapshotMutableIntState(
  */
 internal open class SnapshotMutableIntStateImpl(
     value: Int
-) : StateObject, MutableIntState, SnapshotMutableState<Int> {
+) : StateObjectImpl(), MutableIntState, SnapshotMutableState<Int> {
 
-    private var next = IntStateStateRecord(value)
+    private var next = IntStateStateRecord(value).also {
+        if (Snapshot.isInSnapshot) {
+            it.next = IntStateStateRecord(value).also { next ->
+                next.snapshotId = Snapshot.PreexistingSnapshotId
+            }
+        }
+    }
 
     override val firstStateRecord: StateRecord
         get() = next

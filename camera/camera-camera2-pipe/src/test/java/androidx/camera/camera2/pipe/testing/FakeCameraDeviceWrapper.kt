@@ -21,15 +21,16 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.InputConfiguration
 import android.os.Build
-import android.os.Handler
 import android.view.Surface
 import androidx.annotation.RequiresApi
+import androidx.camera.camera2.pipe.AudioRestrictionMode
 import androidx.camera.camera2.pipe.CameraId
 import androidx.camera.camera2.pipe.RequestTemplate
 import androidx.camera.camera2.pipe.compat.Api23Compat
 import androidx.camera.camera2.pipe.compat.CameraCaptureSessionWrapper
 import androidx.camera.camera2.pipe.compat.CameraDeviceWrapper
 import androidx.camera.camera2.pipe.compat.CameraExtensionSessionWrapper
+import androidx.camera.camera2.pipe.compat.ExtensionSessionConfigData
 import androidx.camera.camera2.pipe.compat.InputConfigData
 import androidx.camera.camera2.pipe.compat.OutputConfigurationWrapper
 import androidx.camera.camera2.pipe.compat.SessionConfigData
@@ -63,8 +64,7 @@ internal class FakeCameraDeviceWrapper(val fakeCamera: RobolectricCameras.FakeCa
 
     override fun createCaptureSession(
         outputs: List<Surface>,
-        stateCallback: CameraCaptureSessionWrapper.StateCallback,
-        handler: Handler?
+        stateCallback: CameraCaptureSessionWrapper.StateCallback
     ): Boolean {
         createFakeCaptureSession(stateCallback)
         return true
@@ -78,8 +78,7 @@ internal class FakeCameraDeviceWrapper(val fakeCamera: RobolectricCameras.FakeCa
     override fun createReprocessableCaptureSession(
         input: InputConfiguration,
         outputs: List<Surface>,
-        stateCallback: CameraCaptureSessionWrapper.StateCallback,
-        handler: Handler?
+        stateCallback: CameraCaptureSessionWrapper.StateCallback
     ): Boolean {
         createFakeCaptureSession(stateCallback)
         return true
@@ -87,8 +86,7 @@ internal class FakeCameraDeviceWrapper(val fakeCamera: RobolectricCameras.FakeCa
 
     override fun createConstrainedHighSpeedCaptureSession(
         outputs: List<Surface>,
-        stateCallback: CameraCaptureSessionWrapper.StateCallback,
-        handler: Handler?
+        stateCallback: CameraCaptureSessionWrapper.StateCallback
     ): Boolean {
         createFakeCaptureSession(stateCallback)
         return true
@@ -96,8 +94,7 @@ internal class FakeCameraDeviceWrapper(val fakeCamera: RobolectricCameras.FakeCa
 
     override fun createCaptureSessionByOutputConfigurations(
         outputConfigurations: List<OutputConfigurationWrapper>,
-        stateCallback: CameraCaptureSessionWrapper.StateCallback,
-        handler: Handler?
+        stateCallback: CameraCaptureSessionWrapper.StateCallback
     ): Boolean {
         createFakeCaptureSession(stateCallback)
         return true
@@ -106,16 +103,25 @@ internal class FakeCameraDeviceWrapper(val fakeCamera: RobolectricCameras.FakeCa
     override fun createReprocessableCaptureSessionByConfigurations(
         inputConfig: InputConfigData,
         outputs: List<OutputConfigurationWrapper>,
-        stateCallback: CameraCaptureSessionWrapper.StateCallback,
-        handler: Handler?
+        stateCallback: CameraCaptureSessionWrapper.StateCallback
     ): Boolean {
         createFakeCaptureSession(stateCallback)
         return true
     }
 
-    override fun createExtensionSession(config: SessionConfigData): Boolean {
+    override fun createExtensionSession(config: ExtensionSessionConfigData): Boolean {
         createFakeExtensionSession(config.extensionStateCallback)
         return true
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    override fun getCameraAudioRestriction(): AudioRestrictionMode {
+        return AudioRestrictionMode(fakeCamera.cameraDevice.cameraAudioRestriction)
+    }
+
+    @RequiresApi(Build.VERSION_CODES.R)
+    override fun onCameraAudioRestrictionUpdated(mode: AudioRestrictionMode) {
+        fakeCamera.cameraDevice.cameraAudioRestriction = mode.value
     }
 
     override fun onDeviceClosed() {

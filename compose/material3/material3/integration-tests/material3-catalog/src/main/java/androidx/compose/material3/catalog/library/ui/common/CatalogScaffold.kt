@@ -36,13 +36,11 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.launch
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -59,9 +57,10 @@ fun CatalogScaffold(
     licensesUrl: String = LicensesUrl,
     onThemeChange: (theme: Theme) -> Unit,
     onBackClick: () -> Unit = {},
+    favorite: Boolean,
+    onFavoriteClick: () -> Unit,
     content: @Composable (PaddingValues) -> Unit
 ) {
-    val coroutineScope = rememberCoroutineScope()
     val context = LocalContext.current
     val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
     val sheetState = rememberModalBottomSheetState()
@@ -74,6 +73,8 @@ fun CatalogScaffold(
                 showBackNavigationIcon = showBackNavigationIcon,
                 scrollBehavior = scrollBehavior,
                 onBackClick = onBackClick,
+                favorite = favorite,
+                onFavoriteClick = onFavoriteClick,
                 onThemeClick = { openThemePicker = true },
                 onGuidelinesClick = { context.openUrl(guidelinesUrl) },
                 onDocsClick = { context.openUrl(docsUrl) },
@@ -96,16 +97,7 @@ fun CatalogScaffold(
             content = {
                 ThemePicker(
                     theme = theme,
-                    onThemeChange = { theme ->
-                        coroutineScope.launch {
-                            sheetState.hide()
-                            onThemeChange(theme)
-                        }.invokeOnCompletion {
-                            if (!sheetState.isVisible) {
-                                openThemePicker = false
-                            }
-                        }
-                    }
+                    onThemeChange = onThemeChange,
                 )
             },
         )

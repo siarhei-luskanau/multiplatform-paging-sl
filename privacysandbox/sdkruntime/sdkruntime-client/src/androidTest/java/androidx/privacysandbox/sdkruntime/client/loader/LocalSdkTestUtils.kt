@@ -16,12 +16,20 @@
 
 package androidx.privacysandbox.sdkruntime.client.loader
 
+import android.app.Activity
 import android.content.Context
 import android.os.Bundle
 import android.os.IBinder
+import androidx.lifecycle.Lifecycle
+import androidx.privacysandbox.sdkruntime.core.AppOwnedSdkSandboxInterfaceCompat
+import androidx.privacysandbox.sdkruntime.core.LoadSdkCompatException
 import androidx.privacysandbox.sdkruntime.core.SandboxedSdkCompat
 import androidx.privacysandbox.sdkruntime.core.SandboxedSdkProviderCompat
 import androidx.privacysandbox.sdkruntime.core.Versions
+import androidx.privacysandbox.sdkruntime.core.activity.SdkSandboxActivityHandlerCompat
+import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.Proxy
+import java.util.concurrent.CountDownLatch
 import kotlin.reflect.cast
 
 /**
@@ -72,15 +80,100 @@ internal fun LocalSdkProvider.extractSdkProviderClassloader(): ClassLoader =
  * Underlying TestSDK should implement and delegate to
  * [androidx.privacysandbox.sdkruntime.core.controller.SdkSandboxControllerCompat]:
  *  1) getSandboxedSdks() : List<SandboxedSdkCompat>
+ *  2) getAppOwnedSdkSandboxInterfaces() : List<AppOwnedSdkSandboxInterfaceCompat>
+ *  3) registerSdkSandboxActivityHandler(SdkSandboxActivityHandlerCompat) : IBinder
+ *  4) unregisterSdkSandboxActivityHandler(SdkSandboxActivityHandlerCompat)
+ *  5) loadSdk(sdkName, sdkParams) : SandboxedSdkCompat
  */
 internal class TestSdkWrapper(
     private val sdk: Any
 ) {
+    fun loadSdk(sdkName: String, sdkParams: Bundle): SandboxedSdkWrapper {
+        val loadSdkMethod = sdk.javaClass
+            .getMethod("loadSdk", String::class.java, Bundle::class.java)
+
+        try {
+            val rawSandboxedSdkCompat = loadSdkMethod.invoke(sdk, sdkName, sdkParams) as Any
+            return SandboxedSdkWrapper(rawSandboxedSdkCompat)
+        } catch (ex: InvocationTargetException) {
+            throw tryRebuildCompatException(ex.targetException)
+        }
+    }
+
+    private fun tryRebuildCompatException(rawException: Throwable): Throwable {
+        if (rawException.javaClass.name != LoadSdkCompatException::class.java.name) {
+            return rawException
+        }
+        val errorCode = rawException.callMethod("getLoadSdkErrorCode") as Int
+        val params = rawException.callMethod("getExtraInformation") as Bundle
+        return LoadSdkCompatException(
+            errorCode,
+            rawException.message,
+            rawException.cause,
+            params
+        )
+    }
+
     fun getSandboxedSdks(): List<SandboxedSdkWrapper> {
         val sdks = sdk.callMethod(
             methodName = "getSandboxedSdks"
         ) as List<*>
         return sdks.map { SandboxedSdkWrapper(it!!) }
+    }
+
+    fun getAppOwnedSdkSandboxInterfaces(): List<AppOwnedSdkWrapper> {
+        val sdks = sdk.callMethod(
+            methodName = "getAppOwnedSdkSandboxInterfaces"
+        ) as List<*>
+        return sdks.map { AppOwnedSdkWrapper(it!!) }
+    }
+
+    fun registerSdkSandboxActivityHandler(handler: CatchingSdkActivityHandler): IBinder {
+        val classLoader = sdk.javaClass.classLoader!!
+        val activityHandlerClass = Class.forName(
+            SdkSandboxActivityHandlerCompat::class.java.name,
+            false,
+            classLoader
+        )
+
+        val proxy = Proxy.newProxyInstance(
+            classLoader,
+            arrayOf(activityHandlerClass)
+        ) { proxy, method, args ->
+            when (method.name) {
+                "hashCode" -> hashCode()
+                "equals" -> proxy === args[0]
+                "onActivityCreated" -> handler.setResult(args[0])
+                else -> {
+                    throw UnsupportedOperationException(
+                        "Unexpected method call object:$proxy, method: $method, args: $args"
+                    )
+                }
+            }
+        }
+
+        val registerMethod = sdk.javaClass
+            .getMethod("registerSdkSandboxActivityHandler", activityHandlerClass)
+
+        val token = registerMethod.invoke(sdk, proxy) as IBinder
+        handler.proxy = proxy
+
+        return token
+    }
+
+    fun unregisterSdkSandboxActivityHandler(handler: CatchingSdkActivityHandler) {
+        val classLoader = sdk.javaClass.classLoader!!
+        val activityHandlerClass = Class.forName(
+            SdkSandboxActivityHandlerCompat::class.java.name,
+            false,
+            classLoader
+        )
+
+        val unregisterMethod = sdk.javaClass
+            .getMethod("unregisterSdkSandboxActivityHandler", activityHandlerClass)
+
+        unregisterMethod.invoke(sdk, handler.proxy)
+        handler.proxy = null
     }
 }
 
@@ -120,6 +213,77 @@ internal class SandboxedSdkWrapper(
         return sdk.callMethod(
             methodName = "getSdkInfo"
         )
+    }
+}
+
+/**
+ * Reflection wrapper for [AppOwnedSdkSandboxInterfaceCompat]
+ */
+internal class AppOwnedSdkWrapper(
+    private val sdk: Any
+) {
+    fun getName(): String {
+        return sdk.callMethod(
+            methodName = "getName"
+        ) as String
+    }
+
+    fun getVersion(): Long {
+        return sdk.callMethod(
+            methodName = "getVersion"
+        ) as Long
+    }
+
+    fun getInterface(): IBinder {
+        return sdk.callMethod(
+            methodName = "getInterface"
+        ) as IBinder
+    }
+}
+
+/**
+ * ActivityHandler to use with [TestSdkWrapper.registerSdkSandboxActivityHandler].
+ * Store received ActivityHolder.
+ */
+internal class CatchingSdkActivityHandler {
+    var proxy: Any? = null
+    var result: ActivityHolderWrapper? = null
+    val async = CountDownLatch(1)
+
+    fun waitForActivity(): ActivityHolderWrapper {
+        async.await()
+        return result!!
+    }
+}
+
+private fun CatchingSdkActivityHandler.setResult(activityHolder: Any) {
+    result = ActivityHolderWrapper(activityHolder)
+    async.countDown()
+}
+
+/**
+ * Reflection wrapper for [androidx.privacysandbox.sdkruntime.core.activity.ActivityHolder]
+ */
+internal class ActivityHolderWrapper(
+    private val activityHolder: Any
+) {
+    fun getActivity(): Activity {
+        return activityHolder.callMethod(
+            methodName = "getActivity"
+        ) as Activity
+    }
+
+    fun getLifeCycleCurrentState(): Lifecycle.State {
+        val lifecycle = activityHolder.callMethod(
+            methodName = "getLifecycle"
+        )
+        val currentState = lifecycle!!.callMethod(
+            methodName = "getCurrentState"
+        )
+        val currentStateString = currentState!!.callMethod(
+            methodName = "name"
+        ) as String
+        return Lifecycle.State.valueOf(currentStateString)
     }
 }
 

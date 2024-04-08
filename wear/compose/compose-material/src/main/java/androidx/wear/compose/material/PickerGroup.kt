@@ -40,6 +40,9 @@ import androidx.compose.ui.layout.ParentDataModifier
 import androidx.compose.ui.layout.Placeable
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
+import androidx.compose.ui.util.fastForEach
+import androidx.compose.ui.util.fastMap
+import androidx.compose.ui.util.fastMaxOfOrNull
 import androidx.wear.compose.foundation.ExperimentalWearFoundationApi
 import androidx.wear.compose.foundation.HierarchicalFocusCoordinator
 import androidx.wear.compose.foundation.rememberActiveFocusRequester
@@ -87,13 +90,11 @@ public fun PickerGroup(
     vararg pickers: PickerGroupItem,
     modifier: Modifier = Modifier,
     pickerGroupState: PickerGroupState = rememberPickerGroupState(),
-    @Suppress("PrimitiveInLambda")
     onSelected: (selectedIndex: Int) -> Unit = {},
     autoCenter: Boolean = true,
     propagateMinConstraints: Boolean = false,
     touchExplorationStateProvider: TouchExplorationStateProvider =
         DefaultTouchExplorationStateProvider(),
-    @Suppress("PrimitiveInLambda")
     separator: (@Composable (Int) -> Unit)? = null
 ) {
     val touchExplorationServicesEnabled by touchExplorationStateProvider.touchExplorationState()
@@ -245,7 +246,6 @@ public class PickerGroupItem(
     val focusRequester: FocusRequester? = null,
     val onSelected: () -> Unit = {},
     val readOnlyLabel: @Composable (BoxScope.() -> Unit)? = null,
-    @Suppress("PrimitiveInLambda")
     val option: @Composable PickerScope.(optionIndex: Int, pickerSelected: Boolean) -> Unit
 )
 
@@ -269,7 +269,7 @@ private fun AutoCenteringRow(
         } else {
             parentConstraints.copy(minWidth = 0, minHeight = 0)
         }
-        val placeables = measurables.map { it.measure(constraints) }
+        val placeables = measurables.fastMap { it.measure(constraints) }
         val centeringOffset = computeCenteringOffset(placeables)
         val rowWidth =
             if (constraints.hasBoundedWidth) constraints.maxWidth
@@ -277,7 +277,7 @@ private fun AutoCenteringRow(
         val rowHeight = calculateHeight(constraints, placeables)
         layout(width = rowWidth, height = rowHeight) {
             var x = rowWidth / 2f - centeringOffset
-            placeables.forEach {
+            placeables.fastForEach {
                 it.placeRelative(x.roundToInt(), ((rowHeight - it.height) / 2f).roundToInt())
                 x += it.width
             }
@@ -307,7 +307,7 @@ private fun Modifier.scrollablePicker(
  */
 private fun computeCenteringOffset(placeables: List<Placeable>): Int {
     var sumWidth = 0
-    placeables.forEach { p ->
+    placeables.fastForEach { p ->
         if (p.isAutoCenteringTarget()) {
             // The target centering offset is at the middle of this child.
             return sumWidth + p.width / 2
@@ -325,7 +325,7 @@ private fun computeCenteringOffset(placeables: List<Placeable>): Int {
  * [Constraints].
  */
 private fun calculateHeight(constraints: Constraints, placeables: List<Placeable>): Int {
-    val maxChildrenHeight = placeables.maxOf { it.height }
+    val maxChildrenHeight = placeables.fastMaxOfOrNull { it.height }!!
     return maxChildrenHeight.coerceIn(constraints.minHeight, constraints.maxHeight)
 }
 

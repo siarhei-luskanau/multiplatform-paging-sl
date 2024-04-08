@@ -37,11 +37,7 @@ class BroadcastFrameClock(
     private val onNewAwaiters: (() -> Unit)? = null
 ) : MonotonicFrameClock {
 
-    private class FrameAwaiter<R>(
-        @Suppress("PrimitiveInLambda")
-        val onFrame: (Long) -> R,
-        val continuation: Continuation<R>
-    ) {
+    private class FrameAwaiter<R>(val onFrame: (Long) -> R, val continuation: Continuation<R>) {
         fun resume(timeNanos: Long) {
             continuation.resumeWith(runCatching { onFrame(timeNanos) })
         }
@@ -52,10 +48,14 @@ class BroadcastFrameClock(
     private var awaiters = mutableListOf<FrameAwaiter<*>>()
     private var spareList = mutableListOf<FrameAwaiter<*>>()
 
+    // Uses AtomicInt to avoid adding AtomicBoolean to the Expect/Actual requirements of the
+    // runtime.
+    private val hasAwaitersUnlocked = AtomicInt(0)
+
     /**
      * `true` if there are any callers of [withFrameNanos] awaiting to run for a pending frame.
      */
-    val hasAwaiters: Boolean get() = synchronized(lock) { awaiters.isNotEmpty() }
+    val hasAwaiters: Boolean get() = hasAwaitersUnlocked.get() != 0
 
     /**
      * Send a frame for time [timeNanos] to all current callers of [withFrameNanos].
@@ -70,6 +70,7 @@ class BroadcastFrameClock(
             val toResume = awaiters
             awaiters = spareList
             spareList = toResume
+            hasAwaitersUnlocked.set(0)
 
             for (i in 0 until toResume.size) {
                 toResume[i].resume(timeNanos)
@@ -79,7 +80,6 @@ class BroadcastFrameClock(
     }
 
     override suspend fun <R> withFrameNanos(
-        @Suppress("PrimitiveInLambda")
         onFrame: (Long) -> R
     ): R = suspendCancellableCoroutine { co ->
         lateinit var awaiter: FrameAwaiter<R>
@@ -92,12 +92,14 @@ class BroadcastFrameClock(
             awaiter = FrameAwaiter(onFrame, co)
             val hadAwaiters = awaiters.isNotEmpty()
             awaiters.add(awaiter)
+            if (!hadAwaiters) hasAwaitersUnlocked.set(1)
             !hadAwaiters
         }
 
         co.invokeOnCancellation {
             synchronized(lock) {
                 awaiters.remove(awaiter)
+                if (awaiters.isEmpty()) hasAwaitersUnlocked.set(0)
             }
         }
 
@@ -121,6 +123,7 @@ class BroadcastFrameClock(
                 awaiter.continuation.resumeWithException(cause)
             }
             awaiters.clear()
+            hasAwaitersUnlocked.set(0)
         }
     }
 

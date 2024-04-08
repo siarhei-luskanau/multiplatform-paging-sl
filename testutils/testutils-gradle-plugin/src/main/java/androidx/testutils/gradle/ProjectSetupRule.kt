@@ -209,10 +209,6 @@ class ProjectSetupRule(parentFolder: File? = null) : ExternalResource() {
 }
 
 // TODO(b/233600239): document the rest of the parameters
-/**
- * @param buildSrcOutPath: absolute path to folder where outputs from buildSrc builds can be found
- *                         (perhaps something like $HOME/src/androidx-main/out/buildSrc)
- */
 data class ProjectProps(
     val compileSdkVersion: String,
     val buildToolsVersion: String,
@@ -220,18 +216,29 @@ data class ProjectProps(
     val debugKeystore: String,
     var navigationRuntime: String,
     val kotlinStblib: String,
-    val kotlinVersion: String,
+    val kgpVersion: String,
+    val kgpDependency: String,
     val kspVersion: String,
     val rootProjectPath: String,
     val tipOfTreeMavenRepoPath: String,
     val agpDependency: String,
     val repositoryUrls: List<String>,
-    val buildSrcOutPath: String
+    // Not available in playground projects.
+    val prebuiltsPath: String?,
 ) {
     companion object {
         private fun Properties.getCanonicalPath(key: String): String {
             return File(getProperty(key)).canonicalPath
         }
+
+        private fun Properties.getOptionalCanonicalPath(key: String): String? {
+            return if (containsKey(key)) {
+                getCanonicalPath(key)
+            } else {
+                null
+            }
+        }
+
         fun load(): ProjectProps {
             val stream = ProjectSetupRule::class.java.classLoader.getResourceAsStream("sdk.prop")
                 ?: throw IllegalStateException("No sdk.prop file found. " +
@@ -262,10 +269,12 @@ data class ProjectProps(
                 minSdkVersion = properties.getProperty("minSdkVersion"),
                 navigationRuntime = properties.getProperty("navigationRuntime"),
                 kotlinStblib = properties.getProperty("kotlinStdlib"),
-                kotlinVersion = properties.getProperty("kotlinVersion"),
+                kgpVersion = properties.getProperty("kgpVersion"),
+                kgpDependency = "org.jetbrains.kotlin:kotlin-gradle-plugin:" +
+                    properties.getProperty("kgpVersion"),
                 kspVersion = properties.getProperty("kspVersion"),
                 agpDependency = properties.getProperty("agpDependency"),
-                buildSrcOutPath = properties.getCanonicalPath("buildSrcOutRelativePath")
+                prebuiltsPath = properties.getOptionalCanonicalPath("prebuiltsRelativePath"),
             )
         }
     }

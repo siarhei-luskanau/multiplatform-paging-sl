@@ -19,7 +19,10 @@ package androidx.mediarouter.app;
 import static androidx.mediarouter.media.MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTED;
 import static androidx.mediarouter.media.MediaRouter.RouteInfo.CONNECTION_STATE_CONNECTING;
 
+import android.content.BroadcastReceiver;
 import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.res.TypedArray;
 import android.graphics.drawable.Drawable;
 import android.net.Uri;
@@ -98,6 +101,7 @@ public class MediaRouteChooserDialog extends AppCompatDialog {
     private ProgressBar mSearchingProgressBar;
     private ListView mListView;
     private RouteAdapter mAdapter;
+    private ScreenOnOffReceiver mScreenOnOffReceiver;
 
     private boolean mAttachedToWindow;
     private long mLastUpdateTime;
@@ -140,6 +144,7 @@ public class MediaRouteChooserDialog extends AppCompatDialog {
 
         mRouter = MediaRouter.getInstance(context);
         mCallback = new MediaRouterCallback();
+        mScreenOnOffReceiver = new ScreenOnOffReceiver();
     }
 
     /**
@@ -237,10 +242,7 @@ public class MediaRouteChooserDialog extends AppCompatDialog {
         mOkButton = findViewById(R.id.mr_chooser_ok_button);
         mSearchingProgressBar = findViewById(R.id.mr_chooser_search_progress_bar);
 
-
-        String formFactor = DeviceUtils.getDeviceFormFactorString(getContext());
-        String wifiWarningText =
-                getContext().getString(R.string.mr_chooser_wifi_warning_description, formFactor);
+        String wifiWarningText = DeviceUtils.getDialogChooserWifiWarningDescription(getContext());
         mWifiWarningTextView.setText(wifiWarningText);
 
         mLearnMoreTextView.setMovementMethod(LinkMovementMethod.getInstance());
@@ -252,6 +254,27 @@ public class MediaRouteChooserDialog extends AppCompatDialog {
         mListView.setEmptyView(findViewById(android.R.id.empty));
 
         updateLayout();
+
+        registerBroadcastReceiver();
+    }
+
+    private void registerBroadcastReceiver() {
+        IntentFilter filter = new IntentFilter(Intent.ACTION_SCREEN_OFF);
+        getContext().registerReceiver(mScreenOnOffReceiver, filter);
+    }
+
+    @Override
+    public void dismiss() {
+        unregisterBroadcastReceiver();
+        super.dismiss();
+    }
+
+    private void unregisterBroadcastReceiver() {
+        try {
+            getContext().unregisterReceiver(mScreenOnOffReceiver);
+        } catch (IllegalArgumentException e) {
+            // May already be unregistered; ignore.
+        }
     }
 
     /**
@@ -483,16 +506,14 @@ public class MediaRouteChooserDialog extends AppCompatDialog {
         @Override
         public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
             MediaRouter.RouteInfo route = getItem(position);
-            if (route.isEnabled()) {
-                ImageView iconView = view.findViewById(R.id.mr_chooser_route_icon);
-                ProgressBar progressBar = view.findViewById(R.id.mr_chooser_route_progress_bar);
-                // Show the progress bar
-                if (iconView != null && progressBar != null) {
-                    iconView.setVisibility(View.GONE);
-                    progressBar.setVisibility(View.VISIBLE);
-                }
-                route.select();
+            ImageView iconView = view.findViewById(R.id.mr_chooser_route_icon);
+            ProgressBar progressBar = view.findViewById(R.id.mr_chooser_route_progress_bar);
+            // Show the progress bar
+            if (iconView != null && progressBar != null) {
+                iconView.setVisibility(View.GONE);
+                progressBar.setVisibility(View.VISIBLE);
             }
+            route.select();
         }
 
         private Drawable getIconDrawable(MediaRouter.RouteInfo route) {
@@ -517,7 +538,7 @@ public class MediaRouteChooserDialog extends AppCompatDialog {
             switch (route.getDeviceType()) {
                 case MediaRouter.RouteInfo.DEVICE_TYPE_TV:
                     return mTvIcon;
-                case MediaRouter.RouteInfo.DEVICE_TYPE_SPEAKER:
+                case MediaRouter.RouteInfo.DEVICE_TYPE_REMOTE_SPEAKER:
                     return mSpeakerIcon;
             }
 
@@ -564,6 +585,15 @@ public class MediaRouteChooserDialog extends AppCompatDialog {
         @Override
         public int compare(MediaRouter.RouteInfo lhs, MediaRouter.RouteInfo rhs) {
             return lhs.getName().compareToIgnoreCase(rhs.getName());
+        }
+    }
+
+    final class ScreenOnOffReceiver extends BroadcastReceiver {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (Intent.ACTION_SCREEN_OFF.equals(intent.getAction())) {
+                dismiss();
+            }
         }
     }
 }

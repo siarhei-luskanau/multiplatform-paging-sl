@@ -38,9 +38,8 @@ import org.gradle.workers.WorkerExecutor
  * in another.
  */
 @CacheableTask
-abstract class CheckApiCompatibilityTask @Inject constructor(
-    workerExecutor: WorkerExecutor
-) : MetalavaTask(workerExecutor) {
+abstract class CheckApiCompatibilityTask @Inject constructor(workerExecutor: WorkerExecutor) :
+    MetalavaTask(workerExecutor) {
     // Text file from which the API signatures will be obtained.
     @get:Internal // already expressed by getTaskInputs()
     abstract val referenceApi: Property<ApiLocation>
@@ -54,8 +53,7 @@ abstract class CheckApiCompatibilityTask @Inject constructor(
     abstract val baselines: Property<ApiBaselinesLocation>
 
     // Version for the current API surface.
-    @get:Input
-    abstract val version: Property<Version>
+    @get:Input abstract val version: Property<Version>
 
     @PathSensitive(PathSensitivity.RELATIVE)
     @InputFiles
@@ -66,10 +64,8 @@ abstract class CheckApiCompatibilityTask @Inject constructor(
         return listOf(
             apiLocation.publicApiFile,
             apiLocation.restrictedApiFile,
-            apiLocation.removedApiFile,
             referenceApiLocation.publicApiFile,
             referenceApiLocation.restrictedApiFile,
-            referenceApiLocation.removedApiFile,
             baselineApiLocation.publicApiFile,
             baselineApiLocation.restrictedApiFile
         )
@@ -92,9 +88,7 @@ abstract class CheckApiCompatibilityTask @Inject constructor(
 
         checkApiFile(
             apiLocation.publicApiFile,
-            apiLocation.removedApiFile,
             referenceApiLocation.publicApiFile,
-            referenceApiLocation.removedApiFile,
             baselineApiLocation.publicApiFile,
             referenceVersion,
             freezeApis,
@@ -103,9 +97,7 @@ abstract class CheckApiCompatibilityTask @Inject constructor(
         if (referenceApiLocation.restrictedApiFile.exists()) {
             checkApiFile(
                 apiLocation.restrictedApiFile,
-                null, // removed api
                 referenceApiLocation.restrictedApiFile,
-                null, // removed api
                 baselineApiLocation.restrictedApiFile,
                 referenceVersion,
                 freezeApis,
@@ -113,43 +105,31 @@ abstract class CheckApiCompatibilityTask @Inject constructor(
         }
     }
 
-    // Confirms that <api>+<removedApi> is compatible with
-    // <oldApi>+<oldRemovedApi> except for any baselines listed in <baselineFile>
+    // Confirms that <api> <oldApi> except for any baselines listed in <baselineFile>
     private fun checkApiFile(
         api: File,
-        removedApi: File?,
         oldApi: File,
-        oldRemovedApi: File?,
         baselineFile: File,
         referenceVersion: Version?,
         freezeApis: Boolean,
     ) {
-        var args = listOf(
-            "--classpath",
-            (bootClasspath + dependencyClasspath.files).joinToString(File.pathSeparator),
-
-            "--source-files",
-            api.toString(),
-
-            "--check-compatibility:api:released",
-            oldApi.toString(),
-
-            "--error-message:compatibility:released",
-            if (freezeApis && referenceVersion != null) {
-                createFrozenCompatibilityCheckError(referenceVersion.toString())
-            } else {
-                CompatibilityCheckError
-            },
-
-            "--warnings-as-errors",
-            "--format=v3"
-        )
-        if (removedApi != null && removedApi.exists()) {
-            args = args + listOf("--source-files", removedApi.toString())
-        }
-        if (oldRemovedApi != null && oldRemovedApi.exists()) {
-            args = args + listOf("--check-compatibility:removed:released", oldRemovedApi.toString())
-        }
+        var args =
+            listOf(
+                "--classpath",
+                (bootClasspath + dependencyClasspath.files).joinToString(File.pathSeparator),
+                "--source-files",
+                api.toString(),
+                "--check-compatibility:api:released",
+                oldApi.toString(),
+                "--error-message:compatibility:released",
+                if (freezeApis && referenceVersion != null) {
+                    createFrozenCompatibilityCheckError(referenceVersion.toString())
+                } else {
+                    CompatibilityCheckError
+                },
+                "--warnings-as-errors",
+                "--format=v3"
+            )
         if (baselineFile.exists()) {
             args = args + listOf("--baseline", baselineFile.toString())
         }
@@ -166,16 +146,18 @@ fun shouldFreezeApis(referenceVersion: Version?, currentVersion: Version) =
         currentVersion.minor == referenceVersion.minor &&
         referenceVersion.isFinalApi()
 
-private const val CompatibilityCheckError = """
+private const val CompatibilityCheckError =
+    """
     ${TERMINAL_RED}Your change has API compatibility issues. Fix the code according to the messages above.$TERMINAL_RESET
 
     If you *intentionally* want to break compatibility, you can suppress it with
-    ./gradlew ignoreApiChange && ./gradlew updateApi
+    ./gradlew ignoreApiChanges && ./gradlew updateApi
 """
 
-private fun createFrozenCompatibilityCheckError(referenceVersion: String) = """
+private fun createFrozenCompatibilityCheckError(referenceVersion: String) =
+    """
     ${TERMINAL_RED}The API surface was finalized in $referenceVersion. Revert the changes noted in the errors above.$TERMINAL_RESET
 
     If you have obtained permission from Android API Council or Jetpack Working Group to bypass this policy, you can suppress this check with:
-    ./gradlew ignoreApiChange && ./gradlew updateApi
+    ./gradlew ignoreApiChanges && ./gradlew updateApi
 """

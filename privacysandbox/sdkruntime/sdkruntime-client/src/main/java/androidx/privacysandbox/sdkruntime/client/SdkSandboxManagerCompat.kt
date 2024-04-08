@@ -16,23 +16,27 @@
 package androidx.privacysandbox.sdkruntime.client
 
 import android.annotation.SuppressLint
+import android.app.Activity
 import android.app.sdksandbox.LoadSdkException
 import android.app.sdksandbox.SandboxedSdk
 import android.app.sdksandbox.SdkSandboxManager
 import android.content.Context
+import android.os.Build
 import android.os.Bundle
-import android.os.ext.SdkExtensions.AD_SERVICES
+import android.os.IBinder
 import androidx.annotation.DoNotInline
 import androidx.annotation.RequiresApi
-import androidx.annotation.RequiresExtension
+import androidx.core.os.BuildCompat
 import androidx.core.os.asOutcomeReceiver
-import androidx.privacysandbox.sdkruntime.client.config.LocalSdkConfigsHolder
-import androidx.privacysandbox.sdkruntime.client.controller.LocalController
-import androidx.privacysandbox.sdkruntime.client.controller.LocallyLoadedSdks
-import androidx.privacysandbox.sdkruntime.client.loader.SdkLoader
+import androidx.privacysandbox.sdkruntime.client.activity.LocalSdkActivityStarter
+import androidx.privacysandbox.sdkruntime.client.controller.AppOwnedSdkRegistry
+import androidx.privacysandbox.sdkruntime.client.controller.impl.LocalAppOwnedSdkRegistry
+import androidx.privacysandbox.sdkruntime.client.controller.impl.LocalSdkRegistry
+import androidx.privacysandbox.sdkruntime.client.controller.impl.PlatformAppOwnedSdkRegistry
+import androidx.privacysandbox.sdkruntime.client.loader.VersionHandshake
 import androidx.privacysandbox.sdkruntime.core.AdServicesInfo
+import androidx.privacysandbox.sdkruntime.core.AppOwnedSdkSandboxInterfaceCompat
 import androidx.privacysandbox.sdkruntime.core.LoadSdkCompatException
-import androidx.privacysandbox.sdkruntime.core.LoadSdkCompatException.Companion.LOAD_SDK_ALREADY_LOADED
 import androidx.privacysandbox.sdkruntime.core.LoadSdkCompatException.Companion.LOAD_SDK_NOT_FOUND
 import androidx.privacysandbox.sdkruntime.core.LoadSdkCompatException.Companion.toLoadCompatSdkException
 import androidx.privacysandbox.sdkruntime.core.SandboxedSdkCompat
@@ -86,9 +90,8 @@ import org.jetbrains.annotations.TestOnly
  */
 class SdkSandboxManagerCompat private constructor(
     private val platformApi: PlatformApi,
-    private val configHolder: LocalSdkConfigsHolder,
-    private val localLocallyLoadedSdks: LocallyLoadedSdks,
-    private val sdkLoader: SdkLoader
+    private val localSdkRegistry: LocalSdkRegistry,
+    private val appOwnedSdkRegistry: AppOwnedSdkRegistry
 ) {
     /**
      * Load SDK in a SDK sandbox java process or locally.
@@ -119,24 +122,28 @@ class SdkSandboxManagerCompat private constructor(
         sdkName: String,
         params: Bundle
     ): SandboxedSdkCompat {
-        if (localLocallyLoadedSdks.isLoaded(sdkName)) {
-            throw LoadSdkCompatException(LOAD_SDK_ALREADY_LOADED, "$sdkName already loaded")
+        val isLocalSdk = localSdkRegistry.isResponsibleFor(sdkName)
+        if (isLocalSdk) {
+            return localSdkRegistry.loadSdk(sdkName, params)
         }
-
-        val sdkConfig = configHolder.getSdkConfig(sdkName)
-        if (sdkConfig != null) {
-            val sdkProvider = sdkLoader.loadSdk(sdkConfig)
-            val sandboxedSdkCompat = sdkProvider.onLoadSdk(params)
-            localLocallyLoadedSdks.put(
-                sdkName, LocallyLoadedSdks.Entry(
-                    sdkProvider = sdkProvider,
-                    sdk = sandboxedSdkCompat
-                )
-            )
-            return sandboxedSdkCompat
-        }
-
         return platformApi.loadSdk(sdkName, params)
+    }
+
+    /**
+     * Load local SDK using different client-core protocol version [apiVersion].
+     *
+     * Could be used for:
+     * 1) Testing features in development (force future version for SDK binary with feature impl)
+     * 2) Testing loading newest SDK versions via old protocol version.
+     */
+    @TestOnly
+    internal fun loadLocalSdkWithVersionOverride(
+        sdkName: String,
+        params: Bundle,
+        apiVersion: Int
+    ): SandboxedSdkCompat {
+        val customHandshake = VersionHandshake(overrideApiVersion = apiVersion)
+        return localSdkRegistry.loadSdk(sdkName, params, customHandshake)
     }
 
     /**
@@ -149,11 +156,11 @@ class SdkSandboxManagerCompat private constructor(
      * @see [SdkSandboxManager.unloadSdk]
      */
     fun unloadSdk(sdkName: String) {
-        val localEntry = localLocallyLoadedSdks.remove(sdkName)
-        if (localEntry == null) {
-            platformApi.unloadSdk(sdkName)
+        val isLocalSdk = localSdkRegistry.isResponsibleFor(sdkName)
+        if (isLocalSdk) {
+            localSdkRegistry.unloadSdk(sdkName)
         } else {
-            localEntry.sdkProvider.beforeUnloadSdk()
+            platformApi.unloadSdk(sdkName)
         }
     }
 
@@ -200,13 +207,60 @@ class SdkSandboxManagerCompat private constructor(
      */
     fun getSandboxedSdks(): List<SandboxedSdkCompat> {
         val platformResult = platformApi.getSandboxedSdks()
-        val localResult = localLocallyLoadedSdks.getLoadedSdks()
+        val localResult = localSdkRegistry.getLoadedSdks()
         return platformResult + localResult
     }
 
-    @TestOnly
-    internal fun getLocallyLoadedSdk(sdkName: String): LocallyLoadedSdks.Entry? =
-        localLocallyLoadedSdks.get(sdkName)
+    /**
+     * Registers [AppOwnedSdkSandboxInterfaceCompat] for an app process.
+     *
+     * Registering an [AppOwnedSdkSandboxInterfaceCompat] that has same name as a previously
+     * registered interface will result in [IllegalStateException].
+     *
+     * [AppOwnedSdkSandboxInterfaceCompat.name] refers to the name of the interface.
+     *
+     * @param appOwnedSdk the [AppOwnedSdkSandboxInterfaceCompat] to be registered
+     */
+    fun registerAppOwnedSdkSandboxInterface(appOwnedSdk: AppOwnedSdkSandboxInterfaceCompat) {
+        appOwnedSdkRegistry.registerAppOwnedSdkSandboxInterface(appOwnedSdk)
+    }
+
+    /**
+     * Unregisters [AppOwnedSdkSandboxInterfaceCompat] for an app process.
+     *
+     * @param sdkName the name under which [AppOwnedSdkSandboxInterfaceCompat] was registered.
+     */
+    fun unregisterAppOwnedSdkSandboxInterface(sdkName: String) {
+        appOwnedSdkRegistry.unregisterAppOwnedSdkSandboxInterface(sdkName)
+    }
+
+    /**
+     * Fetches all [AppOwnedSdkSandboxInterfaceCompat] that are registered by the app.
+     *
+     * @return List of all currently registered [AppOwnedSdkSandboxInterfaceCompat]
+     */
+    fun getAppOwnedSdkSandboxInterfaces(): List<AppOwnedSdkSandboxInterfaceCompat> =
+        appOwnedSdkRegistry.getAppOwnedSdkSandboxInterfaces()
+
+    /**
+     * Starts an [Activity] in the SDK sandbox.
+     *
+     * This function will start a new [Activity] in the same task of the passed `fromActivity` and
+     * pass it to the SDK that shared the passed `sdkActivityToken` that identifies a request from
+     * that SDK to stat this [Activity].
+     *
+     * @param fromActivity the [Activity] will be used to start the new sandbox [Activity] by
+     * calling [Activity#startActivity] against it.
+     * @param sdkActivityToken the identifier that is shared by the SDK which requests the
+     * [Activity].
+     * @see SdkSandboxManager.startSdkSandboxActivity
+     */
+    fun startSdkSandboxActivity(fromActivity: Activity, sdkActivityToken: IBinder) {
+        if (LocalSdkActivityStarter.tryStart(fromActivity, sdkActivityToken)) {
+            return
+        }
+        platformApi.startSdkSandboxActivity(fromActivity, sdkActivityToken)
+    }
 
     private interface PlatformApi {
         @DoNotInline
@@ -227,12 +281,13 @@ class SdkSandboxManagerCompat private constructor(
         )
 
         @DoNotInline
-        fun getSandboxedSdks(): List<SandboxedSdkCompat> = emptyList()
+        fun getSandboxedSdks(): List<SandboxedSdkCompat>
+
+        fun startSdkSandboxActivity(fromActivity: Activity, sdkActivityToken: IBinder)
     }
 
-    @RequiresApi(33)
-    @RequiresExtension(extension = AD_SERVICES, version = 4)
-    private open class ApiAdServicesV4Impl(context: Context) : PlatformApi {
+    @RequiresApi(34)
+    private open class Api34Impl(context: Context) : PlatformApi {
         protected val sdkSandboxManager = context.getSystemService(
             SdkSandboxManager::class.java
         )
@@ -255,6 +310,12 @@ class SdkSandboxManagerCompat private constructor(
 
         override fun unloadSdk(sdkName: String) {
             sdkSandboxManager.unloadSdk(sdkName)
+        }
+
+        override fun getSandboxedSdks(): List<SandboxedSdkCompat> {
+            return sdkSandboxManager
+                .sandboxedSdks
+                .map { platformSdk -> SandboxedSdkCompat(platformSdk) }
         }
 
         @DoNotInline
@@ -284,6 +345,10 @@ class SdkSandboxManagerCompat private constructor(
             }
         }
 
+        override fun startSdkSandboxActivity(fromActivity: Activity, sdkActivityToken: IBinder) {
+            sdkSandboxManager.startSdkSandboxActivity(fromActivity, sdkActivityToken)
+        }
+
         private suspend fun loadSdkInternal(
             sdkName: String,
             params: Bundle
@@ -308,19 +373,6 @@ class SdkSandboxManagerCompat private constructor(
         }
     }
 
-    @RequiresApi(33)
-    @RequiresExtension(extension = AD_SERVICES, version = 5)
-    private class ApiAdServicesV5Impl(
-        context: Context
-    ) : ApiAdServicesV4Impl(context) {
-        @DoNotInline
-        override fun getSandboxedSdks(): List<SandboxedSdkCompat> {
-            return sdkSandboxManager
-                .sandboxedSdks
-                .map { platformSdk -> SandboxedSdkCompat(platformSdk) }
-        }
-    }
-
     private class FailImpl : PlatformApi {
         @DoNotInline
         override suspend fun loadSdk(
@@ -333,6 +385,8 @@ class SdkSandboxManagerCompat private constructor(
         override fun unloadSdk(sdkName: String) {
         }
 
+        override fun getSandboxedSdks(): List<SandboxedSdkCompat> = emptyList()
+
         override fun addSdkSandboxProcessDeathCallback(
             callbackExecutor: Executor,
             callback: SdkSandboxProcessDeathCallbackCompat
@@ -342,6 +396,9 @@ class SdkSandboxManagerCompat private constructor(
         override fun removeSdkSandboxProcessDeathCallback(
             callback: SdkSandboxProcessDeathCallbackCompat
         ) {
+        }
+
+        override fun startSdkSandboxActivity(fromActivity: Activity, sdkActivityToken: IBinder) {
         }
     }
 
@@ -362,16 +419,13 @@ class SdkSandboxManagerCompat private constructor(
                 val reference = sInstances[context]
                 var instance = reference?.get()
                 if (instance == null) {
-                    val configHolder = LocalSdkConfigsHolder.load(context)
-                    val localSdks = LocallyLoadedSdks()
-                    val controller = LocalController(localSdks)
-                    val sdkLoader = SdkLoader.create(context, controller)
+                    val appOwnedSdkRegistry = AppOwnedSdkRegistryFactory.create(context)
+                    val localSdkRegistry = LocalSdkRegistry.create(context, appOwnedSdkRegistry)
                     val platformApi = PlatformApiFactory.create(context)
                     instance = SdkSandboxManagerCompat(
                         platformApi,
-                        configHolder,
-                        localSdks,
-                        sdkLoader
+                        localSdkRegistry,
+                        appOwnedSdkRegistry
                     )
                     sInstances[context] = WeakReference(instance)
                 }
@@ -388,14 +442,24 @@ class SdkSandboxManagerCompat private constructor(
     }
 
     private object PlatformApiFactory {
-        @SuppressLint("NewApi", "ClassVerificationFailure")
         fun create(context: Context): PlatformApi {
-            return if (AdServicesInfo.isAtLeastV5()) {
-                ApiAdServicesV5Impl(context)
-            } else if (AdServicesInfo.isAtLeastV4()) {
-                ApiAdServicesV4Impl(context)
+            return if (Build.VERSION.SDK_INT >= 34 || AdServicesInfo.isDeveloperPreview()) {
+                Api34Impl(context)
             } else {
                 FailImpl()
+            }
+        }
+    }
+
+    private object AppOwnedSdkRegistryFactory {
+        @SuppressLint("NewApi", "ClassVerificationFailure") // For supporting DP Builds
+        fun create(context: Context): AppOwnedSdkRegistry {
+            return if (BuildCompat.AD_SERVICES_EXTENSION_INT >= 8 ||
+                AdServicesInfo.isDeveloperPreview()
+            ) {
+                PlatformAppOwnedSdkRegistry(context)
+            } else {
+                LocalAppOwnedSdkRegistry()
             }
         }
     }

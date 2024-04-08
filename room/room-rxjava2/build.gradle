@@ -14,6 +14,13 @@
  * limitations under the License.
  */
 
+/**
+ * This file was created using the `create_project.py` script located in the
+ * `<AndroidX root>/development/project-creator` directory.
+ *
+ * Please use that script when creating a new project, rather than copying an existing project and
+ * modifying its settings.
+ */
 import androidx.build.Publish
 
 plugins {
@@ -30,7 +37,7 @@ dependencies {
     implementation("androidx.arch.core:core-runtime:2.2.0")
     implementation(libs.kotlinStdlib)
 
-    testImplementation(project(":internal-testutils-kmp"))
+    testImplementation(project(":kruth:kruth"))
     testImplementation(libs.kotlinTest)
     testImplementation(libs.mockitoCore4)
     testImplementation(libs.mockitoKotlin4)
@@ -43,6 +50,7 @@ androidx {
     publish = Publish.SNAPSHOT_AND_RELEASE
     inceptionYear = "2017"
     description = "Android Room RXJava2"
+    metalavaK2UastEnabled = true
 }
 
 android {

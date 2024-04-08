@@ -18,35 +18,33 @@ package androidx.wear.protolayout.expression.pipeline;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 
 import androidx.test.ext.junit.runners.AndroidJUnit4;
+import androidx.wear.protolayout.expression.AppDataKey;
+import androidx.wear.protolayout.expression.DynamicBuilders;
 import androidx.wear.protolayout.expression.pipeline.InstantNodes.FixedInstantNode;
 import androidx.wear.protolayout.expression.pipeline.InstantNodes.PlatformTimeSourceNode;
+import androidx.wear.protolayout.expression.pipeline.InstantNodes.StateInstantSourceNode;
+import androidx.wear.protolayout.expression.proto.DynamicDataProto;
+import androidx.wear.protolayout.expression.proto.DynamicProto;
+import androidx.wear.protolayout.expression.proto.FixedProto;
 import androidx.wear.protolayout.expression.proto.FixedProto.FixedInstant;
 
-import org.junit.Rule;
+import com.google.common.collect.ImmutableMap;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
-import org.mockito.Captor;
-import org.mockito.junit.MockitoJUnit;
-import org.mockito.junit.MockitoRule;
 
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.Executor;
 
 @RunWith(AndroidJUnit4.class)
 public class InstantNodesTest {
-
-    @Rule public final MockitoRule mockito = MockitoJUnit.rule();
-
-    @Captor ArgumentCaptor<Runnable> mReceiverCaptor;
-    @Captor ArgumentCaptor<Executor> mExecutor;
-
     @Test
     public void testFixedInstant() {
         List<Instant> results = new ArrayList<>();
@@ -73,11 +71,55 @@ public class InstantNodesTest {
         node.init();
         assertThat(timeSource.getRegisterConsumersCount()).isEqualTo(1);
 
-        verify(notifier).setReceiver(mExecutor.capture(), mReceiverCaptor.capture());
-        mReceiverCaptor.getValue().run(); // Ticking.
+        ArgumentCaptor<Runnable> receiverCaptor = ArgumentCaptor.forClass(Runnable.class);
+        verify(notifier).setReceiver(any(), receiverCaptor.capture());
         assertThat(results).containsExactly(Instant.ofEpochSecond(1234567L));
 
         node.destroy();
         assertThat(timeSource.getRegisterConsumersCount()).isEqualTo(0);
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testPlatformTimeSourceNode_noEpochTime() {
+        PlatformTimeUpdateNotifier notifier = mock(PlatformTimeUpdateNotifier.class);
+        DynamicTypeValueReceiverWithPreUpdate<Instant> downstream =
+                mock(DynamicTypeValueReceiverWithPreUpdate.class);
+
+        PlatformTimeSourceNode node =
+                new PlatformTimeSourceNode(/* epochTimePlatformDataSource= */ null, downstream);
+
+        node.preInit();
+        verify(downstream).onPreUpdate();
+
+        node.init();
+        verify(downstream).onInvalidated();
+
+        node.destroy();
+    }
+
+    @Test
+    public void testStateInstant() {
+        long seconds = 1234567L;
+        String KEY_FOO = "foo";
+        List<Instant> results = new ArrayList<>();
+        StateStore oss =
+                new StateStore(
+                        ImmutableMap.of(
+                                new AppDataKey<DynamicBuilders.DynamicInstant>(KEY_FOO),
+                                DynamicDataProto.DynamicDataValue.newBuilder()
+                                        .setInstantVal(
+                                                FixedProto.FixedInstant.newBuilder()
+                                                        .setEpochSeconds(seconds))
+                                        .build()));
+        DynamicProto.StateInstantSource protoNode =
+                DynamicProto.StateInstantSource.newBuilder().setSourceKey(KEY_FOO).build();
+        StateInstantSourceNode node =
+                new StateInstantSourceNode(oss, protoNode, new AddToListCallback<>(results));
+
+        node.preInit();
+        node.init();
+
+        assertThat(results).containsExactly(Instant.ofEpochSecond(seconds));
     }
 }

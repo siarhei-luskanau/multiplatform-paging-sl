@@ -13,11 +13,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 @file:OptIn(InternalAnimationApi::class)
 
 package androidx.compose.animation
 
+import androidx.collection.mutableScatterMapOf
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Companion.Down
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Companion.End
 import androidx.compose.animation.AnimatedContentTransitionScope.SlideDirection.Companion.Left
@@ -68,6 +68,7 @@ import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.util.fastForEach
 import androidx.compose.ui.util.fastForEachIndexed
+import androidx.compose.ui.util.fastMaxOfOrNull
 
 /**
  * [AnimatedContent] is a container that automatically animates its content when [targetState]
@@ -283,9 +284,7 @@ infix fun EnterTransition.with(exit: ExitTransition) = ContentTransform(this, ex
  * [AnimatedContentTransitionScope] provides functions that are convenient and only applicable in the
  * context of [AnimatedContent], such as [slideIntoContainer] and [slideOutOfContainer].
  */
-
 sealed interface AnimatedContentTransitionScope<S> : Transition.Segment<S> {
-
     /**
      * Customizes the [SizeTransform] of a given [ContentTransform]. For example:
      *
@@ -349,7 +348,6 @@ sealed interface AnimatedContentTransitionScope<S> : Transition.Segment<S> {
         animationSpec: FiniteAnimationSpec<IntOffset> = spring(
             visibilityThreshold = IntOffset.VisibilityThreshold
         ),
-        @Suppress("PrimitiveInLambda")
         initialOffset: (offsetForFullSlide: Int) -> Int = { it }
     ): EnterTransition
 
@@ -379,14 +377,34 @@ sealed interface AnimatedContentTransitionScope<S> : Transition.Segment<S> {
         animationSpec: FiniteAnimationSpec<IntOffset> = spring(
             visibilityThreshold = IntOffset.VisibilityThreshold
         ),
-        @Suppress("PrimitiveInLambda")
         targetOffset: (offsetForFullSlide: Int) -> Int = { it }
     ): ExitTransition
+
+    /**
+     * [KeepUntilTransitionsFinished] defers the disposal of the exiting content till both enter and
+     * exit transitions have finished. It can be combined with other [ExitTransition]s using
+     * [+][ExitTransition.plus].
+     *
+     * **Important**: [KeepUntilTransitionsFinished] works the best when the
+     * [zIndex][ContentTransform.targetContentZIndex] for the incoming and outgoing content are
+     * specified. Otherwise, if the content gets interrupted from entering and switching to exiting
+     * using [KeepUntilTransitionsFinished], the holding pattern may render exiting content on top
+     * of the entering content, unless the z-order is specified.
+     *
+     * @sample androidx.compose.animation.samples.SlideIntoContainerSample
+     */
+    val ExitTransition.Companion.KeepUntilTransitionsFinished: ExitTransition
+        get() = KeepUntilTransitionsFinished
+
+    /**
+     * This returns the [Alignment] specified on [AnimatedContent].
+     */
+    val contentAlignment: Alignment
 }
 
 internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
     internal val transition: Transition<S>,
-    internal var contentAlignment: Alignment,
+    override var contentAlignment: Alignment,
     internal var layoutDirection: LayoutDirection
 ) : AnimatedContentTransitionScope<S> {
     /**
@@ -440,7 +458,6 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
     override fun slideIntoContainer(
         towards: AnimatedContentTransitionScope.SlideDirection,
         animationSpec: FiniteAnimationSpec<IntOffset>,
-        @Suppress("PrimitiveInLambda")
         initialOffset: (offsetForFullSlide: Int) -> Int
     ): EnterTransition =
         when {
@@ -472,7 +489,6 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
             return this == Left || this == Start && layoutDirection == LayoutDirection.Ltr ||
                 this == End && layoutDirection == LayoutDirection.Rtl
         }
-
     private val AnimatedContentTransitionScope.SlideDirection.isRight: Boolean
         get() {
             return this == Right || this == Start && layoutDirection == LayoutDirection.Rtl ||
@@ -510,7 +526,6 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
     override fun slideOutOfContainer(
         towards: AnimatedContentTransitionScope.SlideDirection,
         animationSpec: FiniteAnimationSpec<IntOffset>,
-        @Suppress("PrimitiveInLambda")
         targetOffset: (offsetForFullSlide: Int) -> Int
     ): ExitTransition {
         return when {
@@ -521,7 +536,6 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
             }
 
             towards.isRight -> slideOutHorizontally(animationSpec) {
-
                 val targetSize = targetSizeMap[transition.targetState]?.value ?: IntSize.Zero
                 targetOffset.invoke(
                     -calculateOffset(IntSize(it, it), targetSize).x + targetSize.width
@@ -529,7 +543,6 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
             }
 
             towards == Up -> slideOutVertically(animationSpec) {
-
                 val targetSize = targetSizeMap[transition.targetState]?.value ?: IntSize.Zero
                 targetOffset.invoke(-calculateOffset(IntSize(it, it), targetSize).y - it)
             }
@@ -546,7 +559,7 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
     }
 
     internal var measuredSize: IntSize by mutableStateOf(IntSize.Zero)
-    internal val targetSizeMap = mutableMapOf<S, State<IntSize>>()
+    internal val targetSizeMap = mutableScatterMapOf<S, State<IntSize>>()
     internal var animatedSize: State<IntSize>? = null
 
     // Current size of the container. If there's any size animation, the current size will be
@@ -583,7 +596,10 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
 
     // This helps track the target measurable without affecting the placement order. Target
     // measurable needs to be measured first but placed last.
-    internal data class ChildData(var isTarget: Boolean) : ParentDataModifier {
+    internal class ChildData(isTarget: Boolean) : ParentDataModifier {
+        // isTarget is read during measure. It is necessary to make this a MutableState
+        // such that when the target changes, measure is triggered
+        var isTarget by mutableStateOf(isTarget)
         override fun Density.modifyParentData(parentData: Any?): Any {
             return this@ChildData
         }
@@ -593,28 +609,31 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
         val sizeAnimation: Transition<S>.DeferredAnimation<IntSize, AnimationVector2D>,
         val sizeTransform: State<SizeTransform?>,
     ) : LayoutModifierWithPassThroughIntrinsics() {
-
         override fun MeasureScope.measure(
             measurable: Measurable,
             constraints: Constraints
         ): MeasureResult {
-
             val placeable = measurable.measure(constraints)
             val size = sizeAnimation.animate(
                 transitionSpec = {
                     val initial = targetSizeMap[initialState]?.value ?: IntSize.Zero
                     val target = targetSizeMap[targetState]?.value ?: IntSize.Zero
-
                     sizeTransform.value?.createAnimationSpec(initial, target) ?: spring()
                 }
             ) {
                 targetSizeMap[it]?.value ?: IntSize.Zero
             }
             animatedSize = size
-            val offset = contentAlignment.align(
-                IntSize(placeable.width, placeable.height), size.value, LayoutDirection.Ltr
-            )
-            return layout(size.value.width, size.value.height) {
+            val measuredSize: IntSize
+            if (isLookingAhead) {
+                measuredSize = IntSize(placeable.width, placeable.height)
+            } else {
+                measuredSize = size.value
+            }
+            return layout(measuredSize.width, measuredSize.height) {
+                val offset = contentAlignment.align(
+                    IntSize(placeable.width, placeable.height), measuredSize, LayoutDirection.Ltr
+                )
                 placeable.place(offset)
             }
         }
@@ -627,7 +646,6 @@ internal class AnimatedContentTransitionScopeImpl<S> internal constructor(
  * transition, or to add more enter/exit transition for the content.
  */
 sealed interface AnimatedContentScope : AnimatedVisibilityScope
-
 private class AnimatedContentScopeImpl internal constructor(
     animatedVisibilityScope: AnimatedVisibilityScope
 ) : AnimatedContentScope, AnimatedVisibilityScope by animatedVisibilityScope
@@ -698,11 +716,9 @@ fun <S> Transition<S>.AnimatedContent(
     val rootScope = remember(this) {
         AnimatedContentTransitionScopeImpl(this, contentAlignment, layoutDirection)
     }
-
     // TODO: remove screen as soon as they are animated out
     val currentlyVisible = remember(this) { mutableStateListOf(currentState) }
-    val contentMap = remember(this) { mutableMapOf<S, @Composable() () -> Unit>() }
-
+    val contentMap = remember(this) { mutableScatterMapOf<S, @Composable() () -> Unit>() }
     // This is needed for tooling because it could change currentState directly,
     // as opposed to changing target only. When that happens we need to clear all the
     // visible content and only display the content for the new current state and target state.
@@ -710,7 +726,6 @@ fun <S> Transition<S>.AnimatedContent(
         currentlyVisible.clear()
         currentlyVisible.add(currentState)
     }
-
     if (currentState == targetState) {
         if (currentlyVisible.size != 1 || currentlyVisible[0] != currentState) {
             currentlyVisible.clear()
@@ -723,7 +738,6 @@ fun <S> Transition<S>.AnimatedContent(
         rootScope.contentAlignment = contentAlignment
         rootScope.layoutDirection = layoutDirection
     }
-
     // Currently visible list always keeps the targetState at the end of the list, unless it's
     // already in the list in the case of interruption. This makes the composable associated with
     // the targetState get placed last, so the target composable will be displayed on top of
@@ -737,7 +751,6 @@ fun <S> Transition<S>.AnimatedContent(
             currentlyVisible[id] = targetState
         }
     }
-
     if (!contentMap.containsKey(targetState) || !contentMap.containsKey(currentState)) {
         contentMap.clear()
         currentlyVisible.fastForEach { stateForContent ->
@@ -758,7 +771,8 @@ fun <S> Transition<S>.AnimatedContent(
                 }
                 // TODO: Will need a custom impl of this to: 1) get the signal for when
                 // the animation is finished, 2) get the target size properly
-                AnimatedVisibility(
+                AnimatedEnterExitImpl(
+                    this,
                     { it == stateForContent },
                     enter = specOnEnter.targetContentEnter,
                     exit = exit,
@@ -769,7 +783,12 @@ fun <S> Transition<S>.AnimatedContent(
                                 placeable.place(0, 0, zIndex = specOnEnter.targetContentZIndex)
                             }
                         }
-                        .then(childData.apply { isTarget = stateForContent == targetState })
+                        .then(childData.apply { isTarget = stateForContent == targetState }),
+                    shouldDisposeBlock = { currentState, targetState ->
+                        currentState == EnterExitState.PostExit &&
+                            targetState == EnterExitState.PostExit &&
+                            !exit.data.hold
+                    }
                 ) {
                     // TODO: Should Transition.AnimatedVisibility have an end listener?
                     DisposableEffect(this) {
@@ -787,13 +806,12 @@ fun <S> Transition<S>.AnimatedContent(
             }
         }
     }
-
     val contentTransform = remember(rootScope, segment) { transitionSpec(rootScope) }
     val sizeModifier = rootScope.createSizeAnimationModifier(contentTransform)
     Layout(
         modifier = modifier.then(sizeModifier),
         content = {
-            currentlyVisible.forEach {
+            currentlyVisible.fastForEach {
                 key(contentKey(it)) {
                     contentMap[it]?.invoke()
                 }
@@ -810,12 +828,15 @@ private class AnimatedContentMeasurePolicy(val rootScope: AnimatedContentTransit
         constraints: Constraints
     ): MeasureResult {
         val placeables = arrayOfNulls<Placeable>(measurables.size)
+        var targetSize = IntSize.Zero
         // Measure the target composable first (but place it on top unless zIndex is specified)
         measurables.fastForEachIndexed { index, measurable ->
             if ((measurable.parentData as? AnimatedContentTransitionScopeImpl.ChildData)
                     ?.isTarget == true
             ) {
-                placeables[index] = measurable.measure(constraints)
+                placeables[index] = measurable.measure(constraints).also {
+                    targetSize = IntSize(it.width, it.height)
+                }
             }
         }
         // Measure the non-target composables after target, since these have no impact on
@@ -825,10 +846,21 @@ private class AnimatedContentMeasurePolicy(val rootScope: AnimatedContentTransit
                 placeables[index] = measurable.measure(constraints)
             }
         }
+        val maxWidth: Int = if (isLookingAhead) {
+            targetSize.width
+        } else {
+            placeables.maxByOrNull { it?.width ?: 0 }?.width ?: 0
+        }
+        val maxHeight = if (isLookingAhead) {
+            targetSize.height
+        } else {
+            placeables.maxByOrNull { it?.height ?: 0 }?.height ?: 0
+        }
+        if (!isLookingAhead) {
+            // update currently measured size only during approach
+            rootScope.measuredSize = IntSize(maxWidth, maxHeight)
+        }
 
-        val maxWidth: Int = placeables.maxByOrNull { it?.width ?: 0 }?.width ?: 0
-        val maxHeight = placeables.maxByOrNull { it?.height ?: 0 }?.height ?: 0
-        rootScope.measuredSize = IntSize(maxWidth, maxHeight)
         // Position the children.
         return layout(maxWidth, maxHeight) {
             placeables.forEach { placeable ->
@@ -847,20 +879,20 @@ private class AnimatedContentMeasurePolicy(val rootScope: AnimatedContentTransit
     override fun IntrinsicMeasureScope.minIntrinsicWidth(
         measurables: List<IntrinsicMeasurable>,
         height: Int
-    ) = measurables.asSequence().map { it.minIntrinsicWidth(height) }.maxOrNull() ?: 0
+    ) = measurables.fastMaxOfOrNull { it.minIntrinsicWidth(height) } ?: 0
 
     override fun IntrinsicMeasureScope.minIntrinsicHeight(
         measurables: List<IntrinsicMeasurable>,
         width: Int
-    ) = measurables.asSequence().map { it.minIntrinsicHeight(width) }.maxOrNull() ?: 0
+    ) = measurables.fastMaxOfOrNull { it.minIntrinsicHeight(width) } ?: 0
 
     override fun IntrinsicMeasureScope.maxIntrinsicWidth(
         measurables: List<IntrinsicMeasurable>,
         height: Int
-    ) = measurables.asSequence().map { it.maxIntrinsicWidth(height) }.maxOrNull() ?: 0
+    ) = measurables.fastMaxOfOrNull { it.maxIntrinsicWidth(height) } ?: 0
 
     override fun IntrinsicMeasureScope.maxIntrinsicHeight(
         measurables: List<IntrinsicMeasurable>,
         width: Int
-    ) = measurables.asSequence().map { it.maxIntrinsicHeight(width) }.maxOrNull() ?: 0
+    ) = measurables.fastMaxOfOrNull { it.maxIntrinsicHeight(width) } ?: 0
 }

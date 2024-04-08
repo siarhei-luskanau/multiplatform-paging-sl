@@ -41,10 +41,12 @@ import androidx.camera.core.impl.utils.executor.CameraXExecutors.mainThreadExecu
 import androidx.camera.core.impl.utils.futures.FutureCallback
 import androidx.camera.core.impl.utils.futures.Futures
 import androidx.camera.testing.fakes.FakeCamera
-import androidx.camera.testing.fakes.FakeDeferrableSurface
+import androidx.camera.testing.impl.fakes.FakeDeferrableSurface
 import androidx.concurrent.futures.CallbackToFutureAdapter
 import com.google.common.truth.Truth.assertThat
 import com.google.common.util.concurrent.ListenableFuture
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -93,6 +95,23 @@ class SurfaceEdgeTest {
         provider.close()
         fakeSurfaceTexture.release()
         fakeSurface.release()
+    }
+
+    @Test
+    fun closeProviderAfterInvalidate_newConnectionNotAffected() {
+        // Arrange: set provider and keep a copy of the old connection.
+        surfaceEdge.setProvider(provider)
+        val oldConnection = surfaceEdge.deferrableSurfaceForTesting
+
+        // Act: invalidate to reset, then close the provider.
+        surfaceEdge.invalidate()
+        provider.close()
+        shadowOf(getMainLooper()).idle()
+
+        // Assert: the new connection is not affected.
+        val newConnection = surfaceEdge.deferrableSurfaceForTesting
+        assertThat(oldConnection.isClosed).isTrue()
+        assertThat(newConnection.isClosed).isFalse()
     }
 
     @Test
@@ -179,6 +198,49 @@ class SurfaceEdgeTest {
     }
 
     @Test
+    fun closeProviderOnNonUiThread_noCrash() {
+        // Arrange.
+        val providerDeferrableSurface = FakeDeferrableSurface(INPUT_SIZE, ImageFormat.PRIVATE)
+        surfaceEdge.setProvider(providerDeferrableSurface)
+        val nonUiExecutor = Executors.newSingleThreadExecutor()
+        // Act.
+        nonUiExecutor.execute {
+            providerDeferrableSurface.close()
+        }
+        nonUiExecutor.shutdown()
+        assertThat(nonUiExecutor.awaitTermination(1, TimeUnit.SECONDS)).isTrue()
+        // Assert.
+        assertThat(providerDeferrableSurface.isClosed).isTrue()
+    }
+
+    @Test
+    fun closeProviderOnClosedEdge_noCrash() {
+        // Arrange: create SurfaceRequest and close the edge.
+        val providerDeferrableSurface = FakeDeferrableSurface(INPUT_SIZE, ImageFormat.PRIVATE)
+        val edgeDeferrableSurface = surfaceEdge.deferrableSurface
+        surfaceEdge.setProvider(providerDeferrableSurface)
+        surfaceEdge.close()
+        // Act: close the provider.
+        providerDeferrableSurface.close()
+        shadowOf(getMainLooper()).idle()
+        // Assert.
+        assertThat(edgeDeferrableSurface.isClosed).isTrue()
+    }
+
+    @Test
+    fun closeSurfaceRequestProviderOnClosedEdge_noCrash() {
+        // Arrange: create SurfaceRequest and close the edge.
+        val surfaceRequest = surfaceEdge.createSurfaceRequest(FakeCamera())
+        val edgeDeferrableSurface = surfaceEdge.deferrableSurface
+        surfaceEdge.close()
+        // Act: close the provider.
+        surfaceRequest.deferrableSurface.close()
+        shadowOf(getMainLooper()).idle()
+        // Assert.
+        assertThat(edgeDeferrableSurface.isClosed).isTrue()
+    }
+
+    @Test
     fun createSurfaceRequest_transformationInfoContainsSensorToBufferTransform() {
         // Act.
         val surfaceRequest = surfaceEdge.createSurfaceRequest(FakeCamera())
@@ -227,18 +289,45 @@ class SurfaceEdgeTest {
     }
 
     @Test
-    fun closeProviderAfterConnected_surfaceNotReleased() {
-        // Arrange.
+    fun closeProvider_surfaceReleasedWhenRefCountingReaches0() {
+        // Arrange: create edge with ref counting incremented.
         val surfaceRequest = surfaceEdge.createSurfaceRequest(FakeCamera())
         var result: SurfaceRequest.Result? = null
         surfaceRequest.provideSurface(fakeSurface, mainThreadExecutor()) {
             result = it
         }
+        val parentDeferrableSurface = surfaceEdge.deferrableSurface
+        parentDeferrableSurface.incrementUseCount()
         // Act: close the provider
         surfaceRequest.deferrableSurface.close()
         shadowOf(getMainLooper()).idle()
-        // Assert: the surface is not released because the parent is not closed.
+        // Assert: the surface is not released because the parent has ref counting.
         assertThat(result).isNull()
+        // Act: decrease ref counting
+        parentDeferrableSurface.decrementUseCount()
+        shadowOf(getMainLooper()).idle()
+        // Assert: the surface is released because the parent has not ref counting.
+        assertThat(result!!.resultCode)
+            .isEqualTo(SurfaceRequest.Result.RESULT_SURFACE_USED_SUCCESSFULLY)
+    }
+
+    @Test
+    fun closeChildProvider_parentEdgeClosed() {
+        // Arrange.
+        val parentEdge = SurfaceEdge(
+            PREVIEW, INTERNAL_DEFINED_IMAGE_FORMAT_PRIVATE,
+            StreamSpec.builder(INPUT_SIZE).build(), SENSOR_TO_BUFFER, true, Rect(), 0,
+            ROTATION_NOT_SPECIFIED, false
+        )
+        val childDeferrableSurface = surfaceEdge.deferrableSurface
+        parentEdge.setProvider(childDeferrableSurface)
+        // Act.
+        childDeferrableSurface.close()
+        shadowOf(getMainLooper()).idle()
+        // Assert.
+        assertThat(parentEdge.deferrableSurface.isClosed).isTrue()
+        // Clean up.
+        parentEdge.close()
     }
 
     @Test(expected = SurfaceClosedException::class)
@@ -293,25 +382,26 @@ class SurfaceEdgeTest {
 
     @Test
     fun createSurfaceOutputWithDisconnectedEdge_surfaceOutputNotCreated() {
-        // Arrange: create a SurfaceOutput future from a closed LinkableSurface
+        // Arrange: create a SurfaceOutput future from a closed Edge
+        surfaceEdge.setProvider(provider)
+        provider.setSurface(fakeSurface)
         surfaceEdge.disconnect()
-        val surfaceOutput = createSurfaceOutputFuture(surfaceEdge)
-
         // Act: wait for the SurfaceOutput to return.
-        var successful: Boolean? = null
-        Futures.addCallback(surfaceOutput, object : FutureCallback<SurfaceOutput> {
-            override fun onSuccess(result: SurfaceOutput?) {
-                successful = true
-            }
-
-            override fun onFailure(t: Throwable) {
-                successful = false
-            }
-        }, mainThreadExecutor())
-        shadowOf(getMainLooper()).idle()
+        val surfaceOutput = getSurfaceOutputFromFuture(createSurfaceOutputFuture(surfaceEdge))
 
         // Assert: the SurfaceOutput is not created.
-        assertThat(successful!!).isEqualTo(false)
+        assertThat(surfaceOutput).isNull()
+    }
+
+    @Test
+    fun createSurfaceOutput_inheritSurfaceEdgeTransformation() {
+        // Arrange: set the provider and create a SurfaceOutput future.
+        surfaceEdge.setProvider(provider)
+        provider.setSurface(fakeSurface)
+        // Act: create a SurfaceOutput from the SurfaceEdge
+        val surfaceOutput = getSurfaceOutputFromFuture(createSurfaceOutputFuture(surfaceEdge))
+        // Assert: the SurfaceOutput inherits the transformation from the SurfaceEdge.
+        assertThat(surfaceOutput!!.sensorToBufferTransform).isEqualTo(SENSOR_TO_BUFFER)
     }
 
     @Test
@@ -540,6 +630,22 @@ class SurfaceEdgeTest {
         // Assert.
         assertThat(transformationInfo).isNotNull()
         assertThat(transformationInfo!!.rotationDegrees).isEqualTo(90)
+    }
+
+    private fun getSurfaceOutputFromFuture(
+        future: ListenableFuture<SurfaceOutput>
+    ): SurfaceOutput? {
+        var surfaceOutput: SurfaceOutput? = null
+        Futures.addCallback(future, object : FutureCallback<SurfaceOutput> {
+            override fun onSuccess(result: SurfaceOutput?) {
+                surfaceOutput = result
+            }
+
+            override fun onFailure(t: Throwable) {
+            }
+        }, mainThreadExecutor())
+        shadowOf(getMainLooper()).idle()
+        return surfaceOutput
     }
 
     private fun createSurfaceOutputFuture(surfaceEdge: SurfaceEdge) =

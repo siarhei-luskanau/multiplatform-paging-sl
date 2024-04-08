@@ -103,12 +103,7 @@ public class MainActivity extends AppCompatActivity {
         // Get extra option for checking whether it needs to be implemented with PreviewView
         Bundle bundle = getIntent().getExtras();
         if (bundle != null) {
-            final String viewTypeString = bundle.getString(INTENT_FRAGMENT_TYPE);
-            if (PREVIEW_VIEW_FRAGMENT.equalsIgnoreCase(viewTypeString)) {
-                mFragmentType = FragmentType.PREVIEW_VIEW;
-            } else if (COMPOSE_UI_FRAGMENT.equalsIgnoreCase(viewTypeString)) {
-                mFragmentType = FragmentType.COMPOSE_UI;
-            }
+            parseFragmentType(bundle);
             // Update the app UI according to the e2e test case.
             String testItem = bundle.getString(INTENT_EXTRA_E2E_TEST_CASE);
             if (testItem != null) {
@@ -174,25 +169,19 @@ public class MainActivity extends AppCompatActivity {
     @SuppressLint("NonConstantResourceId")
     @Override
     public boolean onOptionsItemSelected(@NonNull MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.preview_view:
-                mFragmentType = FragmentType.PREVIEW_VIEW;
-                break;
-            case R.id.camera_controller:
-                mFragmentType = FragmentType.CAMERA_CONTROLLER;
-                break;
-            case R.id.transform:
-                mFragmentType = FragmentType.TRANSFORM;
-                break;
-            case R.id.compose_ui:
-                mFragmentType = FragmentType.COMPOSE_UI;
-                break;
-            case R.id.mlkit:
-                mFragmentType = FragmentType.MLKIT;
-                break;
-            case R.id.effects:
-                mFragmentType = FragmentType.EFFECTS;
-                break;
+        int itemId = item.getItemId();
+        if (itemId == R.id.preview_view) {
+            mFragmentType = FragmentType.PREVIEW_VIEW;
+        } else if (itemId == R.id.camera_controller) {
+            mFragmentType = FragmentType.CAMERA_CONTROLLER;
+        } else if (itemId == R.id.transform) {
+            mFragmentType = FragmentType.TRANSFORM;
+        } else if (itemId == R.id.compose_ui) {
+            mFragmentType = FragmentType.COMPOSE_UI;
+        } else if (itemId == R.id.mlkit) {
+            mFragmentType = FragmentType.MLKIT;
+        } else if (itemId == R.id.effects) {
+            mFragmentType = FragmentType.EFFECTS;
         }
         startFragment();
         return true;
@@ -206,6 +195,15 @@ public class MainActivity extends AppCompatActivity {
             }
         }
         return true;
+    }
+
+    private void parseFragmentType(@NonNull Bundle bundle) {
+        final String viewTypeString = bundle.getString(INTENT_FRAGMENT_TYPE);
+        if (PREVIEW_VIEW_FRAGMENT.equalsIgnoreCase(viewTypeString)) {
+            mFragmentType = FragmentType.PREVIEW_VIEW;
+        } else if (COMPOSE_UI_FRAGMENT.equalsIgnoreCase(viewTypeString)) {
+            mFragmentType = FragmentType.COMPOSE_UI;
+        }
     }
 
     private void startFragment() {

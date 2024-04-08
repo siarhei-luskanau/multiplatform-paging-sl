@@ -34,6 +34,7 @@ import perfetto.protos.SysStatsConfig
 import perfetto.protos.TraceConfig
 import perfetto.protos.TraceConfig.BufferConfig
 import perfetto.protos.TraceConfig.BufferConfig.FillPolicy
+import perfetto.protos.TrackEventConfig
 
 /**
  * Configuration for Perfetto trace recording.
@@ -41,7 +42,7 @@ import perfetto.protos.TraceConfig.BufferConfig.FillPolicy
  * For more info, see https://perfetto.dev/docs/concepts/config
  */
 @ExperimentalPerfettoCaptureApi
-sealed class PerfettoConfig constructor(
+sealed class PerfettoConfig(
     internal val isTextProto: Boolean
 ) {
     @RequiresApi(23)
@@ -151,6 +152,7 @@ private fun ftraceDataSource(
                 AtraceTag.Idle,
                 AtraceTag.Input,
                 AtraceTag.MemReclaim,
+                AtraceTag.Power,
                 AtraceTag.Resources,
                 AtraceTag.Scheduling,
                 AtraceTag.Synchronization,
@@ -317,8 +319,6 @@ private fun stackSamplingSource(
  * Config for perfetto.
  *
  * Eventually, this should be more configurable.
- *
- * @suppress
  */
 @RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 internal fun perfettoConfig(
@@ -334,7 +334,12 @@ internal fun perfettoConfig(
         TraceConfig.DataSource(DataSourceConfig("android.gpu.memory")),
         TraceConfig.DataSource(DataSourceConfig("android.surfaceflinger.frame")),
         TraceConfig.DataSource(DataSourceConfig("android.surfaceflinger.frametimeline")),
-        TraceConfig.DataSource(DataSourceConfig("track_event")) // required by tracing-perfetto
+        TraceConfig.DataSource(DataSourceConfig(
+            "track_event",
+            track_event_config = TrackEventConfig(
+                enabled_categories = listOf("*") // required by tracing-perfetto
+            )
+        ))
     )
     if (stackSamplingConfig != null) {
         dataSources += stackSamplingSource(
@@ -353,7 +358,11 @@ internal fun perfettoConfig(
         file_write_period_ms = 2500,
 
         // multiple of file_write_period_ms, enables trace processor to work in batches
-        flush_period_ms = 5000
+        flush_period_ms = 5000,
+
+        // reduce timeout to reduce trace capture overhead when devices have data source issues
+        // See b/323601788 and b/307649002.
+        data_source_stop_timeout_ms = 2500,
     )
 }
 

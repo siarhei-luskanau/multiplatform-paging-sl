@@ -825,6 +825,32 @@ class MutableVector<T> @PublishedApi internal constructor(
         }
     }
 
+    // Workaround to allow setting size from inline functions
+    @PublishedApi
+    internal fun setSize(newSize: Int) {
+        size = newSize
+    }
+
+    /**
+     * Removes items that satisfy [predicate]
+     */
+    inline fun removeIf(predicate: (T) -> Boolean) {
+        var gap = 0
+        val size = size
+        for (i in 0 until size) {
+            if (predicate(content[i] as T)) {
+                gap++
+                continue
+            }
+
+            if (gap > 0) {
+                content[i - gap] = content[i]
+            }
+        }
+        content.fill(null, fromIndex = size - gap, toIndex = size)
+        setSize(size - gap)
+    }
+
     /**
      * Keeps only [elements] in the [MutableVector] and removes all other values.
      */
@@ -1169,11 +1195,7 @@ inline fun <reified T> MutableVector(capacity: Int = 16) =
  * return the value to be assigned to the element at its given index.
  */
 @OptIn(ExperimentalContracts::class)
-inline fun <reified T> MutableVector(
-    size: Int,
-    @Suppress("PrimitiveInLambda")
-    noinline init: (Int) -> T
-): MutableVector<T> {
+inline fun <reified T> MutableVector(size: Int, noinline init: (Int) -> T): MutableVector<T> {
     contract { callsInPlace(init) }
     val arr = Array(size, init)
     return MutableVector(arr as Array<T?>, size)

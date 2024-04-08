@@ -17,6 +17,7 @@
 package androidx.room.compiler.processing.ksp
 
 import androidx.room.compiler.processing.tryBox
+import com.google.devtools.ksp.symbol.KSAnnotation
 import com.google.devtools.ksp.symbol.KSType
 import com.squareup.kotlinpoet.javapoet.JTypeName
 import com.squareup.kotlinpoet.javapoet.KTypeName
@@ -24,14 +25,23 @@ import com.squareup.kotlinpoet.javapoet.KTypeName
 internal class DefaultKspType(
     env: KspProcessingEnv,
     ksType: KSType,
+    originalKSAnnotations: Sequence<KSAnnotation> = ksType.annotations,
     scope: KSTypeVarianceResolverScope? = null,
     typeAlias: KSType? = null,
-) : KspType(env, ksType, scope, typeAlias) {
+) : KspType(env, ksType, originalKSAnnotations, scope, typeAlias) {
 
     override fun resolveJTypeName(): JTypeName {
-        // always box these. For primitives, typeName might return the primitive type but if we
-        // wanted it to be a primitive, we would've resolved it to [KspPrimitiveType].
-        return ksType.asJTypeName(env.resolver).tryBox()
+        // Always box these unless for inline value classes. For primitives, typeName might return
+        // the primitive type but if we wanted it to be a primitive, we would've resolved it to
+        // [KspPrimitiveType]. Inline value classes with primitive values won't be resolved to
+        // [KspPrimitiveType] because we need boxed name for Kotlin and unboxed name for Java.
+        return if (ksType.declaration.isValueClass()) {
+            // Don't box inline value classes, e.g. the type name for `UInt` should be `int`,
+            // not `Integer`, if used directly.
+            ksType.asJTypeName(env.resolver)
+        } else {
+            ksType.asJTypeName(env.resolver).tryBox()
+        }
     }
 
     override fun resolveKTypeName(): KTypeName {
@@ -45,7 +55,8 @@ internal class DefaultKspType(
     override fun copy(
         env: KspProcessingEnv,
         ksType: KSType,
+        originalKSAnnotations: Sequence<KSAnnotation>,
         scope: KSTypeVarianceResolverScope?,
         typeAlias: KSType?
-    ) = DefaultKspType(env, ksType, scope, typeAlias)
+    ) = DefaultKspType(env, ksType, originalKSAnnotations, scope, typeAlias)
 }

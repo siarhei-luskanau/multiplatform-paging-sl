@@ -143,6 +143,8 @@ open class ComposableCallChecker :
             return
         }
 
+        warnOnUnstableNamedArguments(resolvedCall, context)
+
         var node: PsiElement? = reportOn
         loop@while (node != null) {
             when (node) {
@@ -175,8 +177,11 @@ open class ComposableCallChecker :
                         return
                     }
 
-                    // TODO(lmr): in future, we should check for CALLS_IN_PLACE contract
-                    val isInlined = isInlinedArgument(
+                    val isResolvedInline = bindingContext.get(
+                        BindingContext.NEW_INFERENCE_IS_LAMBDA_FOR_OVERLOAD_RESOLUTION_INLINE,
+                        node.functionLiteral
+                    ) == true
+                    val isInlined = isResolvedInline || isInlinedArgument(
                         node.functionLiteral,
                         bindingContext,
                         true
@@ -297,6 +302,21 @@ open class ComposableCallChecker :
                 }
             }
             node = node.parent as? KtElement
+        }
+    }
+
+    private fun warnOnUnstableNamedArguments(
+        resolvedCall: ResolvedCall<*>,
+        context: CallCheckerContext
+    ) {
+        if (resolvedCall.candidateDescriptor?.hasStableParameterNames() != true) {
+            for (valueArgument in resolvedCall.call.valueArguments) {
+                val nameReference = valueArgument.getArgumentName()?.referenceExpression
+                    ?: continue
+                context.trace.report(
+                    ComposeErrors.NAMED_ARGUMENTS_NOT_ALLOWED.on(nameReference)
+                )
+            }
         }
     }
 

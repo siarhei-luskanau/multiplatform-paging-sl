@@ -50,20 +50,32 @@ class RawQueryMethodProcessor(
             ProcessorErrors.CANNOT_USE_UNBOUND_GENERICS_IN_QUERY_METHODS
         )
 
+        val returnsDeferredType = delegate.returnsDeferredType()
+        val isSuspendFunction = delegate.executableElement.isSuspendFunction()
         context.checker.check(
-            !delegate.isSuspendAndReturnsDeferredType(),
+            !isSuspendFunction || !returnsDeferredType,
             executableElement,
             ProcessorErrors.suspendReturnsDeferredType(returnType.rawType.typeName.toString())
         )
+
+        if (!isSuspendFunction && !returnsDeferredType && !context.isAndroidOnlyTarget()) {
+            // A blocking function that does not return a deferred return type is not allowed if the
+            // target platforms include non-Android targets.
+            context.logger.e(
+                executableElement,
+                ProcessorErrors.INVALID_BLOCKING_DAO_FUNCTION_NON_ANDROID
+            )
+            // TODO(b/332781418): Early return to avoid generating redundant code.
+        }
 
         val observedTableNames = processObservedTables()
         val query = SqlParser.rawQueryForTables(observedTableNames)
         // build the query but don't calculate result info since we just guessed it.
         val resultBinder = delegate.findResultBinder(returnType, query) {
+            @Suppress("DEPRECATION")
             delegate.executableElement.getAnnotation(androidx.room.MapInfo::class)?.let {
-                val keyColumn = it.value.keyColumn.toString()
-                val valueColumn = it.value.valueColumn.toString()
-
+                val keyColumn = it.value.keyColumn
+                val valueColumn = it.value.valueColumn
                 context.checker.check(
                     keyColumn.isNotEmpty() || valueColumn.isNotEmpty(),
                     executableElement,

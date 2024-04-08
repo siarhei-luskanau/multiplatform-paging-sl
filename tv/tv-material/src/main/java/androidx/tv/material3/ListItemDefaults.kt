@@ -31,7 +31,6 @@ import androidx.tv.material3.tokens.Elevation
 /**
  * Contains the default values used by list items.
  */
-@ExperimentalTvMaterial3Api
 object ListItemDefaults {
     /**
      * The default Icon size used by [ListItem].
@@ -39,9 +38,36 @@ object ListItemDefaults {
     val IconSize = 32.dp
 
     /**
+     * The Icon size used by [DenseListItem].
+     */
+    val IconSizeDense = 20.dp
+
+    /**
      * The default elevation used by [ListItem].
      */
-    val ListItemElevation = Elevation.Level0
+    val TonalElevation = Elevation.Level0
+
+    /**
+     * The default shape for a [ListItem].
+     */
+    val ListItemShape = RoundedCornerShape(8.dp)
+
+    /**
+     * The default border applied to [ListItem] in focused disabled state.
+     */
+    val FocusedDisabledBorder
+        @ReadOnlyComposable
+        @Composable get() = Border(
+            border = BorderStroke(
+                width = 2.dp,
+                color = MaterialTheme.colorScheme.border
+            )
+        )
+
+    /**
+     * The default opacity for the [ListItem] container color in selected state.
+     */
+    const val SelectedContainerColorOpacity = 0.4f
 
     /**
      * The default content padding [PaddingValues] used by [ListItem]
@@ -49,6 +75,14 @@ object ListItemDefaults {
     internal val ContentPadding = PaddingValues(
         horizontal = 16.dp,
         vertical = 12.dp
+    )
+
+    /**
+     * The default content padding [PaddingValues] used by [DenseListItem]
+     */
+    internal val ContentPaddingDense = PaddingValues(
+        horizontal = 12.dp,
+        vertical = 10.dp
     )
 
     internal const val LeadingContentOpacity = 0.8f
@@ -63,17 +97,10 @@ object ListItemDefaults {
     internal val MinContainerHeightTwoLine = 64.dp
     internal val MinContainerHeightThreeLine = 80.dp
 
-    private val ListItemShape = RoundedCornerShape(8.dp)
-
-    private val DefaultBorder
-        @ReadOnlyComposable
-        @Composable get() = Border(
-            border = BorderStroke(
-                width = 2.dp,
-                color = MaterialTheme.colorScheme.border
-            ),
-            shape = ListItemShape
-        )
+    internal val MinDenseContainerHeight = 40.dp
+    internal val MinDenseContainerHeightLeadingContent = 40.dp
+    internal val MinDenseContainerHeightTwoLine = 56.dp
+    internal val MinDenseContainerHeightThreeLine = 72.dp
 
     /**
      * Creates a [ListItemShape] that represents the default container shapes used in a ListItem
@@ -89,6 +116,8 @@ object ListItemDefaults {
      * @param pressedSelectedShape the shape used when the ListItem is enabled, pressed and
      * selected
      */
+    @ReadOnlyComposable
+    @Composable
     fun shape(
         shape: Shape = ListItemShape,
         focusedShape: Shape = shape,
@@ -145,7 +174,7 @@ object ListItemDefaults {
         pressedContainerColor: Color = focusedContainerColor,
         pressedContentColor: Color = contentColorFor(focusedContainerColor),
         selectedContainerColor: Color = MaterialTheme.colorScheme.secondaryContainer
-            .copy(alpha = 0.4f),
+            .copy(alpha = SelectedContainerColorOpacity),
         selectedContentColor: Color = MaterialTheme.colorScheme.onSecondaryContainer,
         disabledContainerColor: Color = Color.Transparent,
         disabledContentColor: Color = MaterialTheme.colorScheme.onSurface,
@@ -232,7 +261,7 @@ object ListItemDefaults {
         selectedBorder: Border = border,
         disabledBorder: Border = border,
         focusedSelectedBorder: Border = focusedBorder,
-        focusedDisabledBorder: Border = DefaultBorder,
+        focusedDisabledBorder: Border = FocusedDisabledBorder,
         pressedSelectedBorder: Border = border
     ) = ListItemBorder(
         border = border,

@@ -1,49 +1,18 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<issues format="6" by="lint 8.1.0-beta02" type="baseline" client="gradle" dependencies="false" name="AGP (8.1.0-beta02)" variant="all" version="8.1.0-beta02">
+<issues format="6" by="lint 8.4.0-alpha09" type="baseline" client="gradle" dependencies="false" name="AGP (8.4.0-alpha09)" variant="all" version="8.4.0-alpha09">
 
     <issue
-        id="BanThreadSleep"
-        message="Uses Thread.sleep()"
-        errorLine1="            Thread.sleep(TimeUnit.SECONDS.toMillis(sleepSeconds))"
-        errorLine2="                   ~~~~~">
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.benchmark.ExperimentalBenchmarkConfigApi` or `@OptIn(markerClass = androidx.benchmark.ExperimentalBenchmarkConfigApi.class)`">
         <location
-            file="src/main/java/androidx/benchmark/BenchmarkState.kt"/>
+            file="src/main/java/androidx/benchmark/MetricsContainer.kt"/>
     </issue>
 
     <issue
-        id="BanThreadSleep"
-        message="Uses Thread.sleep()"
-        errorLine1="        Thread.sleep(CONNECTED_PROFILING_SLEEP_MS)"
-        errorLine2="               ~~~~~">
+        id="UnsafeOptInUsageError"
+        message="This declaration is opt-in and its usage should be marked with `@androidx.benchmark.ExperimentalBenchmarkConfigApi` or `@OptIn(markerClass = androidx.benchmark.ExperimentalBenchmarkConfigApi.class)`">
         <location
-            file="src/main/java/androidx/benchmark/Profiler.kt"/>
-    </issue>
-
-    <issue
-        id="BanThreadSleep"
-        message="Uses Thread.sleep()"
-        errorLine1="        Thread.sleep(CONNECTED_PROFILING_SLEEP_MS)"
-        errorLine2="               ~~~~~">
-        <location
-            file="src/main/java/androidx/benchmark/Profiler.kt"/>
-    </issue>
-
-    <issue
-        id="BanThreadSleep"
-        message="Uses Thread.sleep()"
-        errorLine1="        Thread.sleep(CONNECTED_PROFILING_SLEEP_MS)"
-        errorLine2="               ~~~~~">
-        <location
-            file="src/main/java/androidx/benchmark/Profiler.kt"/>
-    </issue>
-
-    <issue
-        id="BanThreadSleep"
-        message="Uses Thread.sleep()"
-        errorLine1="        Thread.sleep(CONNECTED_PROFILING_SLEEP_MS)"
-        errorLine2="               ~~~~~">
-        <location
-            file="src/main/java/androidx/benchmark/Profiler.kt"/>
+            file="src/main/java/androidx/benchmark/MicrobenchmarkPhase.kt"/>
     </issue>
 
 </issues>

@@ -45,7 +45,6 @@ import androidx.compose.ui.unit.TextUnitType
  */
 internal fun AndroidTextPaint.applySpanStyle(
     style: SpanStyle,
-    @Suppress("PrimitiveInLambda")
     resolveTypeface: (FontFamily?, FontWeight, FontStyle, FontSynthesis) -> Typeface,
     density: Density,
     requiresLetterSpacing: Boolean = false,
@@ -78,7 +77,7 @@ internal fun AndroidTextPaint.applySpanStyle(
             } else {
                 style.localeList[0]
             }
-            textLocale = locale.toJavaLocale()
+            textLocale = locale.platformLocale
         }
     }
 

@@ -16,7 +16,6 @@
 
 package androidx.tv.integration.presentation
 
-import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.focusGroup
 import androidx.compose.foundation.layout.Arrangement
@@ -49,7 +48,7 @@ import androidx.compose.ui.unit.dp
 import androidx.tv.material3.ExperimentalTvMaterial3Api
 import androidx.tv.material3.Icon
 
-@OptIn(ExperimentalTvMaterial3Api::class, ExperimentalFoundationApi::class)
+@OptIn(ExperimentalTvMaterial3Api::class)
 @Composable
 fun Sidebar(
     selectedIndex: Int,
@@ -117,23 +116,23 @@ fun Sidebar(
     ) {
         key(0) {
             drawIcon(
-                imageVector = Icons.Outlined.Home,
-                index = 0,
-                modifier = focusRestorerModifiers.childModifier,
+                Icons.Outlined.Home,
+                0,
+                focusRestorerModifiers.childModifier,
             )
         }
         key(1) {
             drawIcon(
-                imageVector = Icons.Outlined.Movie,
-                index = 1,
-                modifier = Modifier,
+                Icons.Outlined.Movie,
+                1,
+                Modifier,
             )
         }
         key(2) {
             drawIcon(
-                imageVector = Icons.Outlined.Tv,
-                index = 2,
-                modifier = Modifier,
+                Icons.Outlined.Tv,
+                2,
+                Modifier,
             )
         }
     }

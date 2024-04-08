@@ -20,6 +20,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 
 /**
  * Common parts backing the interval-based content of lazy layout defined through `item` DSL.
+ *
+ * Note: this class is a part of [LazyLayout] harness that allows for building custom lazy layouts.
+ * LazyLayout and all corresponding APIs are still under development and are subject to change.
  */
 @ExperimentalFoundationApi
 abstract class LazyLayoutIntervalContent<Interval : LazyLayoutIntervalContent.Interval> {
@@ -61,21 +64,21 @@ abstract class LazyLayoutIntervalContent<Interval : LazyLayoutIntervalContent.In
 
     /**
      * Common content of individual intervals in `item` DSL of lazy layouts.
+     *
+     * Note: this class is a part of [LazyLayout] harness that allows for building custom lazy
+     * layouts. LazyLayout and all corresponding APIs are still under development and are subject
+     * to change.
      */
     @ExperimentalFoundationApi
     interface Interval {
         /**
          * Returns item key based on a local index for the current interval.
          */
-        val key: ((index: Int) -> Any)?
-            @Suppress("PrimitiveInLambda")
-            get() = null
+        val key: ((index: Int) -> Any)? get() = null
 
         /**
          * Returns item type based on a local index for the current interval.
          */
-        val type: ((index: Int) -> Any?)
-            @Suppress("PrimitiveInLambda")
-            get() = { null }
+        val type: ((index: Int) -> Any?) get() = { null }
     }
 }

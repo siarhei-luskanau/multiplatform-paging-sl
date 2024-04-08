@@ -18,14 +18,11 @@ package androidx.compose.ui.input.nestedscroll
 
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.modifier.ModifierLocalModifierNode
-import androidx.compose.ui.modifier.modifierLocalMapOf
-import androidx.compose.ui.modifier.modifierLocalOf
 import androidx.compose.ui.node.DelegatableNode
+import androidx.compose.ui.node.TraversableNode
+import androidx.compose.ui.node.findNearestAncestor
 import androidx.compose.ui.unit.Velocity
 import kotlinx.coroutines.CoroutineScope
-
-internal val ModifierLocalNestedScroll = modifierLocalOf<NestedScrollNode?> { null }
 
 /**
  * This creates a Nested Scroll Modifier node that can be delegated to. In most case you should
@@ -45,7 +42,7 @@ fun nestedScrollModifierNode(
 internal class NestedScrollNode(
     var connection: NestedScrollConnection,
     dispatcher: NestedScrollDispatcher?
-) : ModifierLocalModifierNode, NestedScrollConnection, DelegatableNode, Modifier.Node() {
+) : TraversableNode, NestedScrollConnection, Modifier.Node() {
 
     // Resolved dispatcher for re-use in case of null dispatcher is passed.
     private var resolvedDispatcher: NestedScrollDispatcher
@@ -54,17 +51,19 @@ internal class NestedScrollNode(
         resolvedDispatcher = dispatcher ?: NestedScrollDispatcher() // Resolve null dispatcher
     }
 
-    private val parentModifierLocal: NestedScrollNode?
-        get() = if (isAttached) ModifierLocalNestedScroll.current else null
+    internal val parentNestedScrollNode: NestedScrollNode?
+        get() = if (isAttached)
+            findNearestAncestor()
+        else
+            null
 
     private val parentConnection: NestedScrollConnection?
-        get() = if (isAttached) ModifierLocalNestedScroll.current else null
+        get() = if (isAttached) parentNestedScrollNode else null
 
-    // Avoid get() to prevent constant allocations for static map.
-    override val providedValues = modifierLocalMapOf(entry = ModifierLocalNestedScroll to this)
+    override val traverseKey: Any = "androidx.compose.ui.input.nestedscroll.NestedScrollNode"
 
     private val nestedCoroutineScope: CoroutineScope
-        get() = parentModifierLocal?.nestedCoroutineScope
+        get() = parentNestedScrollNode?.nestedCoroutineScope
             ?: resolvedDispatcher.scope
             ?: throw IllegalStateException(
                 "in order to access nested coroutine scope you need to attach dispatcher to the " +
@@ -128,9 +127,10 @@ internal class NestedScrollNode(
     }
 
     override fun onAttach() {
-        assert(resolvedDispatcher.modifierLocalNode == null) {
-            "This dispatcher should only be used by a single Modifier.nestedScroll."
-        }
+        // NOTE: It is possible for the dispatcher of a yet-to-be-removed node above this one in the
+        // chain is being used here where the dispatcher's modifierLocalNode will not be null. As a
+        // result, we should not check to see if the dispatcher's node is null, we should just set
+        // it assuming that it is not going to be used by the previous node anymore.
         updateDispatcherFields()
     }
 
@@ -143,13 +143,16 @@ internal class NestedScrollNode(
      * to reset the dispatcher properties accordingly.
      */
     private fun updateDispatcherFields() {
-        resolvedDispatcher.modifierLocalNode = this
+        resolvedDispatcher.nestedScrollNode = this
         resolvedDispatcher.calculateNestedScrollScope = { nestedCoroutineScope }
         resolvedDispatcher.scope = coroutineScope
     }
 
     private fun resetDispatcherFields() {
-        resolvedDispatcher.modifierLocalNode = null
+        // only null this out if the modifier local node is what we set it to, since it is possible
+        // it has already been reused in a different node
+        if (resolvedDispatcher.nestedScrollNode === this)
+            resolvedDispatcher.nestedScrollNode = null
     }
 
     internal fun updateNode(

@@ -16,50 +16,20 @@
 
 package androidx.appactions.interaction.capabilities.serializers.types
 
-import androidx.appactions.builtintypes.properties.DisambiguatingDescription
 import androidx.appactions.builtintypes.types.Alarm
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeSpec
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeSpecBuilder
-import androidx.appactions.interaction.capabilities.core.impl.exceptions.StructConversionException
 import androidx.appactions.interaction.capabilities.serializers.properties.NAME_TYPE_SPEC
-import androidx.appactions.interaction.capabilities.serializers.properties.createDisambiguatingDescriptionTypeSpec
-
-private val supportedDisambiguatingDescriptionValues = listOf(
-  Alarm.DisambiguatingDescriptionValue.FAMILY_BELL
-)
-
-val ALARM_DISAMBIGUATING_DESCRIPTION_VALUE_TYPE_SPEC = TypeSpec.createStringBasedTypeSpec<
-  DisambiguatingDescription.CanonicalValue
->(
-  toString = DisambiguatingDescription.CanonicalValue::textValue,
-  fromString = {
-    str ->
-    supportedDisambiguatingDescriptionValues.find {
-      it.textValue == str
-    } ?: throw StructConversionException(
-      "failed to deserialize Alarm.DisambiguatingDescriptionValue with textValue=$str"
-    )
-  }
-)
 
 val ALARM_TYPE_SPEC: TypeSpec<Alarm> = TypeSpecBuilder.newBuilder(
   "Alarm",
   Alarm::Builder,
   Alarm.Builder<*>::build
-).bindStringField(
-  "namespace",
-  { it.namespace },
-  Alarm.Builder<*>::setNamespace
 ).bindSpecField(
   "alarmSchedule",
   { it.alarmSchedule },
   Alarm.Builder<*>::setAlarmSchedule,
   SCHEDULE_TYPE_SPEC
-).bindSpecField(
-  "disambiguatingDescription",
-  { it.disambiguatingDescription },
-  Alarm.Builder<*>::setDisambiguatingDescription,
-  createDisambiguatingDescriptionTypeSpec(ALARM_DISAMBIGUATING_DESCRIPTION_VALUE_TYPE_SPEC)
 ).bindSpecField(
   "name",
   { it.name },
@@ -67,8 +37,8 @@ val ALARM_TYPE_SPEC: TypeSpec<Alarm> = TypeSpecBuilder.newBuilder(
   NAME_TYPE_SPEC
 ).bindStringField(
   "identifier",
-  { it.identifier },
+  { it.identifier.ifEmpty { null } },
   Alarm.Builder<*>::setIdentifier
 ).bindIdentifier {
-  it.identifier
+  it.identifier.ifEmpty { null }
 }.build()

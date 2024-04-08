@@ -92,7 +92,7 @@ private fun rememberColumnSlots(
     columns: StaggeredGridCells,
     horizontalArrangement: Arrangement.Horizontal,
     contentPadding: PaddingValues
-) = remember<Density.(Constraints) -> LazyStaggeredGridSlots>(
+) = remember<LazyGridStaggeredGridSlotsProvider>(
     columns,
     horizontalArrangement,
     contentPadding,
@@ -182,7 +182,7 @@ private fun rememberRowSlots(
     rows: StaggeredGridCells,
     verticalArrangement: Arrangement.Vertical,
     contentPadding: PaddingValues
-) = remember<Density.(Constraints) -> LazyStaggeredGridSlots>(
+) = remember<LazyGridStaggeredGridSlotsProvider>(
     rows,
     verticalArrangement,
     contentPadding,
@@ -209,10 +209,16 @@ private fun rememberRowSlots(
     }
 }
 
+// Note: Implementing function interface is prohibited in K/JS (class A: () -> Unit)
+// therefore we workaround this limitation by inheriting a fun interface instead
+internal fun interface LazyGridStaggeredGridSlotsProvider {
+    fun invoke(density: Density, constraints: Constraints): LazyStaggeredGridSlots
+}
+
 /** measurement cache to avoid recalculating row/column sizes on each scroll. */
 private class LazyStaggeredGridSlotCache(
     private val calculation: Density.(Constraints) -> LazyStaggeredGridSlots
-) : (Density, Constraints) -> LazyStaggeredGridSlots {
+) : LazyGridStaggeredGridSlotsProvider {
     private var cachedConstraints = Constraints()
     private var cachedDensity: Float = 0f
     private var cachedSizes: LazyStaggeredGridSlots? = null
@@ -236,7 +242,7 @@ private class LazyStaggeredGridSlotCache(
     }
 }
 
-/** Dsl marker for [LazyStaggeredGridScope] below **/
+/** Dsl marker for [LazyStaggeredGridScope] below */
 @DslMarker
 internal annotation class LazyStaggeredGridScopeMarker
 
@@ -253,6 +259,7 @@ sealed interface LazyStaggeredGridScope {
      *  MUST be saveable via Bundle on Android. If set to null (by default), the position of the
      *  item will be used as a key instead.
      *  Using the same key for multiple items in the staggered grid is not allowed.
+     *  This can be overridden by calling [LazyStaggeredGridState.requestScrollToItem].
      *
      *  When you specify the key the scroll position will be maintained based on the key, which
      *  means if you add/remove items before the current visible item the item with the given key
@@ -279,6 +286,7 @@ sealed interface LazyStaggeredGridScope {
      *  MUST be saveable via Bundle on Android. If set to null (by default), the position of the
      *  item will be used as a key instead.
      *  Using the same key for multiple items in the staggered grid is not allowed.
+     *  This can be overridden by calling [LazyStaggeredGridState.requestScrollToItem].
      *
      *  When you specify the key the scroll position will be maintained based on the key, which
      *  means if you add/remove items before the current visible item the item with the given key
@@ -292,13 +300,9 @@ sealed interface LazyStaggeredGridScope {
      */
     fun items(
         count: Int,
-        @Suppress("PrimitiveInLambda")
         key: ((index: Int) -> Any)? = null,
-        @Suppress("PrimitiveInLambda")
         contentType: (index: Int) -> Any? = { null },
-        @Suppress("PrimitiveInLambda")
         span: ((index: Int) -> StaggeredGridItemSpan)? = null,
-        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyStaggeredGridItemScope.(index: Int) -> Unit
     )
 }
@@ -311,6 +315,7 @@ sealed interface LazyStaggeredGridScope {
  *  MUST be saveable via Bundle on Android. If set to null (by default), the position of the
  *  item will be used as a key instead.
  *  Using the same key for multiple items in the staggered grid is not allowed.
+ *  This can be overridden by calling [LazyStaggeredGridState.requestScrollToItem].
  *
  *  When you specify the key the scroll position will be maintained based on the key, which
  *  means if you add/remove items before the current visible item the item with the given key
@@ -350,6 +355,7 @@ inline fun <T> LazyStaggeredGridScope.items(
  *  MUST be saveable via Bundle on Android. If set to null (by default), the position of the
  *  item will be used as a key instead.
  *  Using the same key for multiple items in the staggered grid is not allowed.
+ *  This can be overridden by calling [LazyStaggeredGridState.requestScrollToItem].
  *
  *  When you specify the key the scroll position will be maintained based on the key, which
  *  means if you add/remove items before the current visible item the item with the given key
@@ -363,10 +369,8 @@ inline fun <T> LazyStaggeredGridScope.items(
  */
 inline fun <T> LazyStaggeredGridScope.itemsIndexed(
     items: List<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
-    @Suppress("PrimitiveInLambda")
     noinline span: ((index: Int, item: T) -> StaggeredGridItemSpan)? = null,
     crossinline itemContent: @Composable LazyStaggeredGridItemScope.(index: Int, item: T) -> Unit
 ) {
@@ -391,6 +395,7 @@ inline fun <T> LazyStaggeredGridScope.itemsIndexed(
  *  MUST be saveable via Bundle on Android. If set to null (by default), the position of the
  *  item will be used as a key instead.
  *  Using the same key for multiple items in the staggered grid is not allowed.
+ *  This can be overridden by calling [LazyStaggeredGridState.requestScrollToItem].
  *
  *  When you specify the key the scroll position will be maintained based on the key, which
  *  means if you add/remove items before the current visible item the item with the given key
@@ -430,6 +435,7 @@ inline fun <T> LazyStaggeredGridScope.items(
  *  MUST be saveable via Bundle on Android. If set to null (by default), the position of the
  *  item will be used as a key instead.
  *  Using the same key for multiple items in the staggered grid is not allowed.
+ *  This can be overridden by calling [LazyStaggeredGridState.requestScrollToItem].
  *
  *  When you specify the key the scroll position will be maintained based on the key, which
  *  means if you add/remove items before the current visible item the item with the given key
@@ -443,10 +449,8 @@ inline fun <T> LazyStaggeredGridScope.items(
  */
 inline fun <T> LazyStaggeredGridScope.itemsIndexed(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
-    @Suppress("PrimitiveInLambda")
     noinline span: ((index: Int, item: T) -> StaggeredGridItemSpan)? = null,
     crossinline itemContent: @Composable LazyStaggeredGridItemScope.(index: Int, item: T) -> Unit
 ) {

@@ -41,7 +41,8 @@ interface LazyListScope {
      * via Bundle on Android. If null is passed the position in the list will represent the key.
      * When you specify the key the scroll position will be maintained based on the key, which
      * means if you add/remove items before the current visible item the item with the given key
-     * will be kept as the first visible one.
+     * will be kept as the first visible one. This can be overridden by calling
+     * 'requestScrollToItem' on the 'LazyListState'.
      * @param contentType the type of the content of this item. The item compositions of the same
      * type could be reused more efficiently. Note that null is a valid type and items of such
      * type will be considered compatible.
@@ -69,7 +70,8 @@ interface LazyListScope {
      * via Bundle on Android. If null is passed the position in the list will represent the key.
      * When you specify the key the scroll position will be maintained based on the key, which
      * means if you add/remove items before the current visible item the item with the given key
-     * will be kept as the first visible one.
+     * will be kept as the first visible one. This can be overridden by calling
+     * 'requestScrollToItem' on the 'LazyListState'.
      * @param contentType a factory of the content types for the item. The item compositions of
      * the same type could be reused more efficiently. Note that null is a valid type and items of such
      * type will be considered compatible.
@@ -77,11 +79,8 @@ interface LazyListScope {
      */
     fun items(
         count: Int,
-        @Suppress("PrimitiveInLambda")
         key: ((index: Int) -> Any)? = null,
-        @Suppress("PrimitiveInLambda")
         contentType: (index: Int) -> Any? = { null },
-        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyItemScope.(index: Int) -> Unit
     ) {
         error("The method is not implemented")
@@ -90,9 +89,7 @@ interface LazyListScope {
     @Deprecated("Use the non deprecated overload", level = DeprecationLevel.HIDDEN)
     fun items(
         count: Int,
-        @Suppress("PrimitiveInLambda")
         key: ((index: Int) -> Any)? = null,
-        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyItemScope.(index: Int) -> Unit
     ) {
         items(count, key, { null }, itemContent)
@@ -109,11 +106,15 @@ interface LazyListScope {
      * via Bundle on Android. If null is passed the position in the list will represent the key.
      * When you specify the key the scroll position will be maintained based on the key, which
      * means if you add/remove items before the current visible item the item with the given key
-     * will be kept as the first visible one.
+     * will be kept as the first visible one. This can be overridden by calling
+     * 'requestScrollToItem' on the 'LazyListState'.
      * @param contentType the type of the content of this item. The item compositions of the same
      * type could be reused more efficiently. Note that null is a valid type and items of such
      * type will be considered compatible.
      * @param content the content of the header
+     *
+     * Note: More investigations needed to make sure sticky headers API is suitable for various
+     * more generic usecases, e.g. in grids. This API is experimental until the answer is found.
      */
     @ExperimentalFoundationApi
     fun stickyHeader(
@@ -132,7 +133,8 @@ interface LazyListScope {
  * via Bundle on Android. If null is passed the position in the list will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one. This can be overridden by calling 'requestScrollToItem'
+ * on the 'LazyListState'.
  * @param contentType a factory of the content types for the item. The item compositions of
  * the same type could be reused more efficiently. Note that null is a valid type and items of such
  * type will be considered compatible.
@@ -167,7 +169,8 @@ inline fun <T> LazyListScope.items(
  * via Bundle on Android. If null is passed the position in the list will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one. This can be overridden by calling 'requestScrollToItem'
+ * on the 'LazyListState'.
  * @param contentType a factory of the content types for the item. The item compositions of
  * the same type could be reused more efficiently. Note that null is a valid type and items of such
  * type will be considered compatible.
@@ -175,7 +178,6 @@ inline fun <T> LazyListScope.items(
  */
 inline fun <T> LazyListScope.itemsIndexed(
     items: List<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
@@ -190,7 +192,6 @@ inline fun <T> LazyListScope.itemsIndexed(
 @Deprecated("Use the non deprecated overload", level = DeprecationLevel.HIDDEN)
 inline fun <T> LazyListScope.itemsIndexed(
     items: List<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
 ) = itemsIndexed(items, key, itemContent = itemContent)
@@ -204,7 +205,8 @@ inline fun <T> LazyListScope.itemsIndexed(
  * via Bundle on Android. If null is passed the position in the list will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one. This can be overridden by calling 'requestScrollToItem'
+ * on the 'LazyListState'.
  * @param contentType a factory of the content types for the item. The item compositions of
  * the same type could be reused more efficiently. Note that null is a valid type and items of such
  * type will be considered compatible.
@@ -239,7 +241,8 @@ inline fun <T> LazyListScope.items(
  * via Bundle on Android. If null is passed the position in the list will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one. This can be overridden by calling 'requestScrollToItem'
+ * on the 'LazyListState'.
  * @param contentType a factory of the content types for the item. The item compositions of
  * the same type could be reused more efficiently. Note that null is a valid type and items of such
  * type will be considered compatible.
@@ -247,7 +250,6 @@ inline fun <T> LazyListScope.items(
  */
 inline fun <T> LazyListScope.itemsIndexed(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
@@ -262,7 +264,6 @@ inline fun <T> LazyListScope.itemsIndexed(
 @Deprecated("Use the non deprecated overload", level = DeprecationLevel.HIDDEN)
 inline fun <T> LazyListScope.itemsIndexed(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
 ) = itemsIndexed(items, key, itemContent = itemContent)

@@ -16,6 +16,11 @@
 
 package androidx.build
 
+import androidx.build.testutils.POM_COLLECTION
+import androidx.build.testutils.POM_COLLECTION_JVM
+import androidx.build.testutils.POM_COMPOSE_UI_GEOMETRY
+import androidx.build.testutils.POM_CORE_CORE
+import androidx.build.testutils.XmlProviderImpl
 import org.junit.Assert.assertEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,10 +30,14 @@ import org.junit.runners.JUnit4
 class MavenUploadHelperTest {
 
     @Test
-    fun testSortPomDependencies() {
+    fun insertDefaultMultiplatformDependenciesTest() {
+        val pom = XmlProviderImpl(POM_COLLECTION)
+
         /* ktlint-disable max-line-length */
-        val pom = """<?xml version="1.0" encoding="UTF-8"?>
-<project xmlns="http://maven.apache.org/POM/4.0.0" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+
+        // Expect that collection-jvm has been inserted in <dependencies>.
+        val expected = """<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
   <!-- This module was also published with a richer model, Gradle metadata,  -->
   <!-- which should be used instead. Do not delete the following line which  -->
   <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
@@ -36,11 +45,11 @@ class MavenUploadHelperTest {
   <!-- do_not_remove: published-with-gradle-metadata -->
   <modelVersion>4.0.0</modelVersion>
   <groupId>androidx.collection</groupId>
-  <artifactId>collection-jvm</artifactId>
-  <version>1.3.0-alpha01</version>
-  <name>Android Support Library collections</name>
+  <artifactId>collection</artifactId>
+  <version>1.3.0-alpha05</version>
+  <name>collections</name>
   <description>Standalone efficient collections.</description>
-  <url>https://developer.android.com/jetpack/androidx/releases/collection#1.3.0-alpha01</url>
+  <url>https://developer.android.com/jetpack/androidx/releases/collection#1.3.0-alpha05</url>
   <inceptionYear>2018</inceptionYear>
   <licenses>
     <license>
@@ -61,24 +70,318 @@ class MavenUploadHelperTest {
   <dependencies>
     <dependency>
       <groupId>org.jetbrains.kotlin</groupId>
-      <artifactId>kotlin-stdlib-common</artifactId>
-      <version>1.6.10</version>
+      <artifactId>kotlin-stdlib</artifactId>
+      <version>1.8.21</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.collection</groupId>
+      <artifactId>collection-jvm</artifactId>
+      <version>1.3.0-alpha05</version>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+</project>
+"""
+        /* ktlint-enable max-line-length */
+
+        insertDefaultMultiplatformDependencies(pom, "jvm")
+
+        val actual = pom.toString()
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun insertDefaultMultiplatformDependenciesNoDepsTest() {
+        val pom = XmlProviderImpl(POM_COMPOSE_UI_GEOMETRY)
+
+        /* ktlint-disable max-line-length */
+
+        // Expect that collection-jvm has been inserted in <dependencies>.
+        val expected = """<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>androidx.compose.ui</groupId>
+  <artifactId>ui-geometry</artifactId>
+  <version>1.6.0-alpha01</version>
+  <packaging>pom</packaging>
+  <name>Compose Geometry</name>
+  <description>Compose classes related to dimensions without units</description>
+  <url>https://developer.android.com/jetpack/androidx/releases/compose-ui#1.6.0-alpha01</url>
+  <inceptionYear>2020</inceptionYear>
+  <licenses>
+    <license>
+      <name>The Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <name>The Android Open Source Project</name>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://android.googlesource.com/platform/frameworks/support</connection>
+    <url>https://cs.android.com/androidx/platform/frameworks/support</url>
+  </scm>
+  <dependencies>
+    <dependency>
+      <groupId>androidx.compose.ui</groupId>
+      <artifactId>ui-geometry-android</artifactId>
+      <version>1.6.0-alpha01</version>
+      <type>aar</type>
+      <scope>compile</scope>
+    </dependency>
+  </dependencies>
+</project>
+"""
+        /* ktlint-enable max-line-length */
+
+        insertDefaultMultiplatformDependencies(pom, "android")
+
+        val actual = pom.toString()
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun testAssignAarTypes() {
+        val pom = XmlProviderImpl(POM_CORE_CORE)
+        val androidLibrariesSet = setOf(
+            "androidx.annotation:annotation-experimental",
+            "androidx.lifecycle:lifecycle-runtime"
+        )
+
+        /* ktlint-disable max-line-length */
+
+        // Expect that elements in <dependencies> are sorted alphabetically.
+        val expected = """<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>androidx.core</groupId>
+  <artifactId>core</artifactId>
+  <version>1.12.0-alpha05</version>
+  <packaging>pom</packaging>
+  <name>Core</name>
+  <description>Provides backward-compatible implementations of Android platform APIs and features.</description>
+  <url>https://developer.android.com/jetpack/androidx/releases/core#1.12.0-alpha05</url>
+  <inceptionYear>2015</inceptionYear>
+  <licenses>
+    <license>
+      <name>The Apache Software License, Version 2.0</name>
+      <url>http://www.apache.org/licenses/LICENSE-2.0.txt</url>
+      <distribution>repo</distribution>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <name>The Android Open Source Project</name>
+    </developer>
+  </developers>
+  <scm>
+    <connection>scm:git:https://android.googlesource.com/platform/frameworks/support</connection>
+    <url>https://cs.android.com/androidx/platform/frameworks/support</url>
+  </scm>
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>androidx.core</groupId>
+        <artifactId>core-ktx</artifactId>
+        <version>1.12.0-alpha05</version>
+      </dependency>
+      <dependency>
+        <groupId>androidx.core</groupId>
+        <artifactId>core-testing</artifactId>
+        <version>1.12.0-alpha05</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+  <dependencies>
+    <dependency>
+      <groupId>androidx.annotation</groupId>
+      <artifactId>annotation</artifactId>
+      <version>1.6.0</version>
+      <scope>compile</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.annotation</groupId>
+      <artifactId>annotation-experimental</artifactId>
+      <version>1.3.0</version>
+      <scope>compile</scope>
+      <type>aar</type>
+    </dependency>
+    <dependency>
+      <groupId>androidx.collection</groupId>
+      <artifactId>collection</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.concurrent</groupId>
+      <artifactId>concurrent-futures</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.interpolator</groupId>
+      <artifactId>interpolator</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.lifecycle</groupId>
+      <artifactId>lifecycle-runtime</artifactId>
+      <version>2.3.1</version>
+      <scope>compile</scope>
+      <type>aar</type>
+    </dependency>
+    <dependency>
+      <groupId>androidx.versionedparcelable</groupId>
+      <artifactId>versionedparcelable</artifactId>
+      <version>1.1.1</version>
       <scope>compile</scope>
     </dependency>
     <dependency>
       <groupId>org.jetbrains.kotlin</groupId>
       <artifactId>kotlin-stdlib</artifactId>
-      <version>1.6.10</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>androidx.annotation</groupId>
-      <artifactId>annotation</artifactId>
-      <version>1.3.0</version>
-      <scope>compile</scope>
+      <version>1.8.22</version>
+      <scope>runtime</scope>
     </dependency>
   </dependencies>
-</project>"""
+</project>
+"""
+        /* ktlint-enable max-line-length */
+
+        assignAarDependencyTypes(pom, androidLibrariesSet)
+
+        val actual = pom.toString()
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun testEnsureConsistentJvmSuffix() {
+        /* ktlint-disable max-line-length */
+
+        val pom = """<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <dependencies>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlinx-coroutines-core-jvm</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+</project>
+"""
+
+        val expected = """<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <dependencies>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlinx-coroutines-core</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+</project>
+"""
+        /* ktlint-enable max-line-length */
+
+        val xmlProvider = XmlProviderImpl(pom)
+        ensureConsistentJvmSuffix(xmlProvider)
+
+        val actual = xmlProvider.toString()
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun testAssignSingleVersionDependenciesInGroupForPom() {
+        /* ktlint-disable max-line-length */
+
+        val pom = """<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <dependencies>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlinx-coroutines-core</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.example</groupId>
+      <artifactId>example-core</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+</project>
+"""
+
+        val expected = """<?xml version="1.0"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <!-- This module was also published with a richer model, Gradle metadata,  -->
+  <!-- which should be used instead. Do not delete the following line which  -->
+  <!-- is to indicate to Gradle or any Gradle module metadata file consumer  -->
+  <!-- that they should prefer consuming it instead. -->
+  <!-- do_not_remove: published-with-gradle-metadata -->
+  <dependencies>
+    <dependency>
+      <groupId>org.jetbrains.kotlin</groupId>
+      <artifactId>kotlinx-coroutines-core</artifactId>
+      <version>1.0.0</version>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>androidx.example</groupId>
+      <artifactId>example-core</artifactId>
+      <version>[1.0.0]</version>
+      <scope>runtime</scope>
+    </dependency>
+  </dependencies>
+</project>
+"""
+        /* ktlint-enable max-line-length */
+
+        val xmlProvider = XmlProviderImpl(pom)
+        val mavenGroup = LibraryGroup("androidx.example", Version("1.0.0"))
+        assignSingleVersionDependenciesInGroupForPom(xmlProvider, mavenGroup)
+
+        val actual = xmlProvider.toString()
+        assertEquals(expected, actual)
+    }
+
+    @Test
+    fun testSortPomDependencies() {
+        val pom = POM_COLLECTION_JVM
+
+        /* ktlint-disable max-line-length */
 
         // Expect that elements in <dependencies> are sorted alphabetically.
         val expected = """<?xml version="1.0" encoding="UTF-8"?>
@@ -91,10 +394,10 @@ class MavenUploadHelperTest {
   <modelVersion>4.0.0</modelVersion>
   <groupId>androidx.collection</groupId>
   <artifactId>collection-jvm</artifactId>
-  <version>1.3.0-alpha01</version>
-  <name>Android Support Library collections</name>
+  <version>1.3.0-alpha05</version>
+  <name>collections</name>
   <description>Standalone efficient collections.</description>
-  <url>https://developer.android.com/jetpack/androidx/releases/collection#1.3.0-alpha01</url>
+  <url>https://developer.android.com/jetpack/androidx/releases/collection#1.3.0-alpha05</url>
   <inceptionYear>2018</inceptionYear>
   <licenses>
     <license>
@@ -112,6 +415,15 @@ class MavenUploadHelperTest {
     <connection>scm:git:https://android.googlesource.com/platform/frameworks/support</connection>
     <url>https://cs.android.com/androidx/platform/frameworks/support</url>
   </scm>
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>androidx.collection</groupId>
+        <artifactId>collection-ktx</artifactId>
+        <version>1.3.0-alpha01</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
   <dependencies>
     <dependency>
       <groupId>androidx.annotation</groupId>
@@ -122,13 +434,7 @@ class MavenUploadHelperTest {
     <dependency>
       <groupId>org.jetbrains.kotlin</groupId>
       <artifactId>kotlin-stdlib</artifactId>
-      <version>1.6.10</version>
-      <scope>compile</scope>
-    </dependency>
-    <dependency>
-      <groupId>org.jetbrains.kotlin</groupId>
-      <artifactId>kotlin-stdlib-common</artifactId>
-      <version>1.6.10</version>
+      <version>1.8.21</version>
       <scope>compile</scope>
     </dependency>
   </dependencies>

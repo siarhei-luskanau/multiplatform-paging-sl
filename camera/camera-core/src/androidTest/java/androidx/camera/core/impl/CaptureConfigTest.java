@@ -28,7 +28,7 @@ import android.view.Surface;
 
 import androidx.annotation.NonNull;
 import androidx.camera.core.impl.Config.Option;
-import androidx.camera.testing.DeferrableSurfacesUtil;
+import androidx.camera.testing.impl.DeferrableSurfacesUtil;
 import androidx.test.ext.junit.runners.AndroidJUnit4;
 import androidx.test.filters.LargeTest;
 import androidx.test.filters.SdkSuppress;
@@ -275,6 +275,29 @@ public class CaptureConfigTest {
         CaptureConfig configuration = builder.build();
 
         configuration.getCameraCaptureCallbacks().add(mock(CameraCaptureCallback.class));
+    }
+
+    @Test
+    public void postviewEnabledDefaultIsFalse() {
+        // 1. Arrange / Act
+        CaptureConfig captureConfig = new CaptureConfig.Builder().build();
+
+        // 3. Assert
+        assertThat(captureConfig.isPostviewEnabled()).isFalse();
+    }
+
+    @Test
+    public void canSetPostviewEnabled() {
+        // 1. Arrange
+        CaptureConfig.Builder builder = new CaptureConfig.Builder();
+
+        // 2. Act
+        builder.setPostviewEnabled(true);
+        CaptureConfig captureConfig = builder.build();
+
+        // 3. Assert
+        assertThat(captureConfig.isPostviewEnabled()).isTrue();
+
     }
 
     @Test

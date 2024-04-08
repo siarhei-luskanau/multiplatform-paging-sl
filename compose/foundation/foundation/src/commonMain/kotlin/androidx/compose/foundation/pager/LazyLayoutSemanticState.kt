@@ -16,25 +16,21 @@
 
 package androidx.compose.foundation.pager
 
-import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.Orientation
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.lazy.layout.LazyLayoutSemanticState
 import androidx.compose.ui.semantics.CollectionInfo
 
-@OptIn(ExperimentalFoundationApi::class)
 internal fun LazyLayoutSemanticState(
     state: PagerState,
     isVertical: Boolean
 ): LazyLayoutSemanticState = object : LazyLayoutSemanticState {
+    override val scrollOffset: Float
+        get() = state.currentAbsoluteScrollOffset().toFloat()
+    override val maxScrollOffset: Float
+        get() = state.layoutInfo.calculateNewMaxScrollOffset(state.pageCount).toFloat()
 
-    override val currentPosition: Float
-        get() = state.firstVisiblePage + state.firstVisiblePageOffset / 100_000f
-    override val canScrollForward: Boolean
-        get() = state.canScrollForward
-
-    override suspend fun animateScrollBy(delta: Float) {
-        state.animateScrollBy(delta)
-    }
+    override suspend fun animateScrollBy(delta: Float): Float = state.animateScrollBy(delta)
 
     override suspend fun scrollToItem(index: Int) {
         state.scrollToPage(index)
@@ -42,8 +38,17 @@ internal fun LazyLayoutSemanticState(
 
     override fun collectionInfo(): CollectionInfo =
         if (isVertical) {
-            CollectionInfo(rowCount = -1, columnCount = 1)
+            CollectionInfo(rowCount = state.pageCount, columnCount = 1)
         } else {
-            CollectionInfo(rowCount = 1, columnCount = -1)
+            CollectionInfo(rowCount = 1, columnCount = state.pageCount)
         }
+
+    override val viewport: Int
+        get() = if (state.layoutInfo.orientation == Orientation.Vertical) {
+            state.layoutInfo.viewportSize.height
+        } else {
+            state.layoutInfo.viewportSize.width
+        }
+    override val contentPadding: Int
+        get() = state.layoutInfo.beforeContentPadding + state.layoutInfo.afterContentPadding
 }

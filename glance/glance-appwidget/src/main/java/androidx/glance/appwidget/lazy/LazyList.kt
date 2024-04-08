@@ -126,7 +126,7 @@ private fun applyListScope(
                 ?: (ReservedItemIdRangeEnd - index)
             check(id != LazyListScope.UnspecifiedItemId) { "Implicit list item ids exhausted." }
             LazyListItem(id, alignment) {
-                object : LazyItemScope { }.apply { composable() }
+                object : LazyItemScope { }.composable()
             }
         }
     }
@@ -196,9 +196,7 @@ interface LazyListScope {
      */
     fun items(
         count: Int,
-        @Suppress("PrimitiveInLambda")
         itemId: ((index: Int) -> Long) = { UnspecifiedItemId },
-        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyItemScope.(index: Int) -> Unit
     )
 
@@ -256,7 +254,6 @@ inline fun <T> LazyListScope.itemsIndexed(
  */
 inline fun <T> LazyListScope.items(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline itemId: ((item: T) -> Long) = { LazyListScope.UnspecifiedItemId },
     crossinline itemContent: @Composable LazyItemScope.(item: T) -> Unit
 ) = items(items.size, { index: Int -> itemId(items[index]) }) {
@@ -275,7 +272,6 @@ inline fun <T> LazyListScope.items(
  */
 inline fun <T> LazyListScope.itemsIndexed(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline itemId: ((index: Int, item: T) -> Long) = { _, _ -> LazyListScope.UnspecifiedItemId },
     crossinline itemContent: @Composable LazyItemScope.(index: Int, item: T) -> Unit
 ) = items(items.size, { index: Int -> itemId(index, items[index]) }) {
@@ -293,12 +289,9 @@ internal abstract class EmittableLazyList : EmittableWithChildren(resetsDepthFor
 }
 
 internal class EmittableLazyListItem : EmittableLazyItemWithChildren() {
-    override var modifier: GlanceModifier
-        get() = children.singleOrNull()?.modifier
-            ?: GlanceModifier.wrapContentHeight().fillMaxWidth()
-        set(_) {
-            throw IllegalAccessError("You cannot set the modifier of an EmittableLazyListItem")
-        }
+    // Fill max width of the lazy column so that item contents can be aligned per the horizontal
+    // alignment.
+    override var modifier: GlanceModifier = GlanceModifier.wrapContentHeight().fillMaxWidth()
     var itemId: Long = 0
 
     override fun copy(): Emittable = EmittableLazyListItem().also {

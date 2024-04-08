@@ -31,7 +31,8 @@ class SingleItemQueryResultAdapter(
         scope.builder.apply {
             rowAdapter.onCursorReady(cursorVarName = cursorVarName, scope = scope)
             addLocalVariable(outVarName, type.asTypeName())
-            beginControlFlow("if (%L.moveToFirst())", cursorVarName).apply {
+            val stepName = if (scope.useDriverApi) "step" else "moveToFirst"
+            beginControlFlow("if (%L.$stepName())", cursorVarName).apply {
                 rowAdapter.convert(outVarName, cursorVarName, scope)
             }
             nextControlFlow("else").apply {
@@ -41,8 +42,11 @@ class SingleItemQueryResultAdapter(
                     type.nullability == XNullability.NONNULL &&
                     defaultValue == "null"
                 ) {
-                    // TODO(b/249984504): Generate / output a better message.
-                    addStatement("error(%S)", "Cursor was empty, but expected a single item.")
+                    addStatement(
+                        "error(%S)", "The query result was empty, but expected a single row to " +
+                            "return a NON-NULL object of " +
+                            "type <${type.asTypeName().toString(language)}>."
+                    )
                 } else {
                     addStatement("%L = %L", outVarName, rowAdapter.out.defaultValue())
                 }
@@ -50,4 +54,6 @@ class SingleItemQueryResultAdapter(
             endControlFlow()
         }
     }
+
+    override fun isMigratedToDriver(): Boolean = rowAdapter.isMigratedToDriver()
 }

@@ -39,15 +39,16 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.wear.compose.foundation.SwipeToDismissBoxState
+import androidx.wear.compose.foundation.SwipeToDismissKeys
+import androidx.wear.compose.foundation.SwipeToDismissValue
+import androidx.wear.compose.foundation.edgeSwipeToDismiss
+import androidx.wear.compose.foundation.lazy.ScalingLazyListState
+import androidx.wear.compose.foundation.rememberSwipeToDismissBoxState
 import androidx.wear.compose.material.Chip
 import androidx.wear.compose.material.ChipDefaults
 import androidx.wear.compose.material.SwipeToDismissBox
-import androidx.wear.compose.material.SwipeToDismissBoxState
-import androidx.wear.compose.material.SwipeToDismissKeys
-import androidx.wear.compose.material.SwipeToDismissValue
 import androidx.wear.compose.material.Text
-import androidx.wear.compose.material.edgeSwipeToDismiss
-import androidx.wear.compose.material.rememberSwipeToDismissBoxState
 
 /**
  * SwipeToDismiss demo - manages its own navigation between a List screen and a Detail screen,
@@ -84,7 +85,12 @@ fun SwipeToDismissDemo(
             // What to show behind the content whilst swiping.
             when (demoState.value) {
                 SwipeDismissDemoState.List -> {
-                    DisplayDemoList(SwipeToDismissDemos, {})
+                    DisplayDemoList(
+                        SwipeToDismissDemos,
+                        {},
+                        0,
+                        remember { mutableListOf(ScalingLazyListState()) }
+                    )
                 }
                 SwipeDismissDemoState.Detail -> {
                     SwipeToDismissOptionsList()

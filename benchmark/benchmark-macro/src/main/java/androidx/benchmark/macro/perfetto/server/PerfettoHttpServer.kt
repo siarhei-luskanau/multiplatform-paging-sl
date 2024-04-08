@@ -24,14 +24,18 @@ import androidx.annotation.DoNotInline
 import androidx.annotation.RequiresApi
 import androidx.benchmark.Shell
 import androidx.benchmark.ShellScript
+import androidx.benchmark.inMemoryTrace
 import androidx.benchmark.perfetto.PerfettoTraceProcessor
-import androidx.benchmark.userspaceTrace
 import java.io.IOException
 import java.io.InputStream
 import java.io.OutputStream
 import java.net.ConnectException
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.DurationUnit
 import perfetto.protos.AppendTraceDataResult
 import perfetto.protos.ComputeMetricArgs
 import perfetto.protos.ComputeMetricResult
@@ -57,9 +61,9 @@ internal class PerfettoHttpServer {
         private const val PATH_RESTORE_INITIAL_TABLES = "/restore_initial_tables"
 
         private const val TAG = "PerfettoHttpServer"
-        private const val SERVER_START_TIMEOUT_MS = 5000
-        private const val READ_TIMEOUT_SECONDS = 300000
         private const val SERVER_PROCESS_NAME = "trace_processor_shell"
+        private val WAIT_INTERVAL = 5.milliseconds
+        private val READ_TIMEOUT = 30.seconds
 
         // Note that trace processor http server has a hard limit of 64Mb for payload size.
         // https://cs.android.com/android/platform/superproject/+/master:external/perfetto/src/base/http/http_server.cc;l=33
@@ -101,10 +105,10 @@ internal class PerfettoHttpServer {
      * @throws IllegalStateException if the server is not running by the end of the timeout.
      */
     @SuppressLint("BanThreadSleep")
-    fun startServer() = userspaceTrace("PerfettoHttpServer#startServer") {
+    fun startServer(timeout: Duration) = inMemoryTrace("PerfettoHttpServer#startServer") {
         if (processId != null) {
             Log.w(TAG, "Tried to start a trace shell processor that is already running.")
-            return@userspaceTrace
+            return@inMemoryTrace
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N &&
@@ -131,11 +135,11 @@ internal class PerfettoHttpServer {
             .toInt()
 
         // Wait for the trace_processor_shell server to start.
-        var elapsed = 0
+        var elapsed = 0.milliseconds
         while (!isRunning()) {
-            Thread.sleep(5)
-            elapsed += 5
-            if (elapsed >= SERVER_START_TIMEOUT_MS) {
+            Thread.sleep(WAIT_INTERVAL.toLong(DurationUnit.MILLISECONDS))
+            elapsed += WAIT_INTERVAL
+            if (elapsed >= timeout) {
 
                 // In the event that the instrumentation app cannot connect to the
                 // trace_processor_shell server, trying to read the full stderr may make the
@@ -168,10 +172,10 @@ internal class PerfettoHttpServer {
     /**
      * Stops the server killing the associated process
      */
-    fun stopServer() = userspaceTrace("PerfettoHttpServer#stopServer") {
+    fun stopServer() = inMemoryTrace("PerfettoHttpServer#stopServer") {
         if (processId == null) {
             Log.w(TAG, "Tried to stop trace shell processor http server without starting it.")
-            return@userspaceTrace
+            return@inMemoryTrace
         }
         Shell.executeScriptSilent("kill -TERM $processId")
         Log.i(TAG, "Perfetto trace processor shell server stopped (pid=$processId).")
@@ -180,10 +184,10 @@ internal class PerfettoHttpServer {
     /**
      * Returns true whether the server is running, false otherwise.
      */
-    fun isRunning(): Boolean = userspaceTrace("PerfettoHttpServer#isRunning") {
-        return@userspaceTrace try {
+    fun isRunning(): Boolean = inMemoryTrace("PerfettoHttpServer#isRunning") {
+        return@inMemoryTrace try {
             val statusResult = status()
-            return@userspaceTrace statusResult.api_version != null && statusResult.api_version > 0
+            return@inMemoryTrace statusResult.api_version != null && statusResult.api_version > 0
         } catch (e: ConnectException) {
             false
         }
@@ -206,11 +210,16 @@ internal class PerfettoHttpServer {
     /**
      * Computes the given metrics on a previously parsed trace.
      */
-    fun computeMetric(metrics: List<String>): ComputeMetricResult =
+    fun computeMetric(
+        metrics: List<String>,
+        resultFormat: ComputeMetricArgs.ResultFormat
+    ): ComputeMetricResult =
         httpRequest(
             method = METHOD_POST,
             url = PATH_COMPUTE_METRIC,
-            encodeBlock = { ComputeMetricArgs.ADAPTER.encode(it, ComputeMetricArgs(metrics)) },
+            encodeBlock = {
+                ComputeMetricArgs.ADAPTER.encode(it, ComputeMetricArgs(metrics, resultFormat))
+            },
             decodeBlock = { ComputeMetricResult.ADAPTER.decode(it) }
         )
 
@@ -279,7 +288,7 @@ internal class PerfettoHttpServer {
                 .openConnection() as HttpURLConnection
         ) {
             requestMethod = method
-            readTimeout = READ_TIMEOUT_SECONDS
+            readTimeout = READ_TIMEOUT.toInt(DurationUnit.MILLISECONDS)
             setRequestProperty("Content-Type", contentType)
             if (encodeBlock != null) {
                 doOutput = true

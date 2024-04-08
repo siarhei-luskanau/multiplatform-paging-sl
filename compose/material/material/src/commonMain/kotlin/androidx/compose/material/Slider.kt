@@ -16,6 +16,7 @@
 
 package androidx.compose.material
 
+import androidx.annotation.IntRange
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.TweenSpec
 import androidx.compose.foundation.Canvas
@@ -50,7 +51,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.progressSemantics
 import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.material.ripple.rememberRipple
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
@@ -92,6 +92,9 @@ import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastCoerceIn
+import androidx.compose.ui.util.fastMap
+import androidx.compose.ui.util.fastMinByOrNull
 import androidx.compose.ui.util.lerp
 import kotlin.math.abs
 import kotlin.math.floor
@@ -135,27 +138,28 @@ import kotlinx.coroutines.launch
  * @param onValueChangeFinished lambda to be invoked when value change has ended. This callback
  * shouldn't be used to update the slider value (use [onValueChange] for that), but rather to
  * know when the user has completed selecting a new value by ending a drag or a click.
- * @param interactionSource the [MutableInteractionSource] representing the stream of
- * [Interaction]s for this Slider. You can create and pass in your own remembered
- * [MutableInteractionSource] if you want to observe [Interaction]s and customize the
- * appearance / behavior of this Slider in different [Interaction]s.
+ * @param interactionSource an optional hoisted [MutableInteractionSource] for observing and
+ * emitting [Interaction]s for this slider. You can use this to change the slider's
+ * appearance or preview the slider in different states. Note that if `null` is provided,
+ * interactions will still happen internally.
  * @param colors [SliderColors] that will be used to determine the color of the Slider parts in
  * different state. See [SliderDefaults.colors] to customize.
  */
 @Composable
 fun Slider(
     value: Float,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Float) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
-    /*@IntRange(from = 0)*/
+    @IntRange(from = 0)
     steps: Int = 0,
     onValueChangeFinished: (() -> Unit)? = null,
-    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    interactionSource: MutableInteractionSource? = null,
     colors: SliderColors = SliderDefaults.colors()
 ) {
+    @Suppress("NAME_SHADOWING")
+    val interactionSource = interactionSource ?: remember { MutableInteractionSource() }
     require(steps >= 0) { "steps should be >= 0" }
     val onValueChangeState = rememberUpdatedState(onValueChange)
     val tickFractions = remember(steps) {
@@ -295,7 +299,7 @@ fun RangeSlider(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
-    /*@IntRange(from = 0)*/
+    @IntRange(from = 0)
     steps: Int = 0,
     onValueChangeFinished: (() -> Unit)? = null,
     colors: SliderColors = SliderDefaults.colors()
@@ -719,7 +723,10 @@ private fun BoxScope.SliderThumb(
                 .size(thumbSize, thumbSize)
                 .indication(
                     interactionSource = interactionSource,
-                    indication = rememberRipple(bounded = false, radius = ThumbRippleRadius)
+                    indication = rippleOrFallbackImplementation(
+                        bounded = false,
+                        radius = ThumbRippleRadius
+                    )
                 )
                 .hoverable(interactionSource = interactionSource)
                 .shadow(if (enabled) elevation else 0.dp, CircleShape, clip = false)
@@ -773,10 +780,11 @@ private fun Track(
             trackStrokeWidth,
             StrokeCap.Round
         )
+        @Suppress("ListIterator")
         tickFractions.groupBy { it > positionFractionEnd || it < positionFractionStart }
             .forEach { (outsideFraction, list) ->
                 drawPoints(
-                    list.map {
+                    list.fastMap {
                         Offset(lerp(sliderStart, sliderEnd, it).x, center.y)
                     },
                     PointMode.Points,
@@ -796,7 +804,7 @@ private fun snapValueToTick(
 ): Float {
     // target is a closest anchor to the `current`, if exists
     return tickFractions
-        .minByOrNull { abs(lerp(minPx, maxPx, it) - current) }
+        .fastMinByOrNull { abs(lerp(minPx, maxPx, it) - current) }
         ?.run { lerp(minPx, maxPx, this) }
         ?: current
 }
@@ -806,7 +814,6 @@ private suspend fun AwaitPointerEventScope.awaitSlop(
     type: PointerType
 ): Pair<PointerInputChange, Float>? {
     var initialDelta = 0f
-    @Suppress("PrimitiveInLambda")
     val postPointerSlop = { pointerInput: PointerInputChange, offset: Float ->
         pointerInput.consume()
         initialDelta = offset
@@ -829,11 +836,10 @@ private fun scale(a1: Float, b1: Float, x: ClosedFloatingPointRange<Float>, a2: 
 
 // Calculate the 0..1 fraction that `pos` value represents between `a` and `b`
 private fun calcFraction(a: Float, b: Float, pos: Float) =
-    (if (b - a == 0f) 0f else (pos - a) / (b - a)).coerceIn(0f, 1f)
+    (if (b - a == 0f) 0f else (pos - a) / (b - a)).fastCoerceIn(0f, 1f)
 
 @Composable
 private fun CorrectValueSideEffect(
-    @Suppress("PrimitiveInLambda")
     scaleToOffset: (Float) -> Float,
     valueRange: ClosedFloatingPointRange<Float>,
     trackRange: ClosedFloatingPointRange<Float>,
@@ -854,7 +860,6 @@ private fun CorrectValueSideEffect(
 private fun Modifier.sliderSemantics(
     value: Float,
     enabled: Boolean,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Float) -> Unit,
     onValueChangeFinished: (() -> Unit)? = null,
     valueRange: ClosedFloatingPointRange<Float> = 0f..1f,
@@ -1046,7 +1051,6 @@ private class RangeSliderLogic(
     val endInteractionSource: MutableInteractionSource,
     val rawOffsetStart: State<Float>,
     val rawOffsetEnd: State<Float>,
-    @Suppress("PrimitiveInLambda")
     val onDrag: State<(Boolean, Float) -> Unit>,
 ) {
     fun activeInteraction(draggingStart: Boolean): MutableInteractionSource =
@@ -1168,7 +1172,6 @@ private val DefaultSliderConstraints =
 private val SliderToTickAnimation = TweenSpec<Float>(durationMillis = 100)
 
 private class SliderDraggableState(
-    @Suppress("PrimitiveInLambda")
     val onDelta: (Float) -> Unit
 ) : DraggableState {
 

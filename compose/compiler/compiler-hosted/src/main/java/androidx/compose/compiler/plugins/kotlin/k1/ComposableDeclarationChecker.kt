@@ -37,6 +37,7 @@ import org.jetbrains.kotlin.psi.KtProperty
 import org.jetbrains.kotlin.psi.KtPropertyAccessor
 import org.jetbrains.kotlin.resolve.checkers.DeclarationChecker
 import org.jetbrains.kotlin.resolve.checkers.DeclarationCheckerContext
+import org.jetbrains.kotlin.resolve.multiplatform.findCompatibleExpectsForActual
 import org.jetbrains.kotlin.types.KotlinType
 import org.jetbrains.kotlin.types.typeUtil.supertypes
 import org.jetbrains.kotlin.util.OperatorNameConventions
@@ -128,7 +129,22 @@ class ComposableDeclarationChecker : DeclarationChecker, StorageComponentContain
             )
         }
 
-        if (hasComposableAnnotation && descriptor.modality == Modality.ABSTRACT) {
+        if (descriptor.isActual) {
+            val expectDescriptor = descriptor.findCompatibleExpectsForActual().singleOrNull()
+            if (expectDescriptor != null &&
+                expectDescriptor.hasComposableAnnotation() != hasComposableAnnotation) {
+                context.trace.report(
+                    ComposeErrors.MISMATCHED_COMPOSABLE_IN_EXPECT_ACTUAL.on(
+                        declaration.nameIdentifier ?: declaration
+                    )
+                )
+            }
+        }
+
+        if (
+            hasComposableAnnotation &&
+                (descriptor.modality == Modality.ABSTRACT || descriptor.modality == Modality.OPEN)
+        ) {
             declaration.valueParameters.forEach {
                 val defaultValue = it.defaultValue
                 if (defaultValue != null) {

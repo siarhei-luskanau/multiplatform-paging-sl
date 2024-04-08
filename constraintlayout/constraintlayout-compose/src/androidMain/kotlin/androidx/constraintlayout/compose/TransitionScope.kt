@@ -18,6 +18,7 @@ package androidx.constraintlayout.compose
 
 import androidx.annotation.FloatRange
 import androidx.annotation.IntRange
+import androidx.compose.foundation.layout.LayoutScopeMarker
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.constraintlayout.core.parser.CLArray
@@ -60,6 +61,7 @@ fun Transition(
  * @see keyPositions
  * @see keyCycles
  */
+@LayoutScopeMarker
 class TransitionScope internal constructor(
     private val from: String,
     private val to: String
@@ -257,9 +259,12 @@ class TransitionScope internal constructor(
         onSwipe?.let {
             containerObject.put("onSwipe", onSwipeObject)
             onSwipeObject.putString("direction", it.direction.name)
-            onSwipeObject.putNumber("dragScale", it.dragScale)
+            onSwipeObject.putNumber("scale", it.dragScale)
             it.dragAround?.id?.let { id ->
                 onSwipeObject.putString("around", id.toString())
+            }
+            it.limitBoundsTo?.id?.let { id ->
+                onSwipeObject.putString("limitBounds", id.toString())
             }
             onSwipeObject.putNumber("threshold", it.dragThreshold)
             onSwipeObject.putString("anchor", it.anchor.id.toString())
@@ -339,6 +344,7 @@ private class FakeKeyFramesScope : BaseKeyFramesScope()
  *
  * @see frame
  */
+@LayoutScopeMarker
 class KeyAttributesScope internal constructor(vararg targets: ConstrainedLayoutReference) :
     BaseKeyFramesScope(*targets) {
 
@@ -362,6 +368,7 @@ class KeyAttributesScope internal constructor(vararg targets: ConstrainedLayoutR
  *
  * @see frame
  */
+@LayoutScopeMarker
 class KeyPositionsScope internal constructor(vararg targets: ConstrainedLayoutReference) :
     BaseKeyFramesScope(*targets) {
     /**
@@ -391,6 +398,7 @@ class KeyPositionsScope internal constructor(vararg targets: ConstrainedLayoutRe
  *
  * @see frame
  */
+@LayoutScopeMarker
 class KeyCyclesScope internal constructor(vararg targets: ConstrainedLayoutReference) :
     BaseKeyFramesScope(*targets) {
 
@@ -530,6 +538,7 @@ private class FakeKeyFrameScope : BaseKeyFrameScope()
  *
  * @see [MotionSceneScope.customFloat]
  */
+@LayoutScopeMarker
 class KeyAttributeScope internal constructor() : BaseKeyFrameScope() {
     var alpha by addOnPropertyChange(1f, "alpha")
     var scaleX by addOnPropertyChange(1f, "scaleX")
@@ -548,6 +557,7 @@ class KeyAttributeScope internal constructor() : BaseKeyFrameScope() {
  * These are modifications on the widget's position and size relative to its final state on the
  * current transition.
  */
+@LayoutScopeMarker
 class KeyPositionScope internal constructor() : BaseKeyFrameScope() {
     /**
      * The position as a percentage of the X axis of the current coordinate space.
@@ -595,6 +605,7 @@ class KeyPositionScope internal constructor() : BaseKeyFrameScope() {
  * [KeyCycleScope] allows you to apply wave-based transforms, defined by [period], [offset] and
  * [phase]. A sinusoidal wave is used by default.
  */
+@LayoutScopeMarker
 class KeyCycleScope internal constructor() : BaseKeyFrameScope() {
     var alpha by addOnPropertyChange(1f)
     var scaleX by addOnPropertyChange(1f)

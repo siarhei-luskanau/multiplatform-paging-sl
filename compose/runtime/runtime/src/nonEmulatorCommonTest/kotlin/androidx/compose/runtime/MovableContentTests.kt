@@ -16,6 +16,7 @@
 
 package androidx.compose.runtime
 
+import androidx.compose.runtime.mock.Linear
 import androidx.compose.runtime.mock.MockViewValidator
 import androidx.compose.runtime.mock.View
 import androidx.compose.runtime.mock.ViewApplier
@@ -912,7 +913,9 @@ class MovableContentTests {
         var useInSub1 by mutableStateOf(false)
         var useInSub2 by mutableStateOf(false)
 
-        @Composable fun use() { remember(rememberObject) { 1 } }
+        @Composable fun use() {
+            remember { rememberObject }
+        }
         compose {
             if (useInMain) use()
             Subcompose {
@@ -970,12 +973,16 @@ class MovableContentTests {
         var useInSub1 by mutableStateOf(false)
         var useInSub2 by mutableStateOf(false)
 
-        @Suppress("UNUSED_EXPRESSION")
+        @Suppress("UNUSED_VARIABLE") // Object not remembered without
         val rememberTheObject = movableContentOf {
-            remember(rememberObject) { 1 }
+            val obj = remember {
+                rememberObject
+            }
         }
 
-        @Composable fun use() { rememberTheObject() }
+        @Composable fun use() {
+            rememberTheObject()
+        }
         compose {
             if (useInMain) use()
             Subcompose {
@@ -1541,6 +1548,129 @@ class MovableContentTests {
 
         assertEquals(state, lastSeen)
     }
+
+    @Test
+    fun movableContent_moveRow() = compositionTest {
+        var condition by mutableStateOf(true)
+
+        val movableContent1 = movableContentOf {
+            Text("First")
+        }
+        val movableContent2 = movableContentOf {
+            Text("Second")
+        }
+
+        compose {
+            if (condition) {
+                Linear {
+                    Linear {
+                        movableContent1()
+                    }
+                    movableContent2()
+                }
+            } else {
+                Linear {
+                    Linear {
+                        movableContent1()
+                    }
+                    movableContent2()
+                }
+            }
+        }
+
+        validate {
+            Linear {
+                Linear {
+                    Text("First")
+                }
+                Text("Second")
+            }
+        }
+
+        condition = false
+        expectChanges()
+
+        revalidate()
+    }
+
+    @Test
+    fun movableContent_rememberOrdering() = compositionTest {
+        val movableContent1 = movableContentOf {
+            repeat(100) {
+                Text("Some content")
+            }
+        }
+        var includeContent by mutableStateOf(true)
+        var rememberKey by mutableStateOf(0)
+
+        compose {
+            if (includeContent) {
+                movableContent1()
+            }
+            val a = remember(rememberKey) {
+                SimpleRememberedObject("Key $rememberKey")
+            }
+            Text(a.name)
+        }
+
+        rememberKey++
+        expectChanges()
+
+        includeContent = false
+        rememberKey++
+        expectChanges()
+    }
+
+    @Test
+    fun movableContent_nestedMovableContent() = compositionTest {
+        var data = 0
+
+        var condition by mutableStateOf(true)
+
+        val nestedContent = movableContentOf {
+            val state = remember {
+                data++
+            }
+            Text("Generated state: $state")
+        }
+
+        val contentHost = movableContentOf {
+            Text("Host")
+            if (condition) {
+                nestedContent()
+            }
+        }
+
+        compose {
+            if (condition) {
+                contentHost()
+            }
+            Text("Outer")
+            if (!condition) {
+                contentHost()
+                nestedContent()
+            }
+        }
+
+        validate {
+            if (condition) {
+                Text("Host")
+                Text("Generated state: 0")
+            }
+            Text("Outer")
+            if (!condition) {
+                Text("Host")
+                Text("Generated state: 0")
+            }
+        }
+
+        condition = false
+        expectChanges()
+        revalidate()
+        condition = true
+        expectChanges()
+        revalidate()
+    }
 }
 
 @Composable
@@ -1703,5 +1833,16 @@ class RememberedObject : RememberObserver {
         abandonedCount++
         count--
         if (count == 0) died = true
+    }
+}
+
+class SimpleRememberedObject(val name: String) : RememberObserver {
+    override fun onRemembered() {
+    }
+
+    override fun onForgotten() {
+    }
+
+    override fun onAbandoned() {
     }
 }

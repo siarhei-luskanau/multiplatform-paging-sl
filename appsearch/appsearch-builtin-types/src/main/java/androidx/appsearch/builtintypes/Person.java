@@ -45,7 +45,7 @@ import java.util.List;
 public class Person extends Thing {
     /** Holds type information for additional names for Person. */
     public static class AdditionalName {
-        /** @hide */
+        /** @exportToFramework:hide */
         @RestrictTo(RestrictTo.Scope.LIBRARY)
         @IntDef({
                 TYPE_UNKNOWN,
@@ -158,6 +158,7 @@ public class Person extends Thing {
             @Nullable String description,
             @Nullable String image,
             @Nullable String url,
+            @NonNull List<PotentialAction> potentialActions,
             @Nullable String givenName,
             @Nullable String middleName,
             @Nullable String familyName,
@@ -172,7 +173,7 @@ public class Person extends Thing {
             @NonNull List<String> relations,
             @NonNull List<ContactPoint> contactPoints) {
         super(namespace, id, documentScore, creationTimestampMillis, documentTtlMillis, name,
-                alternateNames, description, image, url);
+                alternateNames, description, image, url, potentialActions);
         mGivenName = givenName;
         mMiddleName = middleName;
         mFamilyName = familyName;
@@ -524,6 +525,7 @@ public class Person extends Thing {
                     /*description=*/ mDescription,
                     /*image=*/ mImage,
                     /*url=*/ mUrl,
+                    /*potentialActions=*/ mPotentialActions,
                     /*givenName=*/ mGivenName,
                     /*middleName=*/ mMiddleName,
                     /*familyName=*/ mFamilyName,

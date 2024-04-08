@@ -30,11 +30,11 @@ import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.SlotTable
 import androidx.compose.runtime.SlotWriter
 import androidx.compose.runtime.changelist.Operation.AdvanceSlotsBy
+import androidx.compose.runtime.changelist.Operation.AppendValue
 import androidx.compose.runtime.changelist.Operation.ApplyChangeList
-import androidx.compose.runtime.changelist.Operation.ClearSlotValue
 import androidx.compose.runtime.changelist.Operation.CopyNodesToNewAnchorLocation
 import androidx.compose.runtime.changelist.Operation.CopySlotTableToAnchorLocation
-import androidx.compose.runtime.changelist.Operation.Deactivate
+import androidx.compose.runtime.changelist.Operation.DeactivateCurrentGroup
 import androidx.compose.runtime.changelist.Operation.DetermineMovableContentNodeIndex
 import androidx.compose.runtime.changelist.Operation.Downs
 import androidx.compose.runtime.changelist.Operation.EndCompositionScope
@@ -53,13 +53,16 @@ import androidx.compose.runtime.changelist.Operation.RemoveNode
 import androidx.compose.runtime.changelist.Operation.ResetSlots
 import androidx.compose.runtime.changelist.Operation.SideEffect
 import androidx.compose.runtime.changelist.Operation.SkipToEndOfCurrentGroup
+import androidx.compose.runtime.changelist.Operation.TrimParentValues
+import androidx.compose.runtime.changelist.Operation.UpdateAnchoredValue
 import androidx.compose.runtime.changelist.Operation.UpdateAuxData
 import androidx.compose.runtime.changelist.Operation.UpdateNode
 import androidx.compose.runtime.changelist.Operation.UpdateValue
 import androidx.compose.runtime.changelist.Operation.Ups
 import androidx.compose.runtime.changelist.Operation.UseCurrentNode
+import androidx.compose.runtime.internal.IntRef
 
-internal class ChangeList : OperationsDebugStringFormattable {
+internal class ChangeList : OperationsDebugStringFormattable() {
 
     private val operations = Operations()
 
@@ -77,12 +80,6 @@ internal class ChangeList : OperationsDebugStringFormattable {
         rememberManager: RememberManager
     ) = operations.executeAndFlushAllPendingOperations(applier, slots, rememberManager)
 
-    fun pushDeactivate(node: ComposeNodeLifecycleCallback) {
-        operations.push(Deactivate) {
-            setObject(Deactivate.Node, node)
-        }
-    }
-
     fun pushRemember(value: RememberObserver) {
         operations.push(Remember) {
             setObject(Remember.Value, value)
@@ -96,15 +93,33 @@ internal class ChangeList : OperationsDebugStringFormattable {
         }
     }
 
+    fun pushUpdateAnchoredValue(value: Any?, anchor: Anchor, groupSlotIndex: Int) {
+        operations.push(UpdateAnchoredValue) {
+            setObject(UpdateAnchoredValue.Value, value)
+            setObject(UpdateAnchoredValue.Anchor, anchor)
+            setInt(UpdateAnchoredValue.GroupSlotIndex, groupSlotIndex)
+        }
+    }
+
+    fun pushAppendValue(anchor: Anchor, value: Any?) {
+        operations.push(AppendValue) {
+            setObject(AppendValue.Anchor, anchor)
+            setObject(AppendValue.Value, value)
+        }
+    }
+
+    fun pushTrimValues(count: Int) {
+        operations.push(TrimParentValues) {
+            setInt(TrimParentValues.Count, count)
+        }
+    }
+
     fun pushResetSlots() {
         operations.push(ResetSlots)
     }
 
-    fun pushClearSlotValue(index: Int, data: Any) {
-        operations.push(ClearSlotValue) {
-            setInt(ClearSlotValue.Index, index)
-            setObject(ClearSlotValue.Data, data)
-        }
+    fun pushDeactivateCurrentGroup() {
+        operations.push(DeactivateCurrentGroup)
     }
 
     fun pushUpdateAuxData(data: Any?) {
@@ -298,7 +313,7 @@ internal class ChangeList : OperationsDebugStringFormattable {
 
     override fun toDebugString(linePrefix: String): String {
         return buildString {
-            append("ChangeList instance containing")
+            append("ChangeList instance containing ")
             append(size)
             append(" operations")
             if (isNotEmpty()) {

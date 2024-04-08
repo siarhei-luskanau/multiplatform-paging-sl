@@ -19,6 +19,10 @@ package androidx.compose.material3
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.internal.CalendarModel
+import androidx.compose.material3.internal.Strings
+import androidx.compose.material3.internal.defaultLocale
+import androidx.compose.material3.internal.getString
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
@@ -32,7 +36,6 @@ import androidx.compose.ui.unit.dp
 internal fun DateRangeInputContent(
     selectedStartDateMillis: Long?,
     selectedEndDateMillis: Long?,
-    @Suppress("PrimitiveInLambda")
     onDatesSelectionChange: (startDateMillis: Long?, endDateMillis: Long?) -> Unit,
     calendarModel: CalendarModel,
     yearRange: IntRange,

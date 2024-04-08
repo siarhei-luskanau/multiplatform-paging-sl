@@ -27,7 +27,6 @@ import androidx.appactions.interaction.capabilities.serializers.properties.NAME_
 import androidx.appactions.interaction.capabilities.serializers.properties.REPEAT_FREQUENCY_TYPE_SPEC
 import androidx.appactions.interaction.capabilities.serializers.properties.START_DATE_TYPE_SPEC
 import androidx.appactions.interaction.capabilities.serializers.properties.START_TIME_TYPE_SPEC
-import androidx.appactions.interaction.capabilities.serializers.properties.TEXT_ONLY_DISAMBIGUATING_DESCRIPTION_TYPE_SPEC
 
 val SCHEDULE_TYPE_SPEC: TypeSpec<Schedule> = TypeSpecBuilder.newBuilder(
   "Schedule",
@@ -93,19 +92,14 @@ val SCHEDULE_TYPE_SPEC: TypeSpec<Schedule> = TypeSpecBuilder.newBuilder(
   Schedule.Builder<*>::setStartTime,
   START_TIME_TYPE_SPEC
 ).bindSpecField(
-  "disambiguatingDescription",
-  { it.disambiguatingDescription },
-  Schedule.Builder<*>::setDisambiguatingDescription,
-  TEXT_ONLY_DISAMBIGUATING_DESCRIPTION_TYPE_SPEC
-).bindSpecField(
   "name",
   { it.name },
   Schedule.Builder<*>::setName,
   NAME_TYPE_SPEC
 ).bindStringField(
   "identifier",
-  { it.identifier },
+  { it.identifier.ifEmpty { null } },
   Schedule.Builder<*>::setIdentifier
 ).bindIdentifier {
-  it.identifier
+  it.identifier.ifEmpty { null }
 }.build()

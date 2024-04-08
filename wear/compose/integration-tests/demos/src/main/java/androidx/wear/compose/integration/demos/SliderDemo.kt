@@ -34,6 +34,7 @@ import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.foundation.lazy.AutoCenteringParams
+import androidx.wear.compose.integration.demos.common.ScalingLazyColumnWithRSB
 import androidx.wear.compose.material.Icon
 import androidx.wear.compose.material.InlineSlider
 import androidx.wear.compose.material.InlineSliderColors
@@ -203,7 +204,6 @@ fun InlineSliderSegmented() {
 @Composable
 fun DefaultInlineSlider(
     value: Float,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Float) -> Unit,
     steps: Int,
     modifier: Modifier = Modifier,
@@ -231,7 +231,6 @@ fun DefaultInlineSlider(
 @Composable
 fun DefaultInlineSlider(
     value: Int,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Int) -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,

@@ -135,7 +135,7 @@ internal fun applyVerticalGridScope(
                 "Implicit list item ids exhausted."
             }
             LazyVerticalGridItem(id, alignment) {
-                object : LazyItemScope { }.apply { composable() }
+                object : LazyItemScope { }.composable()
             }
         }
     }
@@ -190,9 +190,7 @@ interface LazyVerticalGridScope {
      */
     fun items(
         count: Int,
-        @Suppress("PrimitiveInLambda")
         itemId: ((index: Int) -> Long) = { UnspecifiedItemId },
-        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyItemScope.(index: Int) -> Unit
     )
 
@@ -250,7 +248,6 @@ inline fun <T> LazyVerticalGridScope.itemsIndexed(
  */
 inline fun <T> LazyVerticalGridScope.items(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline itemId: ((item: T) -> Long) = { LazyVerticalGridScope.UnspecifiedItemId },
     crossinline itemContent: @Composable LazyItemScope.(item: T) -> Unit
 ) = items(items.size, { index: Int -> itemId(items[index]) }) {
@@ -269,7 +266,6 @@ inline fun <T> LazyVerticalGridScope.items(
  */
 inline fun <T> LazyVerticalGridScope.itemsIndexed(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline itemId: ((index: Int, item: T) -> Long) = {
       _, _ -> LazyVerticalGridScope.UnspecifiedItemId
     },
@@ -294,14 +290,9 @@ EmittableWithChildren(resetsDepthForChildren = true) {
 }
 
 internal class EmittableLazyVerticalGridListItem : EmittableLazyItemWithChildren() {
-    override var modifier: GlanceModifier
-        get() = children.singleOrNull()?.modifier
-            ?: GlanceModifier.wrapContentHeight().fillMaxWidth()
-        set(_) {
-            throw IllegalAccessError(
-              "You cannot set the modifier of an EmittableLazyVerticalGridListItem"
-            )
-        }
+    // Fill max width of the grid cell so that item contents can be aligned per the horizontal
+    // alignment.
+    override var modifier: GlanceModifier = GlanceModifier.wrapContentHeight().fillMaxWidth()
     var itemId: Long = 0
 
     override fun copy(): Emittable = EmittableLazyVerticalGridListItem().also {

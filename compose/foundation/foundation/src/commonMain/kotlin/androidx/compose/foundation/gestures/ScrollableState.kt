@@ -106,6 +106,24 @@ interface ScrollableState {
      */
     val canScrollBackward: Boolean
         get() = true
+
+    /**
+     * The value of this property is true under the following scenarios, otherwise it's false.
+     * - This [ScrollableState] is currently scrolling forward.
+     * - This [ScrollableState] was scrolling forward in its last scroll action.
+     */
+    @get:Suppress("GetterSetterNames")
+    val lastScrolledForward: Boolean
+        get() = false
+
+    /**
+     * The value of this property is true under the following scenarios, otherwise it's false.
+     * - This [ScrollableState] is currently scrolling backward.
+     * - This [ScrollableState] was scrolling backward in its last scroll action.
+     */
+    @get:Suppress("GetterSetterNames")
+    val lastScrolledBackward: Boolean
+        get() = false
 }
 
 /**
@@ -122,10 +140,7 @@ interface ScrollableState {
  * callback receives the delta in pixels. Callers should update their state in this lambda and
  * return the amount of delta consumed
  */
-fun ScrollableState(
-    @Suppress("PrimitiveInLambda")
-    consumeScrollDelta: (Float) -> Float
-): ScrollableState {
+fun ScrollableState(consumeScrollDelta: (Float) -> Float): ScrollableState {
     return DefaultScrollableState(consumeScrollDelta)
 }
 
@@ -144,10 +159,7 @@ fun ScrollableState(
  * return the amount of delta consumed
  */
 @Composable
-fun rememberScrollableState(
-    @Suppress("PrimitiveInLambda")
-    consumeScrollDelta: (Float) -> Float
-): ScrollableState {
+fun rememberScrollableState(consumeScrollDelta: (Float) -> Float): ScrollableState {
     val lambdaState = rememberUpdatedState(consumeScrollDelta)
     return remember { ScrollableState { lambdaState.value.invoke(it) } }
 }
@@ -164,21 +176,23 @@ interface ScrollScope {
     fun scrollBy(pixels: Float): Float
 }
 
-private class DefaultScrollableState(
-    @Suppress("PrimitiveInLambda")
-    val onDelta: (Float) -> Float
-) : ScrollableState {
+private class DefaultScrollableState(val onDelta: (Float) -> Float) : ScrollableState {
 
     private val scrollScope: ScrollScope = object : ScrollScope {
         override fun scrollBy(pixels: Float): Float {
             if (pixels.isNaN()) return 0f
-            return onDelta(pixels)
+            val delta = onDelta(pixels)
+            isLastScrollForwardState.value = delta > 0
+            isLastScrollBackwardState.value = delta < 0
+            return delta
         }
     }
 
     private val scrollMutex = MutatorMutex()
 
     private val isScrollingState = mutableStateOf(false)
+    private val isLastScrollForwardState = mutableStateOf(false)
+    private val isLastScrollBackwardState = mutableStateOf(false)
 
     override suspend fun scroll(
         scrollPriority: MutatePriority,
@@ -200,4 +214,10 @@ private class DefaultScrollableState(
 
     override val isScrollInProgress: Boolean
         get() = isScrollingState.value
+
+    override val lastScrolledForward: Boolean
+        get() = isLastScrollForwardState.value
+
+    override val lastScrolledBackward: Boolean
+        get() = isLastScrollBackwardState.value
 }

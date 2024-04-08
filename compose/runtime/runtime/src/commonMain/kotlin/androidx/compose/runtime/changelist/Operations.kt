@@ -22,6 +22,8 @@ import androidx.compose.runtime.RememberManager
 import androidx.compose.runtime.SlotWriter
 import androidx.compose.runtime.changelist.Operation.IntParameter
 import androidx.compose.runtime.changelist.Operation.ObjectParameter
+import androidx.compose.runtime.checkPrecondition
+import androidx.compose.runtime.requirePrecondition
 import kotlin.contracts.ExperimentalContracts
 import kotlin.contracts.InvocationKind.EXACTLY_ONCE
 import kotlin.contracts.contract
@@ -37,7 +39,7 @@ import kotlin.contracts.contract
  *
  * `Operations` is not a thread safe data structure.
  */
-internal class Operations : OperationsDebugStringFormattable {
+internal class Operations : OperationsDebugStringFormattable() {
 
     private var opCodes = arrayOfNulls<Operation>(InitialCapacity)
     private var opCodesSize = 0
@@ -70,11 +72,15 @@ internal class Operations : OperationsDebugStringFormattable {
      * Resets the collection to its initial state, clearing all stored operations and arguments.
      */
     fun clear() {
-        opCodes = arrayOfNulls(InitialCapacity)
+        // We don't technically need to clear the opCodes or intArgs arrays, because we ensure
+        // that every operation that gets pushed to this data structure has all of its arguments
+        // set exactly once. This guarantees that they'll overwrite any stale, dirty values from
+        // previous entries on the stack, so we shouldn't ever run into problems of having
+        // uninitialized values causing undefined behavior for other operations.
         opCodesSize = 0
-        intArgs = IntArray(InitialCapacity)
         intArgsSize = 0
-        objectArgs = arrayOfNulls(InitialCapacity)
+        // Clear the object arguments array to prevent leaking memory
+        objectArgs.fill(null, fromIndex = 0, toIndex = objectArgsSize)
         objectArgsSize = 0
     }
 
@@ -98,7 +104,8 @@ internal class Operations : OperationsDebugStringFormattable {
 
         // Resize arrays if needed
         if (opCodesSize == opCodes.size) {
-            opCodes = opCodes.copyOf(opCodesSize * 2)
+            val resizeAmount = opCodesSize.coerceAtMost(MaxResizeAmount)
+            opCodes = opCodes.copyOf(opCodesSize + resizeAmount)
         }
         ensureIntArgsSizeAtLeast(intArgsSize + operation.ints)
         ensureObjectArgsSizeAtLeast(objectArgsSize + operation.objects)
@@ -109,15 +116,22 @@ internal class Operations : OperationsDebugStringFormattable {
         objectArgsSize += operation.objects
     }
 
-    private fun ensureIntArgsSizeAtLeast(size: Int) {
-        if (size > intArgs.size) {
-            intArgs = intArgs.copyOf((intArgsSize * 2).coerceAtLeast(size))
+    private fun determineNewSize(currentSize: Int, requiredSize: Int): Int {
+        val resizeAmount = currentSize.coerceAtMost(MaxResizeAmount)
+        return (currentSize + resizeAmount).coerceAtLeast(requiredSize)
+    }
+
+    private fun ensureIntArgsSizeAtLeast(requiredSize: Int) {
+        val currentSize = intArgs.size
+        if (requiredSize > currentSize) {
+            intArgs = intArgs.copyOf(determineNewSize(currentSize, requiredSize))
         }
     }
 
-    private fun ensureObjectArgsSizeAtLeast(size: Int) {
-        if (size > objectArgs.size) {
-            objectArgs = objectArgs.copyOf((objectArgsSize * 2).coerceAtLeast(size))
+    private fun ensureObjectArgsSizeAtLeast(requiredSize: Int) {
+        val currentSize = objectArgs.size
+        if (requiredSize > currentSize) {
+            objectArgs = objectArgs.copyOf(determineNewSize(currentSize, requiredSize))
         }
     }
 
@@ -129,7 +143,7 @@ internal class Operations : OperationsDebugStringFormattable {
      * defines any arguments.
      */
     fun push(operation: Operation) {
-        require(operation.ints == 0 && operation.objects == 0) {
+        requirePrecondition(operation.ints == 0 && operation.objects == 0) {
             "Cannot push $operation without arguments because it expects " +
                 "${operation.ints} ints and ${operation.objects} objects."
         }
@@ -156,7 +170,7 @@ internal class Operations : OperationsDebugStringFormattable {
         WriteScope(this).args()
 
         // Verify all arguments were written to.
-        check(
+        checkPrecondition(
             pushedIntMask == createExpectedArgMask(operation.ints) &&
                 pushedObjectMask == createExpectedArgMask(operation.objects)
         ) {
@@ -318,7 +332,7 @@ internal class Operations : OperationsDebugStringFormattable {
 
         fun setInt(parameter: IntParameter, value: Int) = with(stack) {
             val mask = 0b1 shl parameter.offset
-            check(pushedIntMask and mask == 0) {
+            checkPrecondition(pushedIntMask and mask == 0) {
                 "Already pushed argument ${operation.intParamName(parameter)}"
             }
             pushedIntMask = pushedIntMask or mask
@@ -327,7 +341,7 @@ internal class Operations : OperationsDebugStringFormattable {
 
         fun <T> setObject(parameter: ObjectParameter<T>, value: T) = with(stack) {
             val mask = 0b1 shl parameter.offset
-            check(pushedObjectMask and mask == 0) {
+            checkPrecondition(pushedObjectMask and mask == 0) {
                 "Already pushed argument ${operation.objectParamName(parameter)}"
             }
             pushedObjectMask = pushedObjectMask or mask
@@ -373,6 +387,7 @@ internal class Operations : OperationsDebugStringFormattable {
     }
 
     companion object {
+        private const val MaxResizeAmount = 1024
         internal const val InitialCapacity = 16
     }
 
@@ -454,6 +469,6 @@ internal class Operations : OperationsDebugStringFormattable {
         }
 }
 
-internal sealed interface OperationsDebugStringFormattable {
-    fun toDebugString(linePrefix: String = "  "): String
+internal abstract class OperationsDebugStringFormattable {
+    abstract fun toDebugString(linePrefix: String = "  "): String
 }

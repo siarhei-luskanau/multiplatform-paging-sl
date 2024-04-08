@@ -23,7 +23,7 @@ import static java.util.Objects.requireNonNull;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.car.app.annotations.CarProtocol;
-import androidx.car.app.annotations.ExperimentalCarApi;
+import androidx.car.app.annotations.KeepFields;
 import androidx.car.app.annotations.RequiresCarApi;
 import androidx.car.app.model.Action;
 import androidx.car.app.model.ActionStrip;
@@ -37,17 +37,21 @@ import java.util.Objects;
  * list). The content is usually rendered as an overlay on top of the map tiles, with the map
  * visible and stable areas adjusting to the content.
  *
- * See {@link ContentTemplateConstraints#MAP_WITH_CONTENT_TEMPLATE_CONSTRAINTS}
- * for the list of supported content templates.
+ * <p>See {@link Builder#setContentTemplate(Template)} for the list of supported content templates.
+ * </p>
+ *
+ * <p>In order to use this template your car app <b>MUST</b> declare that it uses <b>EITHER</b> the
+ * {@code androidx.car.app.NAVIGATION_TEMPLATES} permission <b>OR</b> the {@code
+ *  androidx.car.app.MAP_TEMPLATES} in the manifest.</p>
  */
 @CarProtocol
-@ExperimentalCarApi
+@KeepFields
 @RequiresCarApi(7)
 public final class MapWithContentTemplate implements Template {
     @Nullable
     private final MapController mMapController;
-    @Nullable
-    private final Template mTemplate;
+    @NonNull
+    private final Template mContentTemplate;
     @Nullable
     private final ActionStrip mActionStrip;
 
@@ -57,14 +61,14 @@ public final class MapWithContentTemplate implements Template {
      */
     MapWithContentTemplate(Builder builder) {
         mMapController = builder.mMapController;
-        mTemplate = builder.mTemplate;
+        mContentTemplate = builder.mContentTemplate;
         mActionStrip = builder.mActionStrip;
     }
 
     /** Constructs an empty instance, used by serialization code. */
     private MapWithContentTemplate() {
         mMapController = null;
-        mTemplate = null;
+        mContentTemplate = new Template() {};
         mActionStrip = null;
     }
 
@@ -81,11 +85,11 @@ public final class MapWithContentTemplate implements Template {
     /**
      * Returns the {@link Template} content to display in this template.
      *
-     * @see Builder#setTemplate(Template)
+     * @see Builder#setContentTemplate(Template)
      */
-    @Nullable
-    public Template getTemplate() {
-        return mTemplate;
+    @NonNull
+    public Template getContentTemplate() {
+        return mContentTemplate;
     }
 
     /**
@@ -100,7 +104,7 @@ public final class MapWithContentTemplate implements Template {
 
     @Override
     public int hashCode() {
-        return Objects.hash(mMapController, mTemplate, mActionStrip);
+        return Objects.hash(mMapController, mContentTemplate, mActionStrip);
     }
 
     @Override
@@ -113,19 +117,25 @@ public final class MapWithContentTemplate implements Template {
         }
         MapWithContentTemplate otherTemplate = (MapWithContentTemplate) other;
 
-        return Objects.equals(mTemplate, otherTemplate.mTemplate)
+        return  Objects.equals(mContentTemplate, otherTemplate.mContentTemplate)
                 && Objects.equals(mMapController, otherTemplate.mMapController)
                 && Objects.equals(mActionStrip, otherTemplate.mActionStrip);
     }
 
     /** A builder of {@link MapWithContentTemplate}. */
     public static final class Builder {
+
         @Nullable
         MapController mMapController;
-        @Nullable
-        Template mTemplate;
+        @NonNull
+        Template mContentTemplate;
         @Nullable
         ActionStrip mActionStrip;
+
+        public Builder() {
+            mContentTemplate = new Template() {};
+        }
+
 
         /**
          * Sets the {@link ActionStrip} for this template.
@@ -158,10 +168,21 @@ public final class MapWithContentTemplate implements Template {
 
         /**
          * Sets the content to be displayed on top of the map tiles.
+         *
+         * <p>From Car API 7 onward, the following template types are supported as content:
+         * <ul>
+         *     <li>{@code ListTemplate}
+         *     <li>{@code PaneTemplate}
+         *     <li>{@code GridTemplate}
+         *     <li>{@code MessageTemplate}
+         * </ul>
+         *
+         *  @throws NullPointerException     if {@code template} is null
+         *  @throws IllegalArgumentException if {@code template} does not meet the requirements
          */
         @NonNull
-        public Builder setTemplate(@NonNull Template template) {
-            mTemplate = requireNonNull(template);
+        public Builder setContentTemplate(@NonNull Template template) {
+            mContentTemplate = requireNonNull(template);
             return this;
         }
 
@@ -176,19 +197,17 @@ public final class MapWithContentTemplate implements Template {
 
         /**
          * Constructs the template defined by this builder.
-         *
+         * <p>
          * <h4>Requirements</h4>
-         *
-         * @throws NullPointerException if the {@link Template} is null
-         * @throws Exception if the template is not one of the allowed Content types
-         * see {@link ContentTemplateConstraints#MAP_WITH_CONTENT_TEMPLATE_CONSTRAINTS}
-         * for the list of supported content templates.
+         * <p>
+         * @throws IllegalArgumentException if the template is not one of the allowed Content types
+         * See {@link Builder#setContentTemplate(Template)} for the list of supported content
+         * templates.
          */
         @NonNull
         public MapWithContentTemplate build() {
             ContentTemplateConstraints.MAP_WITH_CONTENT_TEMPLATE_CONSTRAINTS
-                    .validateOrThrow(requireNonNull(mTemplate));
-
+                    .validateOrThrow(mContentTemplate);
             return new MapWithContentTemplate(this);
         }
     }

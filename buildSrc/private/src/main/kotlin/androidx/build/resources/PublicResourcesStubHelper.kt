@@ -17,25 +17,41 @@
 package androidx.build.resources
 
 import androidx.build.getSupportRootFolder
-import com.android.build.gradle.LibraryExtension
+import com.android.build.api.dsl.KotlinMultiplatformAndroidTarget
+import com.android.build.api.variant.LibraryVariant
 import java.io.File
 import org.gradle.api.Project
 import org.gradle.api.tasks.Copy
+import org.gradle.api.tasks.TaskProvider
+import org.jetbrains.kotlin.gradle.dsl.KotlinMultiplatformExtension
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 
-fun Project.configurePublicResourcesStub(extension: LibraryExtension) {
-    val targetResFolder = File(project.buildDir, "generated/res/public-stub")
+fun configurePublicResourcesStub(
+    libraryVariant: LibraryVariant,
+    copyPublicResourcesDirTask: TaskProvider<CopyPublicResourcesDirTask>
+) = libraryVariant.sources.res.also {
+    it?.addGeneratedSourceDirectory(
+        copyPublicResourcesDirTask, CopyPublicResourcesDirTask::outputFolder
+    )
+}
 
-    val generatePublicResourcesTask = tasks.register(
+fun Project.configurePublicResourcesStub(kmpExtension: KotlinMultiplatformExtension) {
+    val targetRes = project.layout.buildDirectory.dir("generated/res/public-stub")
+
+    val generatePublicResourcesStub = tasks.register(
         "generatePublicResourcesStub",
         Copy::class.java
     ) { task ->
         task.from(File(project.getSupportRootFolder(), "buildSrc/res"))
-        task.into(targetResFolder)
+        task.into(targetRes)
     }
-
-    extension.libraryVariants.all { variant ->
-        variant.registerGeneratedResFolders(
-            project.files(targetResFolder).builtBy(generatePublicResourcesTask)
-        )
-    }
+    val sourceSet = kmpExtension
+        .targets
+        .withType(KotlinMultiplatformAndroidTarget::class.java)
+        .single()
+        .compilations
+        .getByName(KotlinCompilation.MAIN_COMPILATION_NAME).defaultSourceSet
+    sourceSet.resources.srcDir(
+        generatePublicResourcesStub.flatMap { project.provider { it.destinationDir } }
+    )
 }

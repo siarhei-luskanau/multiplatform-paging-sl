@@ -1,5 +1,12 @@
+/**
+ * This file was created using the `create_project.py` script located in the
+ * `<AndroidX root>/development/project-creator` directory.
+ *
+ * Please use that script when creating a new project, rather than copying an existing project and
+ * modifying its settings.
+ */
+import androidx.build.LibraryType
 import androidx.build.Publish
-import androidx.build.RunApiTasks
 
 plugins {
     id("AndroidXPlugin")
@@ -8,9 +15,11 @@ plugins {
 }
 
 dependencies {
-    implementation(project(":wear:protolayout:protolayout-proto"))
+    implementation(project(path: ":wear:protolayout:protolayout-proto", configuration: "shadow"))
+    implementation(project(":wear:protolayout:protolayout-expression-pipeline"))
     implementation(project(":wear:tiles:tiles"))
     implementation(project(":wear:tiles:tiles-renderer"))
+    implementation(project(":wear:tiles:tiles-tooling-preview"))
 
     implementation(libs.kotlinStdlib)
     implementation(libs.kotlinCoroutinesGuava)
@@ -18,6 +27,8 @@ dependencies {
     implementation("androidx.core:core:1.1.0")
 
     testImplementation(libs.junit)
+    testImplementation(libs.mockitoCore4)
+    testImplementation(libs.mockitoKotlin4)
 
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.testRunner)
@@ -44,8 +55,9 @@ android {
 
 androidx {
     name = "Android Wear Tiles Tooling"
-    publish = Publish.SNAPSHOT_ONLY // Library is not ready to be released yet.
-    runApiTasks = new RunApiTasks.Yes()
+    type = LibraryType.PUBLISHED_LIBRARY
+    publish = Publish.SNAPSHOT_AND_RELEASE
     inceptionYear = "2023"
-    description = "A set of tools that are used to preview TilesService in Android Studio"
+    description = "A set of tools that are used to preview Tile components in Android Studio"
+    metalavaK2UastEnabled = true
 }

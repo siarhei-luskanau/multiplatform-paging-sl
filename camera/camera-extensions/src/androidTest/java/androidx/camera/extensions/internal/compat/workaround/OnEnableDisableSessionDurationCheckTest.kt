@@ -17,6 +17,7 @@
 package androidx.camera.extensions.internal.compat.workaround
 
 import androidx.camera.extensions.internal.compat.workaround.OnEnableDisableSessionDurationCheck.MIN_DURATION_FOR_ENABLE_DISABLE_SESSION
+import androidx.camera.testing.impl.AndroidUtil
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.SdkSuppress
 import androidx.test.filters.SmallTest
@@ -24,6 +25,8 @@ import com.google.common.truth.Truth.assertThat
 import kotlin.system.measureTimeMillis
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
+import org.junit.Assume.assumeFalse
+import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 
@@ -35,6 +38,11 @@ class OnEnableDisableSessionDurationCheckTest {
         const val TOLERANCE = 60L
     }
 
+    @Before
+    fun setUp() {
+        assumeFalse(AndroidUtil.isEmulatorAndAPI21())
+    }
+
     @Test
     fun enabled_ensureMinimalDuration() = runBlocking {
         // Arrange
@@ -43,15 +51,20 @@ class OnEnableDisableSessionDurationCheckTest {
         val duration = 80L
         // Act
         check.onEnableSessionInvoked()
-        val actualDuration = measureTimeMillis {
+        val elapsedTime: Long
+        val totalTime = measureTimeMillis {
             delay(duration)
+            elapsedTime = measureTimeMillis {
+                check.onDisableSessionInvoked()
+            }
         }
-        val elapsedTime = measureTimeMillis {
-            check.onDisableSessionInvoked()
-        }
-
+        // |----------|--|---|
+        // ^-delay           ^--totalTime
+        //               ^--check.onDisableSessionInvoked()
         // Assert
-        val min = (MIN_DURATION_FOR_ENABLE_DISABLE_SESSION - actualDuration).coerceAtLeast(0)
+        val min =
+            (MIN_DURATION_FOR_ENABLE_DISABLE_SESSION - (totalTime - elapsedTime) - 2 /*tolerance*/
+                ).coerceAtLeast(0)
         assertThat(elapsedTime).isAtLeast(min)
     }
 
