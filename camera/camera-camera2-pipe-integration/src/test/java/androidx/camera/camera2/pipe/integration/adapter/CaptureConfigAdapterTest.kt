@@ -39,6 +39,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeoutOrNull
 import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -69,6 +70,7 @@ class CaptureConfigAdapterTest {
             cameraStateAdapter = CameraStateAdapter(),
         ),
         cameraProperties = fakeCameraProperties,
+        zslControl = ZslControlNoOpImpl(),
         threads = fakeUseCaseThreads,
     )
 
@@ -96,8 +98,9 @@ class CaptureConfigAdapterTest {
     @Test
     fun shouldFail_whenCaptureConfigSurfaceNotRecognized() {
         // Arrange
+        val fakeSurface = FakeSurface()
         val captureConfig = CaptureConfig.Builder()
-            .apply { addSurface(FakeSurface()) }
+            .apply { addSurface(fakeSurface) }
             .build()
         val sessionConfigOptions = Camera2ImplConfig.Builder().build()
 
@@ -109,21 +112,26 @@ class CaptureConfigAdapterTest {
                 sessionConfigOptions
             )
         }
+
+        // Clean up
+        fakeSurface.close()
     }
 
     @Test
     fun shouldReturnRequestThatIncludesCaptureCallbacks() {
         // Arrange
-        val callbackAborted = CompletableDeferred<Unit>()
+        val callbackAborted = CompletableDeferred<Int>()
         val captureCallback = object : CameraCaptureCallback() {
-            override fun onCaptureCancelled() {
-                callbackAborted.complete(Unit)
+            override fun onCaptureCancelled(captureConfigId: Int) {
+                callbackAborted.complete(captureConfigId)
             }
         }
+        val expectedCaptureConfigId = 101
         val captureConfig = CaptureConfig.Builder()
             .apply {
                 addSurface(surface)
                 addCameraCaptureCallback(captureCallback)
+                setId(expectedCaptureConfigId)
             }
             .build()
         val sessionConfigOptions = Camera2ImplConfig.Builder().build()
@@ -140,7 +148,11 @@ class CaptureConfigAdapterTest {
 
         // Assert
         runBlocking {
-            callbackAborted.await()
+            assertThat(
+                withTimeoutOrNull(timeMillis = 5000) {
+                    callbackAborted.await()
+                }
+            ).isEqualTo(expectedCaptureConfigId)
         }
     }
 

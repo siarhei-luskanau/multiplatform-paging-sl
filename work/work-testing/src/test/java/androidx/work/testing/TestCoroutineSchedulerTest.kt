@@ -40,9 +40,13 @@ import kotlin.coroutines.EmptyCoroutineContext
 import kotlinx.coroutines.DisposableHandle
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.asExecutor
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestCoroutineScheduler
 import kotlinx.coroutines.test.TestDispatcher
+import kotlinx.coroutines.yield
+import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Test
@@ -50,11 +54,13 @@ import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
+import org.robolectric.annotation.SQLiteMode
 
 /**
  * Verifies ability to use [kotlinx.coroutines.test.TestCoroutineScheduler] standard Coroutines test
  * dispatchers to test WorkManager over the progress of time.
  */
+@SQLiteMode(SQLiteMode.Mode.LEGACY) // b/285714232
 @RunWith(RobolectricTestRunner::class)
 @Config(manifest = Config.NONE, maxSdk = 33)
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -106,7 +112,7 @@ class TestCoroutineSchedulerTest {
         val workInfoEarly = workManager.getWorkInfoById(request.id)
         synchronizeThreads()
 
-        assertThat(Futures.getDone(workInfoEarly).state).isEqualTo(ENQUEUED)
+        assertThat(Futures.getDone(workInfoEarly)!!.state).isEqualTo(ENQUEUED)
 
         // Work should run and finish now.
         testCoroutineScheduler.advanceTimeBy(initialDelayMillis)
@@ -115,7 +121,7 @@ class TestCoroutineSchedulerTest {
         // Verify result
         val workInfoOnTime = workManager.getWorkInfoById(request.id)
         synchronizeThreads()
-        assertThat(Futures.getDone(workInfoOnTime).state).isEqualTo(SUCCEEDED)
+        assertThat(Futures.getDone(workInfoOnTime)!!.state).isEqualTo(SUCCEEDED)
     }
 
     @Test
@@ -132,7 +138,7 @@ class TestCoroutineSchedulerTest {
         val workInfoEarly = workManager.getWorkInfoById(request.id)
         synchronizeThreads()
 
-        assertThat(Futures.getDone(workInfoEarly).state).isEqualTo(ENQUEUED)
+        assertThat(Futures.getDone(workInfoEarly)!!.state).isEqualTo(ENQUEUED)
 
         // Can't use setXDelayMet with clock-based scheduling
         assertThrows(IllegalStateException::class.java) {
@@ -203,6 +209,17 @@ class TestCoroutineSchedulerTest {
             testCoroutineScheduler.runCurrent()
         }
     }
+
+    @After
+    fun tearDown() {
+        runBlocking {
+            val job = launch { WorkManagerTestInitHelper.closeWorkDatabase() }
+            while (job.isActive) {
+                synchronizeThreads()
+                yield()
+            }
+        }
+    }
 }
 
 private class MarkedRunnable : Runnable {
@@ -216,7 +233,6 @@ private class MarkedRunnable : Runnable {
  * A [RunnableScheduler] that delegates to a Coroutines [kotlinx.coroutines.CoroutineDispatcher] for
  * scheduling.
  */
-@OptIn(ExperimentalCoroutinesApi::class)
 private class CoroutineDispatcherRunnableScheduler(private val testDispatcher: TestDispatcher) :
     RunnableScheduler {
     val runnables: MutableMap<Runnable, DisposableHandle> = Collections.synchronizedMap(HashMap())

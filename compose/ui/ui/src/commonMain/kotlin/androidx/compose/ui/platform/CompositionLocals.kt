@@ -14,16 +14,23 @@
  * limitations under the License.
  */
 
+@file:Suppress("DEPRECATION")
+
 package androidx.compose.ui.platform
 
+import androidx.annotation.RestrictTo
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocal
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.autofill.Autofill
 import androidx.compose.ui.autofill.AutofillTree
 import androidx.compose.ui.draw.DrawModifier
 import androidx.compose.ui.focus.FocusManager
+import androidx.compose.ui.graphics.GraphicsContext
+import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedback
 import androidx.compose.ui.input.InputModeManager
 import androidx.compose.ui.input.pointer.PointerIconService
@@ -31,7 +38,6 @@ import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.node.Owner
 import androidx.compose.ui.text.font.Font
 import androidx.compose.ui.text.font.FontFamily
-import androidx.compose.ui.text.input.PlatformTextInputPluginRegistry
 import androidx.compose.ui.text.input.TextInputService
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
@@ -71,6 +77,20 @@ val LocalClipboardManager = staticCompositionLocalOf<ClipboardManager> {
 }
 
 /**
+ * The CompositionLocal to provide access to a [GraphicsContext] instance for creation of
+ * [GraphicsLayer]s.
+ *
+ * Consumers that access this Local directly and call [GraphicsContext.createGraphicsLayer] are
+ * responsible for calling [GraphicsContext.releaseGraphicsLayer].
+ *
+ * It is recommended that consumers invoke [rememberGraphicsLayer] instead to ensure that a
+ * [GraphicsLayer] is released when the corresponding composable is disposed.
+ */
+val LocalGraphicsContext = staticCompositionLocalOf<GraphicsContext> {
+    noLocalProvidedFor("LocalGraphicsContext")
+}
+
+/**
  * Provides the [Density] to be used to transform between [density-independent pixel
  * units (DP)][androidx.compose.ui.unit.Dp] and pixel units or
  * [scale-independent pixel units (SP)][androidx.compose.ui.unit.TextUnit] and
@@ -91,13 +111,12 @@ val LocalFocusManager = staticCompositionLocalOf<FocusManager> {
 
 /**
  * The CompositionLocal to provide platform font loading methods.
- *
- * @suppress
  */
 @Suppress("DEPRECATION")
 @Deprecated("LocalFontLoader is replaced with LocalFontFamilyResolver",
     replaceWith = ReplaceWith("LocalFontFamilyResolver")
 )
+@get:RestrictTo(RestrictTo.Scope.LIBRARY_GROUP)
 val LocalFontLoader = staticCompositionLocalOf<Font.ResourceLoader> {
     noLocalProvidedFor("LocalFontLoader")
 }
@@ -134,19 +153,16 @@ val LocalLayoutDirection = staticCompositionLocalOf<LayoutDirection> {
 /**
  * The CompositionLocal to provide communication with platform text input service.
  */
+@Deprecated("Use PlatformTextInputModifierNode instead.")
 val LocalTextInputService = staticCompositionLocalOf<TextInputService?> { null }
 
 /**
- * The CompositionLocal to provide platform text input services.
+ * The [CompositionLocal] to provide a [SoftwareKeyboardController] that can control the current
+ * software keyboard.
  *
- * This is a low-level API for code that talks directly to the platform input method framework.
- * Higher-level text input APIs in the Foundation library are more appropriate for most cases.
+ * Will be null if the software keyboard cannot be controlled.
  */
-// Experimental in desktop.
-val LocalPlatformTextInputPluginRegistry =
-    staticCompositionLocalOf<PlatformTextInputPluginRegistry> {
-        error("No PlatformTextInputPluginRegistry provided")
-    }
+val LocalSoftwareKeyboardController = staticCompositionLocalOf<SoftwareKeyboardController?> { null }
 
 /**
  * The CompositionLocal to provide text-related toolbar.
@@ -180,6 +196,16 @@ internal val LocalPointerIconService = staticCompositionLocalOf<PointerIconServi
     null
 }
 
+/** @see LocalScrollCaptureInProgress */
+internal val LocalProvidableScrollCaptureInProgress = compositionLocalOf { false }
+
+/**
+ * True when the system is currently capturing the contents of a scrollable in this compose view or
+ * any parent compose view.
+ */
+val LocalScrollCaptureInProgress: CompositionLocal<Boolean>
+    get() = LocalProvidableScrollCaptureInProgress
+
 @ExperimentalComposeUiApi
 @Composable
 internal fun ProvideCommonCompositionLocals(
@@ -201,12 +227,13 @@ internal fun ProvideCommonCompositionLocals(
         LocalInputModeManager provides owner.inputModeManager,
         LocalLayoutDirection provides owner.layoutDirection,
         LocalTextInputService provides owner.textInputService,
-        LocalPlatformTextInputPluginRegistry provides owner.platformTextInputPluginRegistry,
+        LocalSoftwareKeyboardController provides owner.softwareKeyboardController,
         LocalTextToolbar provides owner.textToolbar,
         LocalUriHandler provides uriHandler,
         LocalViewConfiguration provides owner.viewConfiguration,
         LocalWindowInfo provides owner.windowInfo,
         LocalPointerIconService provides owner.pointerIconService,
+        LocalGraphicsContext provides owner.graphicsContext,
         content = content
     )
 }

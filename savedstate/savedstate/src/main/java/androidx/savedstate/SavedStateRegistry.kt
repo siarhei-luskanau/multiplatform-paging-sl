@@ -15,7 +15,6 @@
  */
 package androidx.savedstate
 
-import android.annotation.SuppressLint
 import android.os.Bundle
 import androidx.annotation.MainThread
 import androidx.arch.core.internal.SafeIterableMap
@@ -29,7 +28,6 @@ import androidx.lifecycle.LifecycleEventObserver
  * This objects lifetime is bound to the lifecycle of owning component: when activity or
  * fragment is recreated, new instance of the object is created as well.
  */
-@SuppressLint("RestrictedApi")
 class SavedStateRegistry internal constructor() {
     private val components = SafeIterableMap<String, SavedStateProvider>()
     private var attached = false
@@ -230,12 +228,9 @@ class SavedStateRegistry internal constructor() {
      * merge with unconsumed state.
      *
      * @param outBundle Bundle in which to place a saved state
-     * @suppress INACCESSIBLE_TYPE iterator is used strictly as Iterator, does not access
-     * inaccessible type IteratorWithAdditions
      */
     @MainThread
-    @Suppress("INACCESSIBLE_TYPE")
-    fun performSave(outBundle: Bundle) {
+    internal fun performSave(outBundle: Bundle) {
         val components = Bundle()
         if (restoredState != null) {
             components.putAll(restoredState)

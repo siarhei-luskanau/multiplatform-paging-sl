@@ -40,9 +40,13 @@ public class PlatformTimeUpdateNotifierImpl implements PlatformTimeUpdateNotifie
     @Nullable private Runnable mRegisteredReceiver;
     private final Runnable mNotifyAndSchedule = this::notifyAndScheduleNextSecond;
     private long mLastScheduleTimeMillis = 0;
-    private boolean mUpdatesEnabled = false;
+    private boolean mUpdatesEnabled = true;
     @Nullable private Executor mRegisteredExecutor;
 
+    /**
+     * Sets the callback to be called whenever platform time needs to be reevaluated. Note that this
+     * doesn't call the callback immediately.
+     */
     @Override
     public void setReceiver(@NonNull Executor executor, @NonNull Runnable tick) {
         if (mRegisteredReceiver != null) {
@@ -56,7 +60,6 @@ public class PlatformTimeUpdateNotifierImpl implements PlatformTimeUpdateNotifie
             // Send first update and schedule next.
             mLastScheduleTimeMillis = SystemClock.uptimeMillis();
             scheduleNextSecond();
-            runReceiver();
         }
     }
 
@@ -83,7 +86,7 @@ public class PlatformTimeUpdateNotifierImpl implements PlatformTimeUpdateNotifie
             mUiHandler.removeCallbacks(this.mNotifyAndSchedule, this);
         } else if (mRegisteredReceiver != null) {
             mLastScheduleTimeMillis = SystemClock.uptimeMillis();
-            scheduleNextSecond();
+            notifyAndScheduleNextSecond();
         }
     }
 

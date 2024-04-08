@@ -48,6 +48,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.Velocity
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastMaxBy
+import androidx.compose.ui.util.fastMinByOrNull
 import androidx.compose.ui.util.lerp
 import kotlin.math.PI
 import kotlin.math.abs
@@ -187,7 +189,6 @@ internal open class CarouselSwipeableState<T>(
         }
     }
 
-    @Suppress("PrimitiveInLambda")
     internal var thresholds: (Float, Float) -> Float by mutableStateOf({ _, _ -> 0f })
 
     internal var velocityThreshold by mutableFloatStateOf(0f)
@@ -718,8 +719,8 @@ private fun findBounds(
     anchors: Set<Float>
 ): List<Float> {
     // Find the anchors the target lies between with a little bit of rounding error.
-    val a = anchors.filter { it <= offset + 0.001 }.maxOrNull()
-    val b = anchors.filter { it >= offset - 0.001 }.minOrNull()
+    val a = anchors.filter { it <= offset + 0.001 }.fastMaxBy { it }
+    val b = anchors.filter { it >= offset - 0.001 }.fastMinByOrNull { it }
 
     return when {
         a == null ->
@@ -743,7 +744,6 @@ private fun computeTarget(
     offset: Float,
     lastValue: Float,
     anchors: Set<Float>,
-    @Suppress("PrimitiveInLambda")
     thresholds: (Float, Float) -> Float,
     velocity: Float,
     velocityThreshold: Float
@@ -831,7 +831,7 @@ internal val <T> CarouselSwipeableState<T>.PreUpPostDownNestedScrollConnection:
     get() = object : NestedScrollConnection {
         override fun onPreScroll(available: Offset, source: NestedScrollSource): Offset {
             val delta = available.toFloat()
-            return if (delta < 0 && source == NestedScrollSource.Drag) {
+            return if (delta < 0 && source == NestedScrollSource.UserInput) {
                 performDrag(delta).toOffset()
             } else {
                 Offset.Zero
@@ -843,7 +843,7 @@ internal val <T> CarouselSwipeableState<T>.PreUpPostDownNestedScrollConnection:
             available: Offset,
             source: NestedScrollSource
         ): Offset {
-            return if (source == NestedScrollSource.Drag) {
+            return if (source == NestedScrollSource.UserInput) {
                 performDrag(available.toFloat()).toOffset()
             } else {
                 Offset.Zero

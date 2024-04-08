@@ -25,8 +25,8 @@ import androidx.camera.core.CameraXConfig
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.MeteringPointFactory
 import androidx.camera.core.SurfaceOrientedMeteringPointFactory
-import androidx.camera.testing.CameraUtil
-import androidx.camera.testing.CameraXUtil
+import androidx.camera.testing.impl.CameraUtil
+import androidx.camera.testing.impl.CameraXUtil
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.filters.LargeTest
 import androidx.test.filters.SdkSuppress
@@ -36,6 +36,7 @@ import java.util.concurrent.TimeUnit
 import org.junit.After
 import org.junit.Assume
 import org.junit.Before
+import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.Parameterized
@@ -47,7 +48,12 @@ class SurfaceOrientedMeteringPointFactoryTest(
     private val implName: String,
     private val cameraConfig: CameraXConfig
 ) {
-    var pointFactory: SurfaceOrientedMeteringPointFactory? = null
+    @get:Rule
+    val cameraRule = CameraUtil.grantCameraPermissionAndPreTest(
+        CameraUtil.PreTestCameraIdList(cameraConfig)
+    )
+
+    private var pointFactory: SurfaceOrientedMeteringPointFactory? = null
     private var context: Context? = null
     @Before
     fun setUp() {

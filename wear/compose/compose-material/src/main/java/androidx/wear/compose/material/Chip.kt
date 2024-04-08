@@ -16,19 +16,36 @@
 package androidx.wear.compose.material
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.Interaction
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxScope
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.State
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.paint
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
@@ -36,8 +53,10 @@ import androidx.compose.ui.graphics.compositeOver
 import androidx.compose.ui.graphics.painter.BrushPainter
 import androidx.compose.ui.graphics.painter.ColorPainter
 import androidx.compose.ui.graphics.painter.Painter
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -50,7 +69,8 @@ import androidx.compose.ui.unit.dp
  *
  * The [Chip] is Stadium shaped and has a max height designed to take no more than two lines of text
  * of [Typography.button] style. The [Chip] can have an icon or image horizontally
- * parallel to the two lines of text.
+ * parallel to the two lines of text. With localisation and/or large font sizes, the [Chip] height
+ * adjusts to accommodate the contents.
  *
  * The [Chip] can have different styles with configurable content colors, background colors
  * including gradients, these are provided by [ChipColors] implementations.
@@ -93,7 +113,7 @@ public fun Chip(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentPadding: PaddingValues = ChipDefaults.ContentPadding,
-    shape: Shape = MaterialTheme.shapes.small,
+    shape: Shape = MaterialTheme.shapes.large,
     interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
     role: Role? = Role.Button,
     content: @Composable RowScope.() -> Unit,
@@ -117,7 +137,8 @@ public fun Chip(
  *
  * The [Chip] is Stadium shaped and has a max height designed to take no more than two lines of text
  * of [Typography.button] style. The [Chip] can have an icon or image horizontally
- * parallel to the two lines of text.
+ * parallel to the two lines of text. With localisation and/or large font sizes, the [Chip] height
+ * adjusts to accommodate the contents.
  *
  * The [Chip] can have different styles with configurable content colors, background colors
  * including gradients, these are provided by [ChipColors] implementations.
@@ -145,10 +166,10 @@ public fun Chip(
  * content
  * @param shape Defines the chip's shape. It is strongly recommended to use the default as this
  * shape is a key characteristic of the Wear Material Theme
- * @param interactionSource The [MutableInteractionSource] representing the stream of
- * [Interaction]s for this Chip. You can create and pass in your own remembered
- * [MutableInteractionSource] if you want to observe [Interaction]s and customize the
- * appearance / behavior of this Chip in different [Interaction]s.
+ * @param interactionSource an optional hoisted [MutableInteractionSource] for observing and
+ * emitting [Interaction]s for this chip. You can use this to change the chip's appearance
+ * or preview the chip in different states. Note that if `null` is provided, interactions will
+ * still happen internally.
  * @param role The type of user interface element. Accessibility services might use this
  * to describe the element or do customizations
  */
@@ -160,26 +181,22 @@ public fun Chip(
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
     contentPadding: PaddingValues = ChipDefaults.ContentPadding,
-    shape: Shape = MaterialTheme.shapes.small,
-    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    shape: Shape = MaterialTheme.shapes.large,
+    interactionSource: MutableInteractionSource? = null,
     role: Role? = Role.Button,
     content: @Composable RowScope.() -> Unit,
 ) {
-    androidx.wear.compose.materialcore.Chip(
-        modifier = modifier.height(ChipDefaults.Height),
+    ChipImpl(
         onClick = onClick,
-        background = { colors.background(enabled = it) },
-        border = { border.borderStroke(enabled = it) },
+        colors = colors,
+        border = border,
+        modifier = modifier.chipSizeModifier(),
         enabled = enabled,
         contentPadding = contentPadding,
         shape = shape,
         interactionSource = interactionSource,
         role = role,
-        content = provideScopeContent(
-            colors.contentColor(enabled = enabled),
-            MaterialTheme.typography.button,
-            content
-        ),
+        content = content
     )
 }
 
@@ -191,6 +208,8 @@ public fun Chip(
  * The [Chip] is Stadium shaped and has a max height designed to take no more than two lines of text
  * of [Typography.button] style. If no secondary label is provided then the label
  * can be two lines of text. The label and secondary label should be consistently aligned.
+ * With localisation and/or large font sizes, the [Chip] height adjusts to
+ * accommodate the contents.
  *
  * If a icon is provided then the labels should be "start" aligned, e.g. left aligned in ltr so that
  * the text starts next to the icon.
@@ -274,6 +293,8 @@ public fun Chip(
  * The [Chip] is Stadium shaped and has a max height designed to take no more than two lines of text
  * of [Typography.button] style. If no secondary label is provided then the label
  * can be two lines of text. The label and secondary label should be consistently aligned.
+ * With localisation and/or large font sizes, the [Chip] height adjusts to
+ * accommodate the contents.
  *
  * If a icon is provided then the labels should be "start" aligned, e.g. left aligned in ltr so that
  * the text starts next to the icon.
@@ -314,10 +335,10 @@ public fun Chip(
  * [ChipDefaults.primaryChipColors]
  * @param enabled Controls the enabled state of the chip. When `false`, this chip will not
  * be clickable
- * @param interactionSource The [MutableInteractionSource] representing the stream of
- * [Interaction]s for this Chip. You can create and pass in your own remembered
- * [MutableInteractionSource] if you want to observe [Interaction]s and customize the
- * appearance / behavior of this Chip in different [Interaction]s.
+ * @param interactionSource an optional hoisted [MutableInteractionSource] for observing and
+ * emitting [Interaction]s for this chip. You can use this to change the chip's appearance
+ * or preview the chip in different states. Note that if `null` is provided, interactions will
+ * still happen internally.
  * @param contentPadding The spacing values to apply internally between the container and the
  * content
  * @param shape Defines the chip's shape. It is strongly recommended to use the default as this
@@ -334,35 +355,25 @@ public fun Chip(
     icon: (@Composable BoxScope.() -> Unit)? = null,
     colors: ChipColors = ChipDefaults.primaryChipColors(),
     enabled: Boolean = true,
-    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    interactionSource: MutableInteractionSource? = null,
     contentPadding: PaddingValues = ChipDefaults.ContentPadding,
-    shape: Shape = MaterialTheme.shapes.small,
+    shape: Shape = MaterialTheme.shapes.large,
     border: ChipBorder = ChipDefaults.chipBorder()
 ) {
-    androidx.wear.compose.materialcore.Chip(
-        modifier = modifier.height(ChipDefaults.Height),
-        label = provideScopeContent(
-            colors.contentColor(enabled = enabled),
-            MaterialTheme.typography.button,
-            label
-        ),
+    ChipImpl(
         onClick = onClick,
-        background = { colors.background(enabled = it) },
-        secondaryLabel = secondaryLabel?.let { provideScopeContent(
-            colors.secondaryContentColor(enabled = enabled),
-            textStyle = MaterialTheme.typography.caption2,
-            secondaryLabel
-        ) },
-        icon = icon?.let {
-            provideIcon(colors.iconColor(enabled = enabled), icon)
-        },
+        label = label,
+        labelTypography = MaterialTheme.typography.button,
+        modifier = modifier.chipSizeModifier(),
+        secondaryLabel = secondaryLabel,
+        icon = icon,
+        colors = colors,
         enabled = enabled,
         interactionSource = interactionSource,
         contentPadding = contentPadding,
         shape = shape,
-        border = { border.borderStroke(enabled = it) },
-        defaultIconSpacing = ChipDefaults.IconSpacing,
-        role = Role.Button
+        border = border,
+        defaultIconSpacing = ChipDefaults.IconSpacing
     )
 }
 
@@ -374,6 +385,8 @@ public fun Chip(
  * The [OutlinedChip] is Stadium shaped and has a max height designed to take no more than two lines
  * of text of [Typography.button] style. If no secondary label is provided then the label
  * can be two lines of text. The label and secondary label should be consistently aligned.
+ * With localisation and/or large font sizes, the [OutlinedChip] height adjusts to
+ * accommodate the contents.
  *
  * If a icon is provided then the labels should be "start" aligned, e.g. left aligned in ltr so that
  * the text starts next to the icon.
@@ -406,10 +419,10 @@ public fun Chip(
  * this chip in different states.
  * @param enabled Controls the enabled state of the chip. When `false`, this chip will not
  * be clickable
- * @param interactionSource The [MutableInteractionSource] representing the stream of
- * [Interaction]s for this Chip. You can create and pass in your own remembered
- * [MutableInteractionSource] if you want to observe [Interaction]s and customize the
- * appearance / behavior of this Chip in different [Interaction]s.
+ * @param interactionSource an optional hoisted [MutableInteractionSource] for observing and
+ * emitting [Interaction]s for this chip. You can use this to change the chip's appearance
+ * or preview the chip in different states. Note that if `null` is provided, interactions will
+ * still happen internally.
  * @param contentPadding The spacing values to apply internally between the container and the
  * content
  * @param shape Defines the chip's shape. It is strongly recommended to use the default as this
@@ -425,9 +438,9 @@ public fun OutlinedChip(
     icon: (@Composable BoxScope.() -> Unit)? = null,
     colors: ChipColors = ChipDefaults.outlinedChipColors(),
     enabled: Boolean = true,
-    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    interactionSource: MutableInteractionSource? = null,
     contentPadding: PaddingValues = ChipDefaults.ContentPadding,
-    shape: Shape = MaterialTheme.shapes.small,
+    shape: Shape = MaterialTheme.shapes.large,
     border: ChipBorder = ChipDefaults.outlinedChipBorder()
 ) =
     Chip(
@@ -601,10 +614,10 @@ public fun CompactChip(
  * [ChipDefaults.primaryChipColors]
  * @param enabled Controls the enabled state of the chip. When `false`, this chip will not
  * be clickable
- * @param interactionSource The [MutableInteractionSource] representing the stream of
- * [Interaction]s for this Chip. You can create and pass in your own remembered
- * [MutableInteractionSource] if you want to observe [Interaction]s and customize the
- * appearance / behavior of this Chip in different [Interaction]s.
+ * @param interactionSource an optional hoisted [MutableInteractionSource] for observing and
+ * emitting [Interaction]s for this chip. You can use this to change the chip's appearance
+ * or preview the chip in different states. Note that if `null` is provided, interactions will
+ * still happen internally.
  * @param contentPadding The spacing values to apply internally between the container and the
  * content
  * @param shape Defines the chip's shape. It is strongly recommended to use the default as this
@@ -620,34 +633,57 @@ public fun CompactChip(
     icon: (@Composable BoxScope.() -> Unit)? = null,
     colors: ChipColors = ChipDefaults.primaryChipColors(),
     enabled: Boolean = true,
-    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    interactionSource: MutableInteractionSource? = null,
     contentPadding: PaddingValues = ChipDefaults.CompactChipContentPadding,
-    shape: Shape = MaterialTheme.shapes.small,
+    shape: Shape = MaterialTheme.shapes.large,
     border: ChipBorder = ChipDefaults.chipBorder()
 ) {
-    androidx.wear.compose.materialcore.CompactChip(
-        modifier = modifier.height(ChipDefaults.CompactChipHeight),
-        onClick = onClick,
-        background = { colors.background(enabled = it) },
-        label = label?.let { provideScopeContent(
-            colors.contentColor(enabled = enabled),
-            MaterialTheme.typography.caption1,
-            label
-        ) },
-        icon = icon?.let { provideIcon(
-            colors.iconColor(enabled = enabled),
-            icon
-        ) },
-        enabled = enabled,
-        interactionSource = interactionSource,
-        contentPadding = contentPadding,
-        shape = shape,
-        border = { border.borderStroke(enabled = it) },
-        defaultIconOnlyCompactChipWidth = ChipDefaults.IconOnlyCompactChipWidth,
-        defaultCompactChipTapTargetPadding = ChipDefaults.CompactChipTapTargetPadding,
-        defaultIconSpacing = ChipDefaults.IconSpacing,
-        role = Role.Button,
-    )
+    if (label != null) {
+        ChipImpl(
+            modifier = modifier
+                .compactChipModifier()
+                .padding(ChipDefaults.CompactChipTapTargetPadding),
+            label = label,
+            labelTypography = MaterialTheme.typography.caption1,
+            onClick = onClick,
+            colors = colors,
+            secondaryLabel = null,
+            icon = icon,
+            enabled = enabled,
+            interactionSource = interactionSource,
+            contentPadding = contentPadding,
+            shape = shape,
+            border = border,
+            defaultIconSpacing = ChipDefaults.IconSpacing,
+        )
+    } else {
+        // Icon only compact chips have their own layout with a specific width and center aligned
+        // content. We use the base simple single slot Chip under the covers.
+        ChipImpl(
+            modifier = modifier
+                .compactChipModifier()
+                .width(ChipDefaults.IconOnlyCompactChipWidth)
+                .padding(ChipDefaults.CompactChipTapTargetPadding),
+            onClick = onClick,
+            colors = colors,
+            border = border,
+            enabled = enabled,
+            contentPadding = contentPadding,
+            shape = shape,
+            interactionSource = interactionSource,
+        ) {
+            // Use a box to fill and center align the icon into the single slot of the Chip
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .wrapContentSize(align = Alignment.Center)
+            ) {
+                if (icon != null) {
+                    icon()
+                }
+            }
+        }
+    }
 }
 
 /**
@@ -702,10 +738,10 @@ public fun CompactChip(
  * [ChipDefaults.primaryChipColors]
  * @param enabled Controls the enabled state of the chip. When `false`, this chip will not
  * be clickable
- * @param interactionSource The [MutableInteractionSource] representing the stream of
- * [Interaction]s for this Chip. You can create and pass in your own remembered
- * [MutableInteractionSource] if you want to observe [Interaction]s and customize the
- * appearance / behavior of this Chip in different [Interaction]s.
+ * @param interactionSource an optional hoisted [MutableInteractionSource] for observing and
+ * emitting [Interaction]s for this chip. You can use this to change the chip's appearance
+ * or preview the chip in different states. Note that if `null` is provided, interactions will
+ * still happen internally.
  * @param contentPadding The spacing values to apply internally between the container and the
  * content
  * @param shape Defines the chip's shape. It is strongly recommended to use the default as this
@@ -721,9 +757,9 @@ public fun OutlinedCompactChip(
     icon: (@Composable BoxScope.() -> Unit)? = null,
     colors: ChipColors = ChipDefaults.outlinedChipColors(),
     enabled: Boolean = true,
-    interactionSource: MutableInteractionSource = remember { MutableInteractionSource() },
+    interactionSource: MutableInteractionSource? = null,
     contentPadding: PaddingValues = ChipDefaults.CompactChipContentPadding,
-    shape: Shape = MaterialTheme.shapes.small,
+    shape: Shape = MaterialTheme.shapes.large,
     border: ChipBorder = ChipDefaults.outlinedChipBorder()
 ) =
     CompactChip(
@@ -1077,8 +1113,8 @@ public object ChipDefaults {
         )
     }
 
-    private val ChipHorizontalPadding = 14.dp
-    private val ChipVerticalPadding = 6.dp
+    public val ChipHorizontalPadding = 14.dp
+    public val ChipVerticalPadding = 6.dp
 
     /**
      * The default content padding used by [Chip]
@@ -1090,8 +1126,8 @@ public object ChipDefaults {
         bottom = ChipVerticalPadding
     )
 
-    private val CompactChipHorizontalPadding = 12.dp
-    private val CompactChipVerticalPadding = 0.dp
+    public val CompactChipHorizontalPadding = 12.dp
+    public val CompactChipVerticalPadding = 0.dp
 
     /**
      * The default content padding used by [CompactChip]
@@ -1107,7 +1143,7 @@ public object ChipDefaults {
      * The default height applied for the [Chip].
      * Note that you can override it by applying Modifier.heightIn directly on [Chip].
      */
-    internal val Height = 52.dp
+    public val Height = 52.dp
 
     /**
      * The height applied for the [CompactChip]. This includes a visible chip height of 32.dp and
@@ -1117,7 +1153,7 @@ public object ChipDefaults {
      * Note that you can override it by adjusting Modifier.height and Modifier.padding directly on
      * [CompactChip].
      */
-    internal val CompactChipHeight = 48.dp
+    public val CompactChipHeight = 48.dp
 
     /**
      * The default padding to be provided around a [CompactChip] in order to ensure that its
@@ -1347,5 +1383,117 @@ private class DefaultChipBorder(
         var result = borderStroke.hashCode()
         result = 31 * result + disabledBorderStroke.hashCode()
         return result
+    }
+}
+
+@Composable
+private fun Modifier.chipSizeModifier() =
+    this.defaultMinSize(minHeight = ChipDefaults.Height)
+        .height(IntrinsicSize.Min)
+
+@Composable
+private fun Modifier.compactChipModifier() =
+    this.height(ChipDefaults.CompactChipHeight)
+
+@Composable
+private fun ChipImpl(
+    onClick: () -> Unit,
+    colors: ChipColors,
+    border: ChipBorder?,
+    modifier: Modifier,
+    enabled: Boolean,
+    contentPadding: PaddingValues,
+    shape: Shape,
+    interactionSource: MutableInteractionSource?,
+    role: Role? = Role.Button,
+    content: @Composable RowScope.() -> Unit,
+) {
+    val borderStroke = border?.borderStroke(enabled)?.value
+    val borderModifier = if (borderStroke != null) modifier.border(
+        border = borderStroke,
+        shape = shape
+    ) else modifier
+    Row(
+        modifier = borderModifier
+            .clip(shape = shape)
+            .width(intrinsicSize = IntrinsicSize.Max)
+            .paint(
+                painter = colors.background(enabled).value,
+                contentScale = ContentScale.Crop
+            )
+            .clickable(
+                enabled = enabled,
+                onClick = onClick,
+                role = role,
+                indication = rippleOrFallbackImplementation(),
+                interactionSource = interactionSource,
+            )
+            .padding(contentPadding),
+        content = provideScopeContent(
+            colors.contentColor(enabled = enabled),
+            MaterialTheme.typography.button,
+            content
+        )
+    )
+}
+
+@Composable
+private fun ChipImpl(
+    label: @Composable RowScope.() -> Unit,
+    labelTypography: TextStyle,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    secondaryLabel: (@Composable RowScope.() -> Unit)?,
+    icon: (@Composable BoxScope.() -> Unit)?,
+    colors: ChipColors,
+    enabled: Boolean,
+    interactionSource: MutableInteractionSource?,
+    contentPadding: PaddingValues,
+    shape: Shape,
+    border: ChipBorder?,
+    defaultIconSpacing: Dp
+) {
+    ChipImpl(
+        onClick = onClick,
+        modifier = modifier,
+        colors = colors,
+        border = border,
+        enabled = enabled,
+        contentPadding = contentPadding,
+        shape = shape,
+        interactionSource = interactionSource,
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            // Fill the container height but not its width as chips have fixed size height but we
+            // want them to be able to fit their content
+            modifier = Modifier.fillMaxHeight()
+        ) {
+            if (icon != null) {
+                Box(
+                    modifier = Modifier.wrapContentSize(align = Alignment.Center),
+                    content = provideIcon(colors.iconColor(enabled), icon)
+                )
+                Spacer(modifier = Modifier.size(defaultIconSpacing))
+            }
+            Column {
+                Row(
+                    content = provideScopeContent(
+                        colors.contentColor(enabled),
+                        labelTypography,
+                        label
+                    )
+                )
+                secondaryLabel?.let {
+                    Row(
+                        content = provideScopeContent(
+                            colors.secondaryContentColor(enabled),
+                            MaterialTheme.typography.caption2,
+                            secondaryLabel
+                        )
+                    )
+                }
+            }
+        }
     }
 }

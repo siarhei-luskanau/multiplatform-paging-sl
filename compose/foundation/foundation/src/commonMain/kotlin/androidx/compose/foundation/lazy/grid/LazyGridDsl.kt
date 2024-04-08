@@ -146,7 +146,7 @@ private fun rememberColumnWidthSums(
     columns: GridCells,
     horizontalArrangement: Arrangement.Horizontal,
     contentPadding: PaddingValues
-) = remember<Density.(Constraints) -> LazyGridSlots>(
+) = remember<LazyGridSlotsProvider>(
     columns,
     horizontalArrangement,
     contentPadding,
@@ -179,7 +179,7 @@ private fun rememberRowHeightSums(
     rows: GridCells,
     verticalArrangement: Arrangement.Vertical,
     contentPadding: PaddingValues
-) = remember<Density.(Constraints) -> LazyGridSlots>(
+) = remember<LazyGridSlotsProvider>(
     rows,
     verticalArrangement,
     contentPadding,
@@ -206,10 +206,16 @@ private fun rememberRowHeightSums(
     }
 }
 
+// Note: Implementing function interface is prohibited in K/JS (class A: () -> Unit)
+// therefore we workaround this limitation by inheriting a fun interface instead
+internal fun interface LazyGridSlotsProvider {
+    fun invoke(density: Density, constraints: Constraints): LazyGridSlots
+}
+
 /** measurement cache to avoid recalculating row/column sizes on each scroll. */
 private class GridSlotCache(
     private val calculation: Density.(Constraints) -> LazyGridSlots
-) : (Density, Constraints) -> LazyGridSlots {
+) : LazyGridSlotsProvider {
     private var cachedConstraints = Constraints()
     private var cachedDensity: Float = 0f
     private var cachedSizes: LazyGridSlots? = null
@@ -380,7 +386,8 @@ sealed interface LazyGridScope {
      * via Bundle on Android. If null is passed the position in the grid will represent the key.
      * When you specify the key the scroll position will be maintained based on the key, which
      * means if you add/remove items before the current visible item the item with the given key
-     * will be kept as the first visible one.
+     * will be kept as the first visible one. This can be overridden by calling
+     * [LazyGridState.requestScrollToItem].
      * @param span the span of the item. Default is 1x1. It is good practice to leave it `null`
      * when this matches the intended behavior, as providing a custom implementation impacts
      * performance
@@ -391,7 +398,6 @@ sealed interface LazyGridScope {
      */
     fun item(
         key: Any? = null,
-        @Suppress("PrimitiveInLambda")
         span: (LazyGridItemSpanScope.() -> GridItemSpan)? = null,
         contentType: Any? = null,
         content: @Composable LazyGridItemScope.() -> Unit
@@ -406,7 +412,8 @@ sealed interface LazyGridScope {
      * via Bundle on Android. If null is passed the position in the grid will represent the key.
      * When you specify the key the scroll position will be maintained based on the key, which
      * means if you add/remove items before the current visible item the item with the given key
-     * will be kept as the first visible one.
+     * will be kept as the first visible one.This can be overridden by calling
+     * [LazyGridState.requestScrollToItem].
      * @param span define custom spans for the items. Default is 1x1. It is good practice to
      * leave it `null` when this matches the intended behavior, as providing a custom
      * implementation impacts performance
@@ -417,13 +424,9 @@ sealed interface LazyGridScope {
      */
     fun items(
         count: Int,
-        @Suppress("PrimitiveInLambda")
         key: ((index: Int) -> Any)? = null,
-        @Suppress("PrimitiveInLambda")
         span: (LazyGridItemSpanScope.(index: Int) -> GridItemSpan)? = null,
-        @Suppress("PrimitiveInLambda")
         contentType: (index: Int) -> Any? = { null },
-        @Suppress("PrimitiveInLambda")
         itemContent: @Composable LazyGridItemScope.(index: Int) -> Unit
     )
 }
@@ -437,7 +440,8 @@ sealed interface LazyGridScope {
  * via Bundle on Android. If null is passed the position in the grid will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one. This can be overridden by calling
+ * [LazyGridState.requestScrollToItem].
  * @param span define custom spans for the items. Default is 1x1. It is good practice to
  * leave it `null` when this matches the intended behavior, as providing a custom implementation
  * impacts performance
@@ -448,9 +452,7 @@ sealed interface LazyGridScope {
  */
 inline fun <T> LazyGridScope.items(
     items: List<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((item: T) -> Any)? = null,
-    @Suppress("PrimitiveInLambda")
     noinline span: (LazyGridItemSpanScope.(item: T) -> GridItemSpan)? = null,
     noinline contentType: (item: T) -> Any? = { null },
     crossinline itemContent: @Composable LazyGridItemScope.(item: T) -> Unit
@@ -472,7 +474,8 @@ inline fun <T> LazyGridScope.items(
  * via Bundle on Android. If null is passed the position in the grid will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one. This can be overridden by calling
+ * [LazyGridState.requestScrollToItem].
  * @param span define custom spans for the items. Default is 1x1. It is good practice to leave
  * it `null` when this matches the intended behavior, as providing a custom implementation
  * impacts performance
@@ -483,9 +486,7 @@ inline fun <T> LazyGridScope.items(
  */
 inline fun <T> LazyGridScope.itemsIndexed(
     items: List<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
-    @Suppress("PrimitiveInLambda")
     noinline span: (LazyGridItemSpanScope.(index: Int, item: T) -> GridItemSpan)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
     crossinline itemContent: @Composable LazyGridItemScope.(index: Int, item: T) -> Unit
@@ -507,7 +508,8 @@ inline fun <T> LazyGridScope.itemsIndexed(
  * via Bundle on Android. If null is passed the position in the grid will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one.This can be overridden by calling
+ * [LazyGridState.requestScrollToItem].
  * @param span define custom spans for the items. Default is 1x1. It is good practice to leave
  * it `null` when this matches the intended behavior, as providing a custom implementation
  * impacts performance
@@ -519,7 +521,6 @@ inline fun <T> LazyGridScope.itemsIndexed(
 inline fun <T> LazyGridScope.items(
     items: Array<T>,
     noinline key: ((item: T) -> Any)? = null,
-    @Suppress("PrimitiveInLambda")
     noinline span: (LazyGridItemSpanScope.(item: T) -> GridItemSpan)? = null,
     noinline contentType: (item: T) -> Any? = { null },
     crossinline itemContent: @Composable LazyGridItemScope.(item: T) -> Unit
@@ -541,7 +542,8 @@ inline fun <T> LazyGridScope.items(
  * via Bundle on Android. If null is passed the position in the grid will represent the key.
  * When you specify the key the scroll position will be maintained based on the key, which
  * means if you add/remove items before the current visible item the item with the given key
- * will be kept as the first visible one.
+ * will be kept as the first visible one. This can be overridden by calling
+ * [LazyGridState.requestScrollToItem].
  * @param span define custom spans for the items. Default is 1x1. It is good practice to leave
  * it `null` when this matches the intended behavior, as providing a custom implementation
  * impacts performance
@@ -552,9 +554,7 @@ inline fun <T> LazyGridScope.items(
  */
 inline fun <T> LazyGridScope.itemsIndexed(
     items: Array<T>,
-    @Suppress("PrimitiveInLambda")
     noinline key: ((index: Int, item: T) -> Any)? = null,
-    @Suppress("PrimitiveInLambda")
     noinline span: (LazyGridItemSpanScope.(index: Int, item: T) -> GridItemSpan)? = null,
     crossinline contentType: (index: Int, item: T) -> Any? = { _, _ -> null },
     crossinline itemContent: @Composable LazyGridItemScope.(index: Int, item: T) -> Unit

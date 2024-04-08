@@ -16,6 +16,7 @@
 
 package androidx.compose.foundation.lazy
 
+import androidx.annotation.FloatRange
 import androidx.compose.animation.core.FiniteAnimationSpec
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.VisibilityThreshold
@@ -46,7 +47,7 @@ interface LazyItemScope {
      * measured with [Constraints.Infinity] as the constraints for the main axis.
      */
     fun Modifier.fillParentMaxSize(
-        /*@FloatRange(from = 0.0, to = 1.0)*/
+        @FloatRange(from = 0.0, to = 1.0)
         fraction: Float = 1f
     ): Modifier
 
@@ -61,7 +62,7 @@ interface LazyItemScope {
      * items are measured with [Constraints.Infinity] as the constraints for the main axis.
      */
     fun Modifier.fillParentMaxWidth(
-        /*@FloatRange(from = 0.0, to = 1.0)*/
+        @FloatRange(from = 0.0, to = 1.0)
         fraction: Float = 1f
     ): Modifier
 
@@ -76,9 +77,36 @@ interface LazyItemScope {
      * items are measured with [Constraints.Infinity] as the constraints for the main axis.
      */
     fun Modifier.fillParentMaxHeight(
-        /*@FloatRange(from = 0.0, to = 1.0)*/
+        @FloatRange(from = 0.0, to = 1.0)
         fraction: Float = 1f
     ): Modifier
+
+    /**
+     * This modifier animates the item appearance (fade in), disappearance (fade out) and placement
+     * changes (such as an item reordering).
+     *
+     * You should also provide a key via [LazyListScope.item]/[LazyListScope.items] for this
+     * modifier to enable animations.
+     *
+     * @sample androidx.compose.foundation.samples.AnimateItemSample
+     *
+     * @param fadeInSpec an animation specs to use for animating the item appearance.
+     * When null is provided the item will be appearing without animations.
+     * @param placementSpec an animation specs that will be used to animate the item placement.
+     * Aside from item reordering all other position changes caused by events like arrangement or
+     * alignment changes will also be animated. When null is provided no animations will happen.
+     * @param fadeOutSpec an animation specs to use for animating the item disappearance.
+     * When null is provided the item will be disappearance without animations.
+     */
+    fun Modifier.animateItem(
+        fadeInSpec: FiniteAnimationSpec<Float>? = spring(stiffness = Spring.StiffnessMediumLow),
+        placementSpec: FiniteAnimationSpec<IntOffset>? = spring(
+            stiffness = Spring.StiffnessMediumLow,
+            visibilityThreshold = IntOffset.VisibilityThreshold
+        ),
+        fadeOutSpec: FiniteAnimationSpec<Float>? =
+            spring(stiffness = Spring.StiffnessMediumLow),
+    ): Modifier = this
 
     /**
      * This modifier animates the item placement within the Lazy list.
@@ -87,15 +115,24 @@ interface LazyItemScope {
      * enable item reordering animations. Aside from item reordering all other position changes
      * caused by events like arrangement or alignment changes will also be animated.
      *
-     * @sample androidx.compose.foundation.samples.ItemPlacementAnimationSample
-     *
      * @param animationSpec a finite animation that will be used to animate the item placement.
      */
+    @Deprecated(
+        "Use Modifier.animateItem() instead",
+        ReplaceWith(
+            "Modifier.animateItem(enterSpec = null, exitSpec = null, " +
+                "placementSpec = animationSpec)"
+        )
+    )
     @ExperimentalFoundationApi
     fun Modifier.animateItemPlacement(
         animationSpec: FiniteAnimationSpec<IntOffset> = spring(
             stiffness = Spring.StiffnessMediumLow,
             visibilityThreshold = IntOffset.VisibilityThreshold
         )
-    ): Modifier
+    ): Modifier = animateItem(
+        fadeInSpec = null,
+        placementSpec = animationSpec,
+        fadeOutSpec = null
+    )
 }

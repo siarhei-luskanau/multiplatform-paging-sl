@@ -17,7 +17,6 @@
 package androidx.compose.runtime.changelist
 
 import androidx.compose.runtime.Anchor
-import androidx.compose.runtime.ComposeNodeLifecycleCallback
 import androidx.compose.runtime.ComposerImpl
 import androidx.compose.runtime.Composition
 import androidx.compose.runtime.CompositionContext
@@ -30,6 +29,7 @@ import androidx.compose.runtime.RememberObserver
 import androidx.compose.runtime.SlotReader
 import androidx.compose.runtime.SlotTable
 import androidx.compose.runtime.Stack
+import androidx.compose.runtime.internal.IntRef
 import androidx.compose.runtime.runtimeCheck
 
 internal class ComposerChangeListWriter(
@@ -173,6 +173,8 @@ internal class ComposerChangeListWriter(
         }
     }
 
+    val pastParent: Boolean get() = reader.parent - writersReaderDelta < 0
+
     inline fun withChangeList(
         newChangeList: ChangeList,
         block: () -> Unit
@@ -196,10 +198,6 @@ internal class ComposerChangeListWriter(
         }
     }
 
-    fun deactivate(node: ComposeNodeLifecycleCallback) {
-        changeList.pushDeactivate(node)
-    }
-
     fun remember(value: RememberObserver) {
         changeList.pushRemember(value)
     }
@@ -209,13 +207,25 @@ internal class ComposerChangeListWriter(
         changeList.pushUpdateValue(value, groupSlotIndex)
     }
 
-    fun resetSlots() {
-        changeList.pushResetSlots()
+    fun updateAnchoredValue(value: Any?, anchor: Anchor, groupSlotIndex: Int) {
+        // Because this uses an anchor, it can be performed without positioning the writer.
+        changeList.pushUpdateAnchoredValue(value, anchor, groupSlotIndex)
     }
 
-    fun clearSlotValue(index: Int, data: Any) {
-        pushSlotTableOperationPreamble()
-        changeList.pushClearSlotValue(index, data)
+    fun appendValue(anchor: Anchor, value: Any?) {
+        // Because this uses an anchor, it can be performed without positioning the writer.
+        changeList.pushAppendValue(anchor, value)
+    }
+
+    fun trimValues(count: Int) {
+        if (count > 0) {
+            pushSlotEditingOperationPreamble()
+            changeList.pushTrimValues(count)
+        }
+    }
+
+    fun resetSlots() {
+        changeList.pushResetSlots()
     }
 
     fun updateAuxData(data: Any?) {
@@ -264,6 +274,7 @@ internal class ComposerChangeListWriter(
     ) {
         pushPendingUpsAndDowns()
         pushSlotEditingOperationPreamble()
+        realizeNodeMovementOperations()
         changeList.pushInsertSlots(anchor, from)
     }
 
@@ -274,6 +285,7 @@ internal class ComposerChangeListWriter(
     ) {
         pushPendingUpsAndDowns()
         pushSlotEditingOperationPreamble()
+        realizeNodeMovementOperations()
         changeList.pushInsertSlots(anchor, from, fixups)
     }
 
@@ -456,6 +468,11 @@ internal class ComposerChangeListWriter(
         startedGroup = false
         startedGroups.clear()
         writersReaderDelta = 0
+    }
+
+    fun deactivateCurrentGroup() {
+        pushSlotTableOperationPreamble()
+        changeList.pushDeactivateCurrentGroup()
     }
 
     companion object {

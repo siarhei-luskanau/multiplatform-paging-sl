@@ -18,54 +18,73 @@ package androidx.wear.protolayout.expression;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import androidx.wear.protolayout.proto.FingerprintProto.NodeFingerprint;
+
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 
 @RunWith(RobolectricTestRunner.class)
 public final class FingerprintTest {
-  private static final int SELF_TYPE_VALUE = 1234;
-  private static final int FIELD_1 = 1;
-  private static final int VALUE_HASH1 = 10;
+    private static final int SELF_TYPE_VALUE = 1234;
+    private static final int FIELD_1 = 1;
+    private static final int VALUE_HASH1 = 10;
 
-  private static final int DISCARDED_VALUE = -1;
+    private static final int DISCARDED_VALUE = -1;
 
-  @Test
-  public void addChildNode() {
-    Fingerprint parentFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
-    Fingerprint childFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
-    childFingerPrint.recordPropertyUpdate(FIELD_1, VALUE_HASH1);
+    @Test
+    public void addChildNode() {
+        Fingerprint parentFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        Fingerprint childFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        childFingerPrint.recordPropertyUpdate(FIELD_1, VALUE_HASH1);
 
-    parentFingerPrint.addChildNode(childFingerPrint);
+        parentFingerPrint.addChildNode(childFingerPrint);
 
-    assertThat(parentFingerPrint.childNodes()).containsExactly(childFingerPrint);
-  }
+        assertThat(parentFingerPrint.childNodes()).containsExactly(childFingerPrint);
+    }
 
-  @Test
-  public void discard_clearsSelfFingerprint() {
-    Fingerprint parentFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
-    Fingerprint childFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
-    childFingerPrint.recordPropertyUpdate(FIELD_1, VALUE_HASH1);
-    parentFingerPrint.addChildNode(childFingerPrint);
+    @Test
+    public void discard_clearsSelfFingerprint() {
+        Fingerprint parentFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        Fingerprint childFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        childFingerPrint.recordPropertyUpdate(FIELD_1, VALUE_HASH1);
+        parentFingerPrint.addChildNode(childFingerPrint);
 
-    parentFingerPrint.discardValues(/* includeChildren= */ false);
+        parentFingerPrint.discardValues(/* includeChildren= */ false);
 
-    assertThat(parentFingerPrint.selfPropsValue()).isEqualTo(DISCARDED_VALUE);
-    assertThat(parentFingerPrint.childNodes()).containsExactly(childFingerPrint);
-    assertThat(parentFingerPrint.childNodesValue()).isNotEqualTo(DISCARDED_VALUE);
-  }
+        assertThat(parentFingerPrint.selfPropsValue()).isEqualTo(DISCARDED_VALUE);
+        assertThat(parentFingerPrint.childNodes()).containsExactly(childFingerPrint);
+        assertThat(parentFingerPrint.childNodesValue()).isNotEqualTo(DISCARDED_VALUE);
+    }
 
-  @Test
-  public void discard_includeChildren_clearsSelfAndChildrenFingerprint() {
-    Fingerprint parentFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
-    Fingerprint childFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
-    childFingerPrint.recordPropertyUpdate(FIELD_1, VALUE_HASH1);
-    parentFingerPrint.addChildNode(childFingerPrint);
+    @Test
+    public void discard_includeChildren_clearsSelfAndChildrenFingerprint() {
+        Fingerprint parentFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        Fingerprint childFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        childFingerPrint.recordPropertyUpdate(FIELD_1, VALUE_HASH1);
+        parentFingerPrint.addChildNode(childFingerPrint);
 
-    parentFingerPrint.discardValues(/* includeChildren= */ true);
+        parentFingerPrint.discardValues(/* includeChildren= */ true);
 
-    assertThat(parentFingerPrint.selfPropsValue()).isEqualTo(DISCARDED_VALUE);
-    assertThat(parentFingerPrint.childNodes()).isEmpty();
-    assertThat(parentFingerPrint.childNodesValue()).isEqualTo(DISCARDED_VALUE);
-  }
+        assertThat(parentFingerPrint.selfPropsValue()).isEqualTo(DISCARDED_VALUE);
+        assertThat(parentFingerPrint.childNodes()).isEmpty();
+        assertThat(parentFingerPrint.childNodesValue()).isEqualTo(DISCARDED_VALUE);
+    }
+
+    @Test
+    public void toProto_fromProto() {
+        Fingerprint parentFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        Fingerprint childFingerPrint = new Fingerprint(SELF_TYPE_VALUE);
+        childFingerPrint.recordPropertyUpdate(FIELD_1, VALUE_HASH1);
+        parentFingerPrint.addChildNode(childFingerPrint);
+
+        NodeFingerprint proto = parentFingerPrint.toProto();
+        Fingerprint fingerprint = new Fingerprint(proto);
+        assertThat(fingerprint.selfTypeValue()).isEqualTo(SELF_TYPE_VALUE);
+        assertThat(fingerprint.selfPropsValue()).isEqualTo(0);
+
+        Fingerprint child = fingerprint.childNodes().get(0);
+        assertThat(child.selfTypeValue()).isEqualTo(SELF_TYPE_VALUE);
+        assertThat(child.selfPropsValue()).isEqualTo(31 * FIELD_1 + VALUE_HASH1);
+    }
 }

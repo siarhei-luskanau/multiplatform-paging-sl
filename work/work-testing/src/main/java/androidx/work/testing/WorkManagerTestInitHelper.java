@@ -191,6 +191,27 @@ public final class WorkManagerTestInitHelper {
         }
     }
 
+    /**
+     * Closes internal {@link androidx.work.WorkManager}'s database.
+     * <p>
+     * It could be helpful to avoid warnings by CloseGuard in testing infra. You need to be
+     * make sure that {@code WorkManager} finished all operations and won't touch database
+     * anymore. Meaning that both {@link Configuration#getTaskExecutor()} and
+     * {@link Configuration#getExecutor()} are idle.
+     * <p>
+     * It shouldn't be called from {@link Configuration#getTaskExecutor()}
+     * because this method will block until all internal work is complete after
+     * cancellation. To complete this work {@link Configuration#getTaskExecutor()}
+     * could be require and blocking it may lead to deadlocks.
+     */
+    @SuppressWarnings("deprecation")
+    public static void closeWorkDatabase() {
+        WorkManagerImpl workManager = WorkManagerImpl.getInstance();
+        if (workManager != null) {
+            workManager.closeDatabase();
+        }
+    }
+
     private WorkManagerTestInitHelper() {
     }
 }

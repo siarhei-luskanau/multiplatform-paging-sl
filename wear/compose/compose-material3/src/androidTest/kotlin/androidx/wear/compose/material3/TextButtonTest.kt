@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
@@ -46,7 +48,6 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.unit.dp
 import androidx.wear.compose.material3.TextButtonDefaults.DefaultButtonSize
-import androidx.wear.compose.material3.TextButtonDefaults.ExtraSmallButtonSize
 import androidx.wear.compose.material3.TextButtonDefaults.LargeButtonSize
 import androidx.wear.compose.material3.TextButtonDefaults.SmallButtonSize
 import org.junit.Assert.assertEquals
@@ -222,12 +223,33 @@ class TextButtonTest {
     }
 
     @Test
+    fun allows_custom_role() {
+        val overrideRole = Role.Checkbox
+
+        rule.setContentWithTheme {
+            TextButton(
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG).semantics { role = overrideRole }
+            ) {
+                Text("Test")
+            }
+        }
+
+        rule.onNodeWithTag(TEST_TAG).assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.Role,
+                overrideRole
+            )
+        )
+    }
+
+    @Test
     fun sets_correct_font() {
         var actualTextStyle = TextStyle.Default
         var expectedTextStyle = TextStyle.Default
 
         rule.setContentWithTheme {
-            expectedTextStyle = MaterialTheme.typography.buttonMedium
+            expectedTextStyle = MaterialTheme.typography.labelMedium
             TextButton(
                 onClick = {},
             ) {
@@ -270,20 +292,6 @@ class TextButtonTest {
                 modifier = modifier.touchTargetAwareSize(SmallButtonSize)
             ) {
                 Text("abc")
-            }
-        }
-    }
-
-    @Test
-    fun gives_extra_small_button_correct_tap_size() {
-        rule.verifyTapSize(
-            expectedSize = MinimumButtonTapSize
-        ) { modifier ->
-            TextButton(
-                onClick = {},
-                modifier = modifier.touchTargetAwareSize(ExtraSmallButtonSize)
-            ) {
-                Text("xs")
             }
         }
     }
@@ -342,7 +350,7 @@ class TextButtonTest {
             colors = { TextButtonDefaults.textButtonColors() },
             expectedContainerColor = { Color.Transparent },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -365,10 +373,10 @@ class TextButtonTest {
             status = Status.Disabled,
             colors = { TextButtonDefaults.filledTextButtonColors() },
             expectedContainerColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = DisabledBorderAndContainerAlpha
+                alpha = DisabledContainerAlpha
             ) },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -391,10 +399,10 @@ class TextButtonTest {
             status = Status.Disabled,
             colors = { TextButtonDefaults.filledTonalTextButtonColors() },
             expectedContainerColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = DisabledBorderAndContainerAlpha
+                alpha = DisabledContainerAlpha
             ) },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -416,11 +424,9 @@ class TextButtonTest {
         rule.verifyTextButtonColors(
             status = Status.Disabled,
             colors = { TextButtonDefaults.outlinedTextButtonColors() },
-            expectedContainerColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = DisabledBorderAndContainerAlpha
-            ) },
+            expectedContainerColor = { Color.Transparent },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -449,7 +455,7 @@ class TextButtonTest {
         val status = Status.Disabled
         rule.verifyButtonBorderColor(
             expectedBorderColor = {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledBorderAndContainerAlpha)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledBorderAlpha)
             },
             content = { modifier: Modifier ->
                 TextButton(
@@ -526,7 +532,7 @@ private fun ComposeContentTestRule.isShape(
     setContentWithTheme {
         background = MaterialTheme.colorScheme.surface
         Box(Modifier.background(background)) {
-            buttonColor = colors().containerColor(true).value
+            buttonColor = colors().containerColor(true)
             if (buttonColor == Color.Transparent) {
                 buttonColor = background
             }

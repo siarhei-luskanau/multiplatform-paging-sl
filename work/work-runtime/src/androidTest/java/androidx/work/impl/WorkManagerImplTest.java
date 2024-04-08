@@ -531,7 +531,7 @@ public class WorkManagerImplTest {
             throws ExecutionException, InterruptedException {
 
         OneTimeWorkRequest work = new OneTimeWorkRequest.Builder(TestWorker.class).build();
-        assertThat(work.getWorkSpec().lastEnqueueTime, is(0L));
+        assertThat(work.getWorkSpec().lastEnqueueTime, is(-1L));
 
         long beforeEnqueueTime = System.currentTimeMillis();
 
@@ -549,7 +549,7 @@ public class WorkManagerImplTest {
                 PeriodicWorkRequest.MIN_PERIODIC_INTERVAL_MILLIS,
                 MILLISECONDS)
                 .build();
-        assertThat(periodicWork.getWorkSpec().lastEnqueueTime, is(0L));
+        assertThat(periodicWork.getWorkSpec().lastEnqueueTime, is(-1L));
         // Disable the greedy scheduler in this test. This is because sometimes the Worker
         // finishes instantly after enqueue(), and the periodStartTime gets updated.
         doNothing().when(mScheduler).schedule(any(WorkSpec.class));
@@ -1905,7 +1905,7 @@ public class WorkManagerImplTest {
         OneTimeWorkRequest work = new OneTimeWorkRequest.Builder(TestWorker.class).build();
         insertWorkSpecAndTags(work);
 
-        CancelWorkRunnable.forAll(mWorkManagerImpl).run();
+        CancelWorkRunnable.forAll(mWorkManagerImpl);
         assertThat(preferenceUtils.getLastCancelAllTimeMillis(), is(greaterThan(0L)));
     }
 
@@ -2091,6 +2091,13 @@ public class WorkManagerImplTest {
                         eq(PackageManager.DONT_KILL_APP));
 
         reset(packageManager);
+
+        // Scheduling work involved enabling RescheduleReceiver.class.
+        // Mark the component state as enabled (so we can check for disablement).
+        // This is necessary because we are using a PackageManager mock here.
+        when(packageManager.getComponentEnabledSetting(eq(componentName)))
+                .thenReturn(PackageManager.COMPONENT_ENABLED_STATE_ENABLED);
+
         mWorkManagerImpl.cancelWorkById(stopAwareWorkRequest.getId())
                 .getResult()
                 .get();

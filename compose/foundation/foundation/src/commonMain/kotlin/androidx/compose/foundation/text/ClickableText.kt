@@ -75,7 +75,6 @@ fun ClickableText(
     overflow: TextOverflow = TextOverflow.Clip,
     maxLines: Int = Int.MAX_VALUE,
     onTextLayout: (TextLayoutResult) -> Unit = {},
-    @Suppress("PrimitiveInLambda")
     onClick: (Int) -> Unit
 ) {
     val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }
@@ -136,6 +135,9 @@ fun ClickableText(
  * hovering this.
  * @param onClick Callback that is executed when users click the text. This callback is called
  * with clicked character's offset.
+ *
+ * Note: API research for improvements on clickable text and related functionality is still ongoing
+ * so keeping this experimental to avoid future churn.
  */
 @ExperimentalFoundationApi // when removing this experimental annotation,
 // onHover should be nullable with null as default. The other ClickableText
@@ -143,7 +145,6 @@ fun ClickableText(
 @Composable
 fun ClickableText(
     text: AnnotatedString,
-    @Suppress("PrimitiveInLambda")
     onHover: ((Int?) -> Unit),
     modifier: Modifier = Modifier,
     style: TextStyle = TextStyle.Default,
@@ -151,7 +152,6 @@ fun ClickableText(
     overflow: TextOverflow = TextOverflow.Clip,
     maxLines: Int = Int.MAX_VALUE,
     onTextLayout: (TextLayoutResult) -> Unit = {},
-    @Suppress("PrimitiveInLambda")
     onClick: (Int) -> Unit
 ) {
     val layoutResult = remember { mutableStateOf<TextLayoutResult?>(null) }

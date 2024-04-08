@@ -568,6 +568,44 @@ class CompositionLocalTests {
         }
     }
 
+    @Suppress("UNUSED_EXPRESSION")
+    @Test // Regression for b/292224893
+    fun testSingleInvalidatedProvider() = compositionTest {
+        val local1 = compositionLocalOf { 10 }
+        val local2 = compositionLocalOf { 20 }
+        val local3 = compositionLocalOf { 30 }
+        var state by mutableStateOf(0)
+
+        compose {
+            state
+            CompositionLocalProvider(local1 provides 11) {
+                state
+                CompositionLocalProvider(local2 provides 22) {
+                    state
+                    CompositionLocalProvider(local3 provides 33) {
+                        state
+                        assertEquals(11, local1.current)
+                        assertEquals(22, local2.current)
+                        assertEquals(33, local3.current)
+                    }
+                    assertEquals(11, local1.current)
+                    assertEquals(22, local2.current)
+                    assertEquals(30, local3.current)
+                }
+                assertEquals(11, local1.current)
+                assertEquals(20, local2.current)
+                assertEquals(30, local3.current)
+            }
+            assertEquals(10, local1.current)
+            assertEquals(20, local2.current)
+            assertEquals(30, local3.current)
+        }
+
+        state++
+
+        advance()
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun testProvideAllLocals() = compositionTest {
@@ -663,6 +701,78 @@ class CompositionLocalTests {
         advance()
 
         revalidate()
+    }
+
+    @Test // Regression test for: b/330036209
+    fun testSingleProvideDefaultValue() = compositionTest {
+        val local = compositionLocalOf { 0 }
+        compose {
+            CompositionLocalProvider(local provides 1) {
+                CompositionLocalProvider(local providesDefault 2) {
+                    assertEquals(1, local.current)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testDefaultComputedLocal() = compositionTest {
+        val local1 = compositionLocalOf { 0 }
+        val local2 = compositionLocalWithComputedDefaultOf { local1.currentValue + 10 }
+        compose {
+            val valueOfLocal1 = local1.current
+            val valueOfLocal2 = local2.current
+            assertEquals(valueOfLocal1 + 10, valueOfLocal2)
+            CompositionLocalProvider(local1 provides 20) {
+                val nestedValueOfLocal1 = local1.current
+                val nestedValueOfLocal2 = local2.current
+                assertEquals(nestedValueOfLocal1 + 10, nestedValueOfLocal2)
+            }
+        }
+    }
+
+    @Test
+    fun testProvidingDynamicLocalAsComputed() = compositionTest {
+        val local1 = compositionLocalOf { 0 }
+        val local2 = compositionLocalOf { 0 }
+        compose {
+            val valueOfLocal1A = local1.current
+            val valueOfLocal2A = local2.current
+            assertEquals(0, valueOfLocal1A)
+            assertEquals(0, valueOfLocal2A)
+            CompositionLocalProvider(local2 providesComputed { local1.currentValue + 10 }) {
+                val valueOfLocal1B = local1.current
+                val valueOfLocal2B = local2.current
+                assertEquals(valueOfLocal1B + 10, valueOfLocal2B)
+                CompositionLocalProvider(local1 provides 10) {
+                    val valueOfLocal1C = local1.current
+                    val valueOfLocal2C = local2.current
+                    assertEquals(valueOfLocal1C + 10, valueOfLocal2C)
+                }
+            }
+        }
+    }
+
+    @Test
+    fun testProvidingAStaticLocalAsComputed() = compositionTest {
+        val local1 = staticCompositionLocalOf { 0 }
+        val local2 = staticCompositionLocalOf { 0 }
+        compose {
+            val valueOfLocal1A = local1.current
+            val valueOfLocal2A = local2.current
+            assertEquals(0, valueOfLocal1A)
+            assertEquals(0, valueOfLocal2A)
+            CompositionLocalProvider(local2 providesComputed { local1.currentValue + 10 }) {
+                val valueOfLocal1B = local1.current
+                val valueOfLocal2B = local2.current
+                assertEquals(valueOfLocal1B + 10, valueOfLocal2B)
+                CompositionLocalProvider(local1 provides 10) {
+                    val valueOfLocal1C = local1.current
+                    val valueOfLocal2C = local2.current
+                    assertEquals(valueOfLocal1C + 10, valueOfLocal2C)
+                }
+            }
+        }
     }
 }
 

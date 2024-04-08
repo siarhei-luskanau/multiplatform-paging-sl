@@ -42,6 +42,7 @@ import kotlinx.coroutines.test.StandardTestDispatcher
 import kotlinx.coroutines.test.TestScope
 import kotlinx.coroutines.test.advanceUntilIdle
 import kotlinx.coroutines.test.runTest
+import org.junit.After
 import org.junit.Assert.assertThrows
 import org.junit.Before
 import org.junit.Rule
@@ -82,11 +83,17 @@ class UseCaseCameraStateTest {
     private val useCaseCameraState = UseCaseCameraState(
         useCaseGraphConfig = fakeUseCaseGraphConfig,
         threads = useCaseThreads,
+        sessionProcessorManager = null,
     )
 
     @Before
     fun setUp() {
         fakeCameraGraphSession.startRepeatingSignal = CompletableDeferred() // not complete yet
+    }
+
+    @After
+    fun tearDown() {
+        surface.close()
     }
 
     @Test

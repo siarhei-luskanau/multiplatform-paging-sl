@@ -37,20 +37,23 @@ import androidx.compose.ui.InternalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.UiComposable
 import androidx.compose.ui.input.nestedscroll.NestedScrollDispatcher
+import androidx.compose.ui.internal.checkPreconditionNotNull
 import androidx.compose.ui.materialize
 import androidx.compose.ui.node.ComposeUiNode.Companion.SetCompositeKeyHash
 import androidx.compose.ui.node.ComposeUiNode.Companion.SetResolvedCompositionLocals
 import androidx.compose.ui.node.LayoutNode
+import androidx.compose.ui.node.Owner
 import androidx.compose.ui.node.UiApplier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalLayoutDirection
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.platform.LocalSavedStateRegistryOwner
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.ViewRootForInspector
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.lifecycle.LifecycleOwner
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.findViewTreeLifecycleOwner
 import androidx.savedstate.SavedStateRegistryOwner
 
@@ -208,7 +211,7 @@ fun <T : View> AndroidView(
     update: (T) -> Unit = NoOpUpdate
 ) {
     val compositeKeyHash = currentCompositeKeyHash
-    val materializedModifier = currentComposer.materialize(modifier)
+    val materializedModifier = currentComposer.materialize(modifier.focusInteropModifier())
     val density = LocalDensity.current
     val layoutDirection = LocalLayoutDirection.current
     val compositionLocalMap = currentComposer.currentCompositionLocalMap
@@ -266,6 +269,7 @@ private fun <T : View> createAndroidViewNodeFactory(
     val context = LocalContext.current
     val parentReference = rememberCompositionContext()
     val stateRegistry = LocalSaveableStateRegistry.current
+    val ownerView = LocalView.current
 
     return {
         ViewFactoryHolder(
@@ -273,7 +277,8 @@ private fun <T : View> createAndroidViewNodeFactory(
             factory = factory,
             parentContext = parentReference,
             saveStateRegistry = stateRegistry,
-            compositeKeyHash = compositeKeyHash
+            compositeKeyHash = compositeKeyHash,
+            owner = ownerView as Owner
         ).layoutNode
     }
 }
@@ -307,7 +312,7 @@ private fun <T : View> Updater<LayoutNode>.updateViewHolderParams(
 @Suppress("UNCHECKED_CAST", "ExceptionMessage")
 private fun <T : View> LayoutNode.requireViewFactoryHolder(): ViewFactoryHolder<T> {
     @OptIn(InternalComposeUiApi::class)
-    return checkNotNull(interopViewFactoryHolder) as ViewFactoryHolder<T>
+    return checkPreconditionNotNull(interopViewFactoryHolder) as ViewFactoryHolder<T>
 }
 
 /**
@@ -323,7 +328,8 @@ internal class ViewFactoryHolder<T : View> private constructor(
     val dispatcher: NestedScrollDispatcher = NestedScrollDispatcher(),
     private val saveStateRegistry: SaveableStateRegistry?,
     private val compositeKeyHash: Int,
-) : AndroidViewHolder(context, parentContext, compositeKeyHash, dispatcher, typedView),
+    owner: Owner,
+) : AndroidViewHolder(context, parentContext, compositeKeyHash, dispatcher, typedView, owner),
     ViewRootForInspector {
 
     constructor(
@@ -331,13 +337,15 @@ internal class ViewFactoryHolder<T : View> private constructor(
         factory: (Context) -> T,
         parentContext: CompositionContext? = null,
         saveStateRegistry: SaveableStateRegistry?,
-        compositeKeyHash: Int
+        compositeKeyHash: Int,
+        owner: Owner,
     ) : this(
         context = context,
         typedView = factory(context),
         parentContext = parentContext,
         saveStateRegistry = saveStateRegistry,
         compositeKeyHash = compositeKeyHash,
+        owner = owner,
     )
 
     override val viewRoot: View get() = this

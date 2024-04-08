@@ -26,7 +26,6 @@ import androidx.camera.camera2.pipe.RequestMetadata
 import androidx.camera.camera2.pipe.RequestTemplate
 import androidx.camera.camera2.pipe.StreamId
 import androidx.camera.camera2.pipe.integration.adapter.CameraStateAdapter
-import androidx.camera.camera2.pipe.integration.adapter.CaptureConfigAdapter
 import androidx.camera.camera2.pipe.integration.adapter.RobolectricCameraPipeTestRunner
 import androidx.camera.camera2.pipe.integration.config.UseCaseGraphConfig
 import androidx.camera.camera2.pipe.integration.testing.FakeCameraGraph
@@ -49,6 +48,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.asExecutor
 import kotlinx.coroutines.runBlocking
+import org.junit.After
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
@@ -77,21 +77,21 @@ class UseCaseCameraRequestControlTest {
         surfaceToStreamMap = surfaceToStreamMap,
         cameraStateAdapter = CameraStateAdapter(),
     )
-    private val fakeConfigAdapter = CaptureConfigAdapter(
-        useCaseGraphConfig = fakeUseCaseGraphConfig,
-        cameraProperties = fakeCameraProperties,
-        threads = useCaseThreads,
-    )
     private val fakeUseCaseCameraState = UseCaseCameraState(
         useCaseGraphConfig = fakeUseCaseGraphConfig,
         threads = useCaseThreads,
+        sessionProcessorManager = null,
     )
     private val requestControl = UseCaseCameraRequestControlImpl(
         capturePipeline = FakeCapturePipeline(),
-        configAdapter = fakeConfigAdapter,
         state = fakeUseCaseCameraState,
         useCaseGraphConfig = fakeUseCaseGraphConfig,
     )
+
+    @After
+    fun tearDown() {
+        surface.close()
+    }
 
     @Test
     fun testMergeRequestOptions(): Unit = runBlocking {
@@ -248,7 +248,10 @@ class UseCaseCameraRequestControlTest {
         val testRequestListener1 = TestRequestListener()
         val testCaptureCallback = object : CameraCaptureCallback() {
             val latch = CountDownLatch(1)
-            override fun onCaptureCompleted(cameraCaptureResult: CameraCaptureResult) {
+            override fun onCaptureCompleted(
+                captureConfigId: Int,
+                cameraCaptureResult: CameraCaptureResult
+            ) {
                 latch.countDown()
             }
         }

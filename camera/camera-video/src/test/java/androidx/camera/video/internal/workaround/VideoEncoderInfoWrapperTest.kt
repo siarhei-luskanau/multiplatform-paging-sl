@@ -19,7 +19,7 @@ package androidx.camera.video.internal.workaround
 import android.os.Build
 import android.util.Range
 import android.util.Size
-import androidx.camera.testing.fakes.FakeVideoEncoderInfo
+import androidx.camera.testing.impl.fakes.FakeVideoEncoderInfo
 import androidx.camera.video.internal.encoder.VideoEncoderInfo
 import com.google.common.truth.Truth.assertThat
 import org.junit.Assert.assertThrows
@@ -130,6 +130,21 @@ object VideoEncoderInfoWrapperTest {
             val videoEncoderInfo = createFakeVideoEncoderInfoWrapper()
             val videoEncoderInfo2 = createFakeVideoEncoderInfoWrapper(videoEncoderInfo)
             assertThat(videoEncoderInfo2).isSameInstanceAs(videoEncoderInfo)
+        }
+
+        @Test
+        fun addValidSizeToWrapper() {
+            val videoEncoderInfo = createFakeVideoEncoderInfoWrapper()
+            val sizeToBeValid = Size(Int.MAX_VALUE, Int.MAX_VALUE)
+            assertThat(videoEncoderInfo.isSizeSupported(sizeToBeValid.width, sizeToBeValid.height))
+                .isFalse()
+            val videoEncoderInfo2 = createFakeVideoEncoderInfoWrapper(
+                videoEncoderInfo,
+                validSizeToCheck = sizeToBeValid
+            )
+            assertThat(videoEncoderInfo2).isSameInstanceAs(videoEncoderInfo)
+            assertThat(videoEncoderInfo2.isSizeSupported(sizeToBeValid.width, sizeToBeValid.height))
+                .isTrue()
         }
 
         @Test

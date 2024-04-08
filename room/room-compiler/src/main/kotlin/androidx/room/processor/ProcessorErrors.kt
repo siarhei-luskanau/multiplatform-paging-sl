@@ -39,10 +39,10 @@ object ProcessorErrors {
     val ISSUE_TRACKER_LINK = "https://issuetracker.google.com/issues/new?component=413107"
 
     val MISSING_QUERY_ANNOTATION = "Query methods must be annotated with ${Query::class.java}"
-    val MISSING_INSERT_ANNOTATION = "Insertion methods must be annotated with ${Insert::class.java}"
-    val MISSING_DELETE_ANNOTATION = "Deletion methods must be annotated with ${Delete::class.java}"
+    val MISSING_INSERT_ANNOTATION = "Insert methods must be annotated with ${Insert::class.java}"
+    val MISSING_DELETE_ANNOTATION = "Delete methods must be annotated with ${Delete::class.java}"
     val MISSING_UPDATE_ANNOTATION = "Update methods must be annotated with ${Update::class.java}"
-    val MISSING_UPSERT_ANNOTATION = "Upsertion methods must be annotated with ${Upsert::class.java}"
+    val MISSING_UPSERT_ANNOTATION = "Upsert methods must be annotated with ${Upsert::class.java}"
     val MISSING_RAWQUERY_ANNOTATION = "RawQuery methods must be annotated with" +
         " ${RawQuery::class.java}"
     val INVALID_ON_CONFLICT_VALUE = "On conflict value must be one of @OnConflictStrategy values."
@@ -56,14 +56,16 @@ object ProcessorErrors {
     val CANNOT_RESOLVE_RETURN_TYPE = "Cannot resolve return type for %s"
     val CANNOT_USE_UNBOUND_GENERICS_IN_QUERY_METHODS = "Cannot use unbound generics in query" +
         " methods. It must be bound to a type through base Dao class."
-    val CANNOT_USE_UNBOUND_GENERICS_IN_INSERTION_METHODS = "Cannot use unbound generics in" +
-        " insertion methods. It must be bound to a type through base Dao class."
-    val CANNOT_USE_UNBOUND_GENERICS_IN_UPSERTION_METHODS = "Cannot use unbound generics in" +
-        " upsertion methods. It must be bound to a type through base Dao class."
+    val CANNOT_USE_UNBOUND_GENERICS_IN_INSERT_METHODS = "Cannot use unbound generics in" +
+        " insert methods. It must be bound to a type through base Dao class."
+    val CANNOT_USE_UNBOUND_GENERICS_IN_UPSERT_METHODS = "Cannot use unbound generics in" +
+        " upsert methods. It must be bound to a type through base Dao class."
     val CANNOT_USE_UNBOUND_GENERICS_IN_ENTITY_FIELDS = "Cannot use unbound fields in entities."
     val CANNOT_USE_UNBOUND_GENERICS_IN_DAO_CLASSES = "Cannot use unbound generics in Dao classes." +
         " If you are trying to create a base DAO, create a normal class, extend it with type" +
         " params then mark the subclass with @Dao."
+    val CANNOT_USE_MAP_COLUMN_AND_MAP_INFO_SIMULTANEOUSLY = "Cannot use @MapColumn and " +
+        " @MapInfo annotation in the same function. Please prefer using @MapColumn only."
     val CANNOT_FIND_GETTER_FOR_FIELD = "Cannot find getter for field."
     val CANNOT_FIND_SETTER_FOR_FIELD = "Cannot find setter for field."
     val MISSING_PRIMARY_KEY = "An entity must have at least 1 field annotated with @PrimaryKey"
@@ -143,33 +145,27 @@ object ProcessorErrors {
         " of the provided method's multimap return type must implement equals() and " +
         "hashCode(). Key type is: $keyType."
 
-    val INSERTION_DOES_NOT_HAVE_ANY_PARAMETERS_TO_INSERT = "Method annotated with" +
+    val INSERT_DOES_NOT_HAVE_ANY_PARAMETERS_TO_INSERT = "Method annotated with" +
         " @Insert but does not have any parameters to insert."
 
-    val UPSERTION_DOES_NOT_HAVE_ANY_PARAMETERS_TO_UPSERT = "Method annotated with" +
+    val UPSERT_DOES_NOT_HAVE_ANY_PARAMETERS_TO_UPSERT = "Method annotated with" +
         " @Upsert but does not have any parameters to insert or update."
 
-    val DELETION_MISSING_PARAMS = "Method annotated with" +
+    val DELETE_MISSING_PARAMS = "Method annotated with" +
         " @Delete but does not have any parameters to delete."
 
-    fun cannotMapInfoSpecifiedColumn(column: String, columnsInQuery: List<String>) =
-        "Column specified in the provided @MapInfo annotation must be present in the query. " +
+    fun cannotMapSpecifiedColumn(column: String, columnsInQuery: List<String>, annotation: String) =
+        "Column specified in the provided @$annotation annotation must be present in the query. " +
             "Provided: $column. Columns found: ${columnsInQuery.joinToString(", ")}"
 
     val MAP_INFO_MUST_HAVE_AT_LEAST_ONE_COLUMN_PROVIDED = "To use the @MapInfo annotation, you " +
         "must provide either the key column name, value column name, or both."
 
-    fun keyMayNeedMapInfo(keyArg: String): String {
+    fun mayNeedMapColumn(columnArg: String): String {
         return """
-            Looks like you may need to use @MapInfo to clarify the 'keyColumn' needed for
-            the return type of a method. Type argument that needs @MapInfo: $keyArg
-            """.trim()
-    }
-
-    fun valueMayNeedMapInfo(valueArg: String): String {
-        return """
-            Looks like you may need to use @MapInfo to clarify the 'valueColumn' needed for
-            the return type of a method. Type argument that needs @MapInfo: $valueArg
+            Looks like you may need to use @MapColumn to clarify the 'columnName' needed for
+            type argument(s) in the return type of a method. Type argument that needs
+            @MapColumn: $columnArg
             """.trim()
     }
 
@@ -271,8 +267,9 @@ object ProcessorErrors {
         return MISSING_PARAMETER_FOR_BIND.format(bindVarName.joinToString(", "))
     }
 
-    fun valueCollectionMustBeListOrSet(mapValueTypeName: String): String {
-        return "Multimap 'value' collection type must be a List or Set. Found $mapValueTypeName."
+    fun valueCollectionMustBeListOrSetOrMap(mapValueTypeName: String): String {
+        return "Multimap 'value' collection type must be a List, Set or Map. " +
+            "Found $mapValueTypeName."
     }
 
     private val UNUSED_QUERY_METHOD_PARAMETER = "Unused parameter%s: %s"
@@ -656,9 +653,6 @@ object ProcessorErrors {
         "add `room-paging-rxjava3` artifact from Room as a dependency. " +
         "androidx.room:room-paging-rxjava3:<version>"
 
-    val MISSING_ROOM_COROUTINE_ARTIFACT = "To use Coroutine features, you must add `ktx`" +
-        " artifact from Room as a dependency. androidx.room:room-ktx:<version>"
-
     fun ambiguousConstructor(
         pojo: String,
         paramName: String,
@@ -927,31 +921,18 @@ object ProcessorErrors {
                 " be greater than the From version."
         }
 
-    fun autoMigrationSchemasNotFound(schemaFile: String, schemaOutFolderPath: String): String {
-        return "Schema '$schemaFile' required for migration was not found at the schema out " +
-            "folder: $schemaOutFolderPath. Cannot generate auto migrations."
+    fun autoMigrationSchemasNotFound(schemaVersion: Int, schemaOutFolderPath: String): String {
+        return "Schema '$schemaVersion.json' required for migration was not found at the schema " +
+            "out folder: $schemaOutFolderPath. Cannot generate auto migrations."
     }
 
-    fun autoMigrationSchemaIsEmpty(schemaFile: String, schemaOutFolderPath: String): String {
-        return "Found empty schema file '$schemaFile' required for migration was not found at the" +
-            " schema out folder: $schemaOutFolderPath. Cannot generate auto migrations."
-    }
-
-    fun invalidAutoMigrationSchema(schemaFile: String, schemaOutFolderPath: String): String {
-        return "Found invalid schema file '$schemaFile.json' at the schema out " +
+    fun invalidAutoMigrationSchema(schemaVersion: Int, schemaOutFolderPath: String): String {
+        return "Found invalid schema file '$schemaVersion.json' at the schema out " +
             "folder: $schemaOutFolderPath.\nIf you've modified the file, you might've broken the " +
             "JSON format, try deleting the file and re-running the compiler.\n" +
             "If you've not modified the file, please file a bug at " +
             "https://issuetracker.google.com/issues/new?component=413107&template=1096568 " +
             "with a sample app to reproduce the issue."
-    }
-
-    fun autoMigrationSchemasMustBeRoomGenerated(
-        fromFile: Int,
-        toFile: Int
-    ): String {
-        return "Found invalid schema file(s): '$fromFile.json' and $toFile.json'. The schema " +
-            "files must be generated by Room. Cannot generate auto migrations."
     }
 
     fun newNotNullColumnMustHaveDefaultValue(columnName: String): String {
@@ -1167,4 +1148,14 @@ object ProcessorErrors {
         "option `room.schemaLocation`, please remove the configuration of the option and " +
         "configure the schema location via the plugin project extension: " +
         "`room { schemaDirectory(...) }`."
+
+    val INVALID_DATABASE_VERSION = "Database version must be greater than 0"
+
+    val JAVA_CODEGEN_ON_NON_ANDROID_TARGET = "Cannot generate Java targeting a non-Android " +
+        "platform. To generate Java, you must only have Android as a target platform. " +
+        "To process a non-Android target platform, you must enable Kotlin code " +
+        "generation in KSP."
+
+    val INVALID_BLOCKING_DAO_FUNCTION_NON_ANDROID = "Only suspend functions are allowed in DAOs" +
+        " declared in source sets targeting non-Android platforms."
 }

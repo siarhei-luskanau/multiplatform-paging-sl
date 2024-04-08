@@ -55,10 +55,10 @@ import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.Observer
+import androidx.lifecycle.compose.LocalLifecycleOwner
 
 private const val TAG = "ImageCaptureScreen"
 
@@ -111,7 +111,6 @@ fun ImageCaptureScreen(
     modifier: Modifier,
     zoomRatio: Float,
     linearZoom: Float,
-    @Suppress("PrimitiveInLambda")
     onLinearZoomChange: (Float) -> Unit,
     isCameraReady: Boolean,
     hasFlashUnit: Boolean,

@@ -87,6 +87,7 @@ import android.app.DownloadManager;
 import android.app.KeyguardManager;
 import android.app.NotificationManager;
 import android.app.SearchManager;
+import android.app.UiAutomation;
 import android.app.UiModeManager;
 import android.app.WallpaperManager;
 import android.app.admin.DevicePolicyManager;
@@ -146,11 +147,9 @@ import android.view.accessibility.CaptioningManager;
 import android.view.inputmethod.InputMethodManager;
 import android.view.textservice.TextServicesManager;
 
-import androidx.annotation.OptIn;
 import androidx.core.app.AppLocalesStorageHelper;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.hardware.display.DisplayManagerCompat;
-import androidx.core.os.BuildCompat;
 import androidx.core.os.ConfigurationCompat;
 import androidx.core.os.LocaleListCompat;
 import androidx.core.test.R;
@@ -202,32 +201,50 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
                 ContextCompat.getSystemServiceName(mContext, ActivityManager.class));
         assertEquals(ALARM_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, AlarmManager.class));
+        assertEquals(APP_OPS_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, AppOpsManager.class));
         assertEquals(AUDIO_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, AudioManager.class));
+        assertEquals(BLUETOOTH_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, BluetoothManager.class));
+        assertEquals(CAPTIONING_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, CaptioningManager.class));
         assertEquals(CLIPBOARD_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, ClipboardManager.class));
         assertEquals(CONNECTIVITY_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, ConnectivityManager.class));
+        assertEquals(CONSUMER_IR_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, ConsumerIrManager.class));
         assertEquals(DEVICE_POLICY_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, DevicePolicyManager.class));
+        assertEquals(DISPLAY_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, DisplayManager.class));
         assertEquals(DOWNLOAD_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, DownloadManager.class));
         assertEquals(DROPBOX_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, DropBoxManager.class));
         assertEquals(INPUT_METHOD_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, InputMethodManager.class));
+        assertEquals(INPUT_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, InputManager.class));
         assertEquals(KEYGUARD_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, KeyguardManager.class));
         assertEquals(LAYOUT_INFLATER_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, LayoutInflater.class));
         assertEquals(LOCATION_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, LocationManager.class));
+        assertEquals(MEDIA_ROUTER_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, MediaRouter.class));
         assertEquals(NFC_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, NfcManager.class));
         assertEquals(NOTIFICATION_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, NotificationManager.class));
+        assertEquals(NSD_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, NsdManager.class));
         assertEquals(POWER_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, PowerManager.class));
+        assertEquals(PRINT_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, PrintManager.class));
         assertEquals(SEARCH_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, SearchManager.class));
         assertEquals(SENSOR_SERVICE,
@@ -242,6 +259,8 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
                 ContextCompat.getSystemServiceName(mContext, UiModeManager.class));
         assertEquals(USB_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, UsbManager.class));
+        assertEquals(USER_SERVICE,
+                ContextCompat.getSystemServiceName(mContext, UserManager.class));
         assertEquals(VIBRATOR_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, Vibrator.class));
         assertEquals(WALLPAPER_SERVICE,
@@ -252,46 +271,6 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
                 ContextCompat.getSystemServiceName(mContext, WifiManager.class));
         assertEquals(WINDOW_SERVICE,
                 ContextCompat.getSystemServiceName(mContext, WindowManager.class));
-    }
-
-    @Test
-    @SdkSuppress(minSdkVersion = 16)
-    public void getSystemServiceNameApi16() {
-        assertEquals(INPUT_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, InputManager.class));
-        assertEquals(MEDIA_ROUTER_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, MediaRouter.class));
-        assertEquals(NSD_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, NsdManager.class));
-    }
-
-    @Test
-    @SdkSuppress(minSdkVersion = 17)
-    public void getSystemServiceNameApi17() {
-        assertEquals(DISPLAY_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, DisplayManager.class));
-        assertEquals(USER_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, UserManager.class));
-    }
-
-    @Test
-    @SdkSuppress(minSdkVersion = 18)
-    public void getSystemServiceNameApi18() {
-        assertEquals(BLUETOOTH_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, BluetoothManager.class));
-    }
-
-    @Test
-    @SdkSuppress(minSdkVersion = 19)
-    public void getSystemServiceNameApi19() {
-        assertEquals(APP_OPS_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, AppOpsManager.class));
-        assertEquals(CAPTIONING_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, CaptioningManager.class));
-        assertEquals(CONSUMER_IR_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, ConsumerIrManager.class));
-        assertEquals(PRINT_SERVICE,
-                ContextCompat.getSystemServiceName(mContext, PrintManager.class));
     }
 
     @Test
@@ -531,11 +510,15 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
     @Test
     @SdkSuppress(minSdkVersion = 29, maxSdkVersion = 32)
     public void testRegisterReceiverPermissionNotGrantedApi26() {
-        InstrumentationRegistry
-                .getInstrumentation().getUiAutomation().adoptShellPermissionIdentity();
-        assertThrows(RuntimeException.class,
-                () -> ContextCompat.registerReceiver(mContext,
-                        mTestReceiver, mTestFilter, ContextCompat.RECEIVER_NOT_EXPORTED));
+        UiAutomation uiAutomation = InstrumentationRegistry.getInstrumentation().getUiAutomation();
+        uiAutomation.adoptShellPermissionIdentity();
+        try {
+            assertThrows(RuntimeException.class,
+                    () -> ContextCompat.registerReceiver(mContext,
+                            mTestReceiver, mTestFilter, ContextCompat.RECEIVER_NOT_EXPORTED));
+        } finally {
+            uiAutomation.dropShellPermissionIdentity();
+        }
     }
 
     @Test
@@ -599,9 +582,8 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
     }
 
     @Test
-    @OptIn(markerClass = BuildCompat.PrereleaseSdkCheck.class)
     public void testCheckSelfPermissionNotificationPermission() {
-        if (BuildCompat.isAtLeastT()) {
+        if (Build.VERSION.SDK_INT >= 33) {
             assertEquals(
                     mContext.checkCallingPermission(Manifest.permission.POST_NOTIFICATIONS),
                     ContextCompat.checkSelfPermission(
@@ -629,7 +611,6 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
     }
 
     @Test
-    @SdkSuppress(minSdkVersion = 17)
     public void testGetDisplayFromDisplayContext() {
         final DisplayManagerCompat displayManagerCompat = DisplayManagerCompat
                 .getInstance(mContext);
@@ -671,7 +652,7 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
     }
 
     @Test
-    @SdkSuppress(minSdkVersion = 17, maxSdkVersion = 32)
+    @SdkSuppress(maxSdkVersion = 32)
     public void testGetContextForLanguage17() {
         setAppLocales(mContext, LocaleListCompat.create(Locale.JAPAN).toLanguageTags());
 
@@ -685,5 +666,15 @@ public class ContextCompatTest extends BaseInstrumentationTestCase<ThemedYellowA
 
     private void setAppLocales(Context context, String locales) {
         AppLocalesStorageHelper.persistLocales(context, locales);
+    }
+
+    @Test
+    @SdkSuppress(minSdkVersion = 30)
+    public void testCreateAttributionContext() {
+        Context attributionContext = ContextCompat.createAttributionContext(mContext, "tag");
+        assertEquals("tag", attributionContext.getAttributionTag());
+
+        Context attributionContextNull = ContextCompat.createAttributionContext(mContext, null);
+        assertNull(attributionContextNull.getAttributionTag());
     }
 }

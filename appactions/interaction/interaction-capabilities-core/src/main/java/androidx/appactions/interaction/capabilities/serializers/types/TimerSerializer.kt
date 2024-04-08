@@ -20,27 +20,17 @@ import androidx.appactions.builtintypes.types.Timer
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeSpec
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeSpecBuilder
 import androidx.appactions.interaction.capabilities.serializers.properties.NAME_TYPE_SPEC
-import androidx.appactions.interaction.capabilities.serializers.properties.TEXT_ONLY_DISAMBIGUATING_DESCRIPTION_TYPE_SPEC
 
 @JvmField
 val TIMER_TYPE_SPEC: TypeSpec<Timer> = TypeSpecBuilder.newBuilder(
   "Timer",
   Timer::Builder,
   Timer.Builder<*>::build
-).bindStringField(
-  "namespace",
-  { it.namespace },
-  Timer.Builder<*>::setNamespace
 ).bindSpecField(
   "duration",
   { it.duration },
   Timer.Builder<*>::setDuration,
   TypeSpec.DURATION_TYPE_SPEC
-).bindSpecField(
-  "disambiguatingDescription",
-  { it.disambiguatingDescription },
-  Timer.Builder<*>::setDisambiguatingDescription,
-  TEXT_ONLY_DISAMBIGUATING_DESCRIPTION_TYPE_SPEC
 ).bindSpecField(
   "name",
   { it.name },
@@ -48,8 +38,8 @@ val TIMER_TYPE_SPEC: TypeSpec<Timer> = TypeSpecBuilder.newBuilder(
   NAME_TYPE_SPEC
 ).bindStringField(
   "identifier",
-  { it.identifier },
+  { it.identifier.ifEmpty { null } },
   Timer.Builder<*>::setIdentifier
 ).bindIdentifier {
-  it.identifier
+  it.identifier.ifEmpty { null }
 }.build()

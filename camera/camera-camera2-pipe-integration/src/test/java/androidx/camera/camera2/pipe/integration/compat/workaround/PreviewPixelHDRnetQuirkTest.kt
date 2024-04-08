@@ -25,15 +25,14 @@ import androidx.camera.camera2.pipe.integration.impl.Camera2ImplConfig
 import androidx.camera.core.ImageCapture
 import androidx.camera.core.Preview
 import androidx.camera.core.UseCase
-import androidx.camera.core.impl.CameraInternal
 import androidx.camera.core.impl.ImageCaptureConfig
 import androidx.camera.core.impl.PreviewConfig
 import androidx.camera.core.impl.StreamSpec
 import androidx.camera.core.impl.UseCaseConfig
 import androidx.camera.core.internal.CameraUseCaseAdapter
 import androidx.camera.testing.fakes.FakeCamera
-import androidx.camera.testing.fakes.FakeCameraCoordinator
-import androidx.camera.testing.fakes.FakeCameraDeviceSurfaceManager
+import androidx.camera.testing.impl.fakes.FakeCameraCoordinator
+import androidx.camera.testing.impl.fakes.FakeCameraDeviceSurfaceManager
 import androidx.test.core.app.ApplicationProvider
 import com.google.common.truth.Truth.assertThat
 import org.junit.After
@@ -103,7 +102,7 @@ class PreviewPixelHDRnetQuirkTest(
     @Test
     fun previewShouldApplyToneModeForHDRNet() {
         // Arrange
-        val cameraUseCaseAdapter = configureCameraUseCaseAdapter(
+        cameraUseCaseAdapter = configureCameraUseCaseAdapter(
             resolutionVGA,
             configType = PreviewConfig::class.java
         )
@@ -172,7 +171,7 @@ class PreviewPixelHDRnetQuirkTest(
         configType: Class<out UseCaseConfig<*>?>,
     ): CameraUseCaseAdapter {
         return CameraUseCaseAdapter(
-            LinkedHashSet<CameraInternal>(setOf(FakeCamera(fakeCameraId))),
+            FakeCamera(fakeCameraId),
             FakeCameraCoordinator(),
             FakeCameraDeviceSurfaceManager().apply {
                 setSuggestedStreamSpec(

@@ -32,6 +32,7 @@ import androidx.window.area.WindowAreaCapability.Operation.Companion.OPERATION_P
 import androidx.window.area.WindowAreaCapability.Operation.Companion.OPERATION_TRANSFER_ACTIVITY_TO_AREA
 import androidx.window.area.WindowAreaCapability.Status.Companion.WINDOW_AREA_STATUS_AVAILABLE
 import androidx.window.area.WindowAreaCapability.Status.Companion.WINDOW_AREA_STATUS_UNAVAILABLE
+import androidx.window.core.ExperimentalWindowApi
 import androidx.window.extensions.area.ExtensionWindowAreaPresentation
 import androidx.window.extensions.area.ExtensionWindowAreaStatus
 import androidx.window.extensions.area.WindowAreaComponent
@@ -59,7 +60,7 @@ import org.junit.Assume.assumeTrue
 import org.junit.Rule
 import org.junit.Test
 
-@OptIn(ExperimentalCoroutinesApi::class)
+@OptIn(ExperimentalCoroutinesApi::class, ExperimentalWindowApi::class)
 class WindowAreaControllerImplTest {
 
     @get:Rule
@@ -83,7 +84,7 @@ class WindowAreaControllerImplTest {
             val extensionComponent = FakeWindowAreaComponent()
             val controller = WindowAreaControllerImpl(
                 windowAreaComponent = extensionComponent,
-                vendorApiLevel = 3
+                vendorApiLevel = FEATURE_VENDOR_API_LEVEL
             )
             extensionComponent.currentRearDisplayStatus = STATUS_UNAVAILABLE
             extensionComponent.currentRearDisplayPresentationStatus = STATUS_UNAVAILABLE
@@ -169,7 +170,7 @@ class WindowAreaControllerImplTest {
         val extensions = FakeWindowAreaComponent()
         val controller = WindowAreaControllerImpl(
             windowAreaComponent = extensions,
-            vendorApiLevel = 3
+            vendorApiLevel = FEATURE_VENDOR_API_LEVEL
         )
         extensions.currentRearDisplayStatus = STATUS_AVAILABLE
         val callback = TestWindowAreaSessionCallback()
@@ -180,7 +181,7 @@ class WindowAreaControllerImplTest {
 
         assertNotNull(windowAreaInfo)
         assertEquals(
-            windowAreaInfo.getCapability(OPERATION_TRANSFER_ACTIVITY_TO_AREA)?.status,
+            windowAreaInfo.getCapability(OPERATION_TRANSFER_ACTIVITY_TO_AREA).status,
             WINDOW_AREA_STATUS_AVAILABLE
         )
 
@@ -233,7 +234,7 @@ class WindowAreaControllerImplTest {
         val extensions = FakeWindowAreaComponent()
         val controller = WindowAreaControllerImpl(
             windowAreaComponent = extensions,
-            vendorApiLevel = 2
+            vendorApiLevel = FEATURE_VENDOR_API_LEVEL
         )
         extensions.currentRearDisplayStatus = initialState
         val callback = TestWindowAreaSessionCallback()
@@ -244,7 +245,7 @@ class WindowAreaControllerImplTest {
 
         assertNotNull(windowAreaInfo)
         assertEquals(
-            windowAreaInfo.getCapability(OPERATION_TRANSFER_ACTIVITY_TO_AREA)?.status,
+            windowAreaInfo.getCapability(OPERATION_TRANSFER_ACTIVITY_TO_AREA).status,
             WindowAreaAdapter.translate(initialState)
         )
 
@@ -276,7 +277,7 @@ class WindowAreaControllerImplTest {
         val extensions = FakeWindowAreaComponent()
         val controller = WindowAreaControllerImpl(
             windowAreaComponent = extensions,
-            vendorApiLevel = 3
+            vendorApiLevel = FEATURE_VENDOR_API_LEVEL
         )
 
         extensions.updateRearDisplayStatusListeners(STATUS_AVAILABLE)
@@ -289,7 +290,7 @@ class WindowAreaControllerImplTest {
         assertNotNull(windowAreaInfo)
         assertTrue {
             windowAreaInfo
-                .getCapability(OPERATION_PRESENT_ON_AREA)?.status ==
+                .getCapability(OPERATION_PRESENT_ON_AREA).status ==
                 WINDOW_AREA_STATUS_AVAILABLE
         }
 
@@ -340,7 +341,7 @@ class WindowAreaControllerImplTest {
         assertNotNull(windowAreaInfo)
         assertTrue {
             windowAreaInfo
-                .getCapability(OPERATION_PRESENT_ON_AREA)?.status ==
+                .getCapability(OPERATION_PRESENT_ON_AREA).status ==
                 WINDOW_AREA_STATUS_AVAILABLE
         }
 
@@ -394,7 +395,7 @@ class WindowAreaControllerImplTest {
 
         assertNotNull(windowAreaInfo)
         assertEquals(
-            windowAreaInfo.getCapability(OPERATION_TRANSFER_ACTIVITY_TO_AREA)?.status,
+            windowAreaInfo.getCapability(OPERATION_TRANSFER_ACTIVITY_TO_AREA).status,
             WINDOW_AREA_STATUS_AVAILABLE
         )
 
@@ -440,7 +441,7 @@ class WindowAreaControllerImplTest {
         val extensionComponent = FakeWindowAreaComponent()
         val controller = WindowAreaControllerImpl(
             windowAreaComponent = extensionComponent,
-            vendorApiLevel = 3
+            vendorApiLevel = FEATURE_VENDOR_API_LEVEL
         )
 
         extensionComponent.updateRearDisplayStatusListeners(STATUS_AVAILABLE)
@@ -453,7 +454,7 @@ class WindowAreaControllerImplTest {
         assertNotNull(windowAreaInfo)
         assertTrue {
             windowAreaInfo
-                .getCapability(OPERATION_PRESENT_ON_AREA)?.status ==
+                .getCapability(OPERATION_PRESENT_ON_AREA).status ==
                 WINDOW_AREA_STATUS_UNAVAILABLE
         }
 
@@ -650,5 +651,7 @@ class WindowAreaControllerImplTest {
 
     companion object {
         private const val REAR_FACING_BINDER_DESCRIPTION = "TEST_WINDOW_AREA_REAR_FACING"
+
+        private const val FEATURE_VENDOR_API_LEVEL = 3
     }
 }

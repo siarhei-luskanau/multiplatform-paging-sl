@@ -19,7 +19,11 @@ package androidx.wear.compose.material3.demos
 import androidx.wear.compose.integration.demos.common.Centralize
 import androidx.wear.compose.integration.demos.common.ComposableDemo
 import androidx.wear.compose.integration.demos.common.DemoCategory
+import androidx.wear.compose.material3.samples.EdgeSwipeForSwipeToDismiss
 import androidx.wear.compose.material3.samples.FixedFontSize
+import androidx.wear.compose.material3.samples.HorizontalPageIndicatorSample
+import androidx.wear.compose.material3.samples.SimpleSwipeToDismissBox
+import androidx.wear.compose.material3.samples.StatefulSwipeToDismissBox
 import androidx.wear.compose.material3.samples.StepperSample
 import androidx.wear.compose.material3.samples.StepperWithIntegerSample
 import androidx.wear.compose.material3.samples.StepperWithRangeSemanticsSample
@@ -28,27 +32,75 @@ val WearMaterial3Demos = DemoCategory(
     "Material 3",
     listOf(
         DemoCategory(
-            "Buttons",
+            "Button",
             listOf(
                 ComposableDemo("Button") {
                     ButtonDemo()
                 },
-                ComposableDemo("FilledTonalButton") {
+                ComposableDemo("Filled Tonal Button") {
                     FilledTonalButtonDemo()
                 },
-                ComposableDemo("OutlinedButton") {
+                ComposableDemo("Outlined Button") {
                     OutlinedButtonDemo()
                 },
-                ComposableDemo("ChildButton") {
+                ComposableDemo("Child Button") {
                     ChildButtonDemo()
-                }
+                },
+                ComposableDemo("Compact Button") {
+                    CompactButtonDemo()
+                },
+                ComposableDemo("Multiline Button") {
+                    MultilineButtonDemo()
+                },
+                ComposableDemo("Avatar Button") {
+                    AvatarButtonDemo()
+                },
             )
         ),
+        ComposableDemo("List Header") {
+            Centralize {
+                ListHeaderDemo()
+            }
+        },
+        DemoCategory(
+            "Time Text",
+            TimeTextDemos
+        ),
+        ComposableDemo("Card") {
+            CardDemo()
+        },
         ComposableDemo("Text Button") {
             TextButtonDemo()
         },
         ComposableDemo("Icon Button") {
             IconButtonDemo()
+        },
+        ComposableDemo("Text Toggle Button") {
+            TextToggleButtonDemo()
+        },
+        ComposableDemo("Icon Toggle Button") {
+            IconToggleButtonDemo()
+        },
+        ComposableDemo("Checkbox") {
+            CheckboxDemos()
+        },
+        ComposableDemo("Switch") {
+            SwitchDemos()
+        },
+        ComposableDemo("Radio") {
+            RadioDemos()
+        },
+        ComposableDemo("Radio Button") {
+            RadioButtonDemo()
+        },
+        ComposableDemo("Split Radio Button") {
+            SplitRadioButtonDemo()
+        },
+        ComposableDemo("Toggle Button") {
+            ToggleButtonDemo()
+        },
+        ComposableDemo("Split Toggle Button") {
+            SplitToggleButtonDemo()
         },
         DemoCategory(
             "Stepper",
@@ -66,19 +118,29 @@ val WearMaterial3Demos = DemoCategory(
                             Centralize { StepperWithRangeSemanticsSample() }
                         }
                     )
-                ),
-                DemoCategory(
-                    "Demos",
-                    listOf(
-                        // Add Stepper demos here
-                    )
                 )
             )
+        ),
+        DemoCategory(
+            "Slider",
+            SliderDemos
         ),
         ComposableDemo(
             title = "Fixed Font Size"
         ) {
             Centralize { FixedFontSize() }
-        }
+        },
+        DemoCategory(
+            title = "Swipe To Dismiss",
+            listOf(
+                ComposableDemo("Simple") { SimpleSwipeToDismissBox(it.navigateBack) },
+                ComposableDemo("Stateful") { StatefulSwipeToDismissBox() },
+                ComposableDemo("Edge swipe") { EdgeSwipeForSwipeToDismiss(it.navigateBack) },
+            )
+        ),
+        ComposableDemo("HorizontalPageIndicator") {
+            Centralize { HorizontalPageIndicatorSample() }
+        },
+        ComposableDemo("Settings Demo") { SettingsDemo() }
     )
 )

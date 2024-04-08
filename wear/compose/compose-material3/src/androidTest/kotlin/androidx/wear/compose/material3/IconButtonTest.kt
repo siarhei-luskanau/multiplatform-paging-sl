@@ -31,6 +31,8 @@ import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
@@ -191,6 +193,27 @@ class IconButtonTest {
     }
 
     @Test
+    fun allows_custom_role() {
+        val overrideRole = Role.Checkbox
+
+        rule.setContentWithTheme {
+            IconButton(
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG).semantics { role = overrideRole }
+            ) {
+                TestImage()
+            }
+        }
+
+        rule.onNodeWithTag(TEST_TAG).assert(
+            SemanticsMatcher.expectValue(
+                SemanticsProperties.Role,
+                overrideRole
+            )
+        )
+    }
+
+    @Test
     fun gives_default_button_correct_tap_size() {
         rule.verifyTapSize(DefaultButtonSize) { modifier ->
             IconButton(
@@ -239,6 +262,50 @@ class IconButtonTest {
             }
         }
     }
+
+    @Test
+    fun gives_default_correct_size() =
+        rule.verifyActualSize(DefaultButtonSize) {
+            IconButton(
+                onClick = {},
+                modifier = it.touchTargetAwareSize(DefaultButtonSize)
+            ) {
+                TestImage()
+            }
+        }
+
+    @Test
+    fun gives_small_correct_size() =
+        rule.verifyActualSize(SmallButtonSize) {
+            IconButton(
+                onClick = {},
+                modifier = it.touchTargetAwareSize(SmallButtonSize)
+            ) {
+                TestImage()
+            }
+        }
+
+    @Test
+    fun gives_extraSmall_correct_size() =
+        rule.verifyActualSize(ExtraSmallButtonSize) {
+            IconButton(
+                onClick = {},
+                modifier = it.touchTargetAwareSize(ExtraSmallButtonSize)
+            ) {
+                TestImage()
+            }
+        }
+
+    @Test
+    fun gives_large_correct_size() =
+        rule.verifyActualSize(LargeButtonSize) {
+            IconButton(
+                onClick = {},
+                modifier = it.touchTargetAwareSize(LargeButtonSize)
+            ) {
+                TestImage()
+            }
+        }
 
     @RequiresApi(Build.VERSION_CODES.O)
     @Test
@@ -294,7 +361,7 @@ class IconButtonTest {
             colors = { IconButtonDefaults.iconButtonColors() },
             expectedContainerColor = { Color.Transparent },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -317,10 +384,10 @@ class IconButtonTest {
             status = Status.Disabled,
             colors = { IconButtonDefaults.filledIconButtonColors() },
             expectedContainerColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = DisabledBorderAndContainerAlpha
+                alpha = DisabledContainerAlpha
             ) },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -343,10 +410,10 @@ class IconButtonTest {
             status = Status.Disabled,
             colors = { IconButtonDefaults.filledTonalIconButtonColors() },
             expectedContainerColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = DisabledBorderAndContainerAlpha
+                alpha = DisabledContainerAlpha
             ) },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -370,7 +437,7 @@ class IconButtonTest {
             colors = { IconButtonDefaults.outlinedIconButtonColors() },
             expectedContainerColor = { Color.Transparent },
             expectedContentColor = { MaterialTheme.colorScheme.onSurface.copy(
-                alpha = ContentAlpha.disabled
+                alpha = DisabledContentAlpha
             ) }
         )
     }
@@ -397,7 +464,7 @@ class IconButtonTest {
         val status = Status.Disabled
         rule.verifyButtonBorderColor(
             expectedBorderColor = {
-                MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledBorderAndContainerAlpha)
+                MaterialTheme.colorScheme.onSurface.copy(alpha = DisabledBorderAlpha)
             },
             content = { modifier: Modifier ->
                 OutlinedIconButton(
@@ -471,7 +538,7 @@ private fun ComposeContentTestRule.isShape(
     setContentWithTheme {
         background = MaterialTheme.colorScheme.surface
         Box(Modifier.background(background)) {
-            buttonColor = colors().containerColor(true).value
+            buttonColor = colors().containerColor(true)
             if (buttonColor == Color.Transparent) {
                 buttonColor = background
             }

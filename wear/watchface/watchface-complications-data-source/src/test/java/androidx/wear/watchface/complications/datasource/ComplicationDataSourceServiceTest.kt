@@ -17,6 +17,7 @@ package androidx.wear.watchface.complications.datasource
 
 import android.content.Intent
 import android.content.res.Resources
+import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.HandlerThread
@@ -25,6 +26,7 @@ import android.support.wearable.complications.ComplicationData as WireComplicati
 import android.support.wearable.complications.IComplicationManager
 import android.support.wearable.complications.IComplicationProvider
 import android.util.Log
+import androidx.annotation.RequiresApi
 import androidx.wear.protolayout.expression.DynamicBuilders.DynamicFloat
 import androidx.wear.protolayout.expression.DynamicBuilders.DynamicString
 import androidx.wear.watchface.complications.data.ComplicationData
@@ -51,6 +53,7 @@ import org.mockito.ArgumentMatchers.eq
 import org.mockito.Mockito.verify
 import org.mockito.kotlin.argumentCaptor
 import org.mockito.kotlin.mock
+import org.robolectric.annotation.Config
 import org.robolectric.annotation.internal.DoNotInstrument
 import org.robolectric.shadows.ShadowLog
 import org.robolectric.shadows.ShadowLooper.runUiThreadTasks
@@ -308,6 +311,7 @@ class ComplicationDataSourceServiceTest {
             .isEqualTo("hello preview")
     }
 
+    @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     enum class GetComplicationPreviewDataInvalidScenario(
         val data: ComplicationData,
         val message: String
@@ -374,6 +378,7 @@ class ComplicationDataSourceServiceTest {
     }
 
     @Test
+    @Config(minSdk = Build.VERSION_CODES.TIRAMISU)
     fun testGetComplicationPreviewData_invalid_fails() {
         for (scenario in GetComplicationPreviewDataInvalidScenario.values()) {
             mService.previewData = scenario.data
@@ -636,6 +641,7 @@ class ComplicationDataSourceServiceTest {
     }
 
     @Test
+    @Config(sdk = [Build.VERSION_CODES.TIRAMISU])
     fun testImmediateRequest_invalidTimelineData() {
         mService.respondWithTimeline = true
         mService.responseDataTimeline = ComplicationDataTimeline(INVALID_DATA, listOf())
@@ -674,6 +680,44 @@ class ComplicationDataSourceServiceTest {
         }
     }
 
+    @Test
+    @Config(sdk = [Build.VERSION_CODES.R])
+    fun testImmediateRequest_invalidTimelineData_preT() {
+        mService.respondWithTimeline = true
+        mService.responseDataTimeline = ComplicationDataTimeline(INVALID_DATA, listOf())
+        val thread = HandlerThread("testThread")
+
+        try {
+            thread.start()
+            val threadHandler = Handler(thread.looper)
+            val response = AtomicReference<WireComplicationData>()
+            val exception = AtomicReference<Throwable>()
+            val exceptionLatch = CountDownLatch(1)
+
+            mPretendMainThread.uncaughtExceptionHandler =
+                Thread.UncaughtExceptionHandler { _, throwable ->
+                    exception.set(throwable)
+                    exceptionLatch.countDown()
+                }
+            threadHandler.post {
+                try {
+                    response.set(
+                        mProvider.onSynchronousComplicationRequest(
+                            123,
+                            INVALID_DATA.type.toWireComplicationType()
+                        )
+                    )
+                } catch (e: RemoteException) {
+                    // Should not happen
+                }
+            }
+
+            assertThat(exceptionLatch.await(1000, TimeUnit.MILLISECONDS)).isFalse()
+        } finally {
+            thread.quitSafely()
+        }
+    }
+
     private fun runUiThreadTasksWhileAwaitingDataLatch(timeout: Long) {
         // Allowing UI thread to execute while we wait for the data latch.
         var attempts: Long = 0
@@ -695,6 +739,7 @@ class ComplicationDataSourceServiceTest {
                 )
                 .setText(ComplicationText.EMPTY)
                 .build()
-        private val INVALID_DATA_ERROR_MESSAGE = "value must be between min and max"
+        private val INVALID_DATA_ERROR_MESSAGE =
+            "From T API onwards, value must be between min and max"
     }
 }

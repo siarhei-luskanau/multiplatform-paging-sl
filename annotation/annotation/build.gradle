@@ -1,6 +1,13 @@
-import androidx.build.KmpPlatformsKt
+/**
+ * This file was created using the `create_project.py` script located in the
+ * `<AndroidX root>/development/project-creator` directory.
+ *
+ * Please use that script when creating a new project, rather than copying an existing project and
+ * modifying its settings.
+ */
 import androidx.build.LibraryType
-import androidx.build.Publish
+import androidx.build.PlatformIdentifier
+import androidx.build.KotlinTarget
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.tasks.KotlinNativeCompile
 
@@ -9,10 +16,13 @@ plugins {
 }
 
 androidXMultiplatform {
+    androidNative()
     jvm()
     mac()
     linux()
     ios()
+
+    defaultPlatform(PlatformIdentifier.JVM)
 
     sourceSets {
         commonMain {
@@ -21,19 +31,18 @@ androidXMultiplatform {
             }
         }
 
-        if (KmpPlatformsKt.enableNative(project)) {
-            nonJvmMain {
-                dependsOn commonMain
-            }
+        nonJvmMain {
+            dependsOn commonMain
+        }
 
-            targets.all { target ->
-                if (target.platformType !in [KotlinPlatformType.jvm, KotlinPlatformType.common]) {
-                    target.compilations["main"].defaultSourceSet {
-                        dependsOn(nonJvmMain)
-                    }
+        targets.all { target ->
+            if (target.platformType !in [KotlinPlatformType.jvm, KotlinPlatformType.common]) {
+                target.compilations["main"].defaultSourceSet {
+                    dependsOn(nonJvmMain)
                 }
             }
         }
+
 
         // Workaround for https://youtrack.jetbrains.com/issue/KT-51763
         // Make sure commonization runs before any compilation task.
@@ -69,6 +78,7 @@ androidx {
     name = "Annotation"
     type = LibraryType.PUBLISHED_LIBRARY
     mavenVersion = LibraryVersions.ANNOTATION
+    kotlinTarget = KotlinTarget.KOTLIN_1_7
     inceptionYear = "2013"
     description = "Provides source annotations for tooling and readability."
 }

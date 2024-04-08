@@ -18,7 +18,6 @@
 
 package androidx.camera.camera2.pipe.integration.impl
 
-import android.hardware.camera2.CaptureFailure
 import android.hardware.camera2.CaptureRequest
 import androidx.annotation.GuardedBy
 import androidx.annotation.RequiresApi
@@ -30,14 +29,21 @@ import androidx.camera.camera2.pipe.FrameInfo
 import androidx.camera.camera2.pipe.FrameNumber
 import androidx.camera.camera2.pipe.Metadata
 import androidx.camera.camera2.pipe.Request
+import androidx.camera.camera2.pipe.RequestFailure
 import androidx.camera.camera2.pipe.RequestMetadata
 import androidx.camera.camera2.pipe.RequestTemplate
 import androidx.camera.camera2.pipe.StreamId
 import androidx.camera.camera2.pipe.core.Log
 import androidx.camera.camera2.pipe.integration.config.UseCaseCameraScope
 import androidx.camera.camera2.pipe.integration.config.UseCaseGraphConfig
+import androidx.camera.core.Preview
+import androidx.camera.core.impl.SessionConfig
+import androidx.camera.core.impl.SessionProcessor.CaptureCallback
+import androidx.camera.core.impl.TagBundle
+import androidx.camera.core.streamsharing.StreamSharing
 import javax.inject.Inject
 import kotlinx.atomicfu.atomic
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Deferred
@@ -56,7 +62,8 @@ import kotlinx.coroutines.launch
 @UseCaseCameraScope
 class UseCaseCameraState @Inject constructor(
     useCaseGraphConfig: UseCaseGraphConfig,
-    private val threads: UseCaseThreads
+    private val threads: UseCaseThreads,
+    private val sessionProcessorManager: SessionProcessorManager?,
 ) {
     private val lock = Any()
 
@@ -91,6 +98,9 @@ class UseCaseCameraState @Inject constructor(
     @GuardedBy("lock")
     private var currentTemplate: RequestTemplate? = null
 
+    @GuardedBy("lock")
+    private var currentSessionConfig: SessionConfig? = null
+
     private val requestListener = RequestListener()
 
     /**
@@ -114,6 +124,7 @@ class UseCaseCameraState @Inject constructor(
         streams: Set<StreamId>? = null,
         template: RequestTemplate? = null,
         listeners: Set<Request.Listener>? = null,
+        sessionConfig: SessionConfig? = null,
     ): Deferred<Unit> {
         val result: Deferred<Unit>
         synchronized(lock) {
@@ -134,7 +145,7 @@ class UseCaseCameraState @Inject constructor(
             updateState(
                 parameters, appendParameters, internalParameters,
                 appendInternalParameters, streams, template,
-                listeners
+                listeners, sessionConfig
             )
 
             if (updateSignal == null) {
@@ -193,7 +204,8 @@ class UseCaseCameraState @Inject constructor(
         appendInternalParameters: Boolean = true,
         streams: Set<StreamId>? = null,
         template: RequestTemplate? = null,
-        listeners: Set<Request.Listener>? = null
+        listeners: Set<Request.Listener>? = null,
+        sessionConfig: SessionConfig? = null,
     ) {
         // TODO: Consider if this should detect changes and only invoke an update if state has
         //  actually changed.
@@ -221,6 +233,9 @@ class UseCaseCameraState @Inject constructor(
             currentListeners.clear()
             currentListeners.addAll(listeners)
         }
+        if (sessionConfig != null) {
+            currentSessionConfig = sessionConfig
+        }
     }
 
     /**
@@ -230,6 +245,11 @@ class UseCaseCameraState @Inject constructor(
     fun tryStartRepeating() = submitLatest()
 
     private fun submitLatest() {
+        if (sessionProcessorManager != null) {
+            submitLatestWithSessionProcessor()
+            return
+        }
+
         // Update the cameraGraph with the most recent set of values.
         // Since acquireSession is a suspending function, it's possible that subsequent updates
         // can occur while waiting for the acquireSession call to complete. If this happens,
@@ -237,13 +257,17 @@ class UseCaseCameraState @Inject constructor(
         // synchronously with the latest values. The startRepeating/stopRepeating call happens
         // outside of the synchronized block to avoid holding a lock while updating the camera
         // state.
-
         threads.scope.launch(start = CoroutineStart.UNDISPATCHED) {
             val result: CompletableDeferred<Unit>?
             val request: Request?
-            cameraGraph.acquireSession().use {
+            try {
+                cameraGraph.acquireSession()
+            } catch (e: CancellationException) {
+                Log.debug(e) { "Cannot acquire session at ${this@UseCaseCameraState}" }
+                null
+            }.let { session ->
                 synchronized(lock) {
-                    request = if (currentStreams.isEmpty()) {
+                    request = if (currentStreams.isEmpty() || session == null) {
                         null
                     } else {
                         Request(
@@ -263,18 +287,21 @@ class UseCaseCameraState @Inject constructor(
                     updating = false
                     updateSignal = null
                 }
-
-                if (request == null) {
-                    it.stopRepeating()
-                } else {
-                    result?.let { result ->
-                        synchronized(lock) {
-                            updateSignals.add(RequestSignal(submittedRequestCounter.value, result))
+                session?.use {
+                    if (request == null) {
+                        it.stopRepeating()
+                    } else {
+                        result?.let { result ->
+                            synchronized(lock) {
+                                updateSignals.add(
+                                    RequestSignal(submittedRequestCounter.value, result)
+                                )
+                            }
                         }
+                        Log.debug { "Update RepeatingRequest: $request" }
+                        it.startRepeating(request)
+                        it.update3A(request.parameters)
                     }
-                    Log.debug { "Update RepeatingRequest: $request" }
-                    it.startRepeating(request)
-                    it.update3A(request.parameters)
                 }
             }
 
@@ -285,6 +312,52 @@ class UseCaseCameraState @Inject constructor(
                 // calls.
                 result?.complete(Unit)
             }
+        }
+    }
+
+    private fun submitLatestWithSessionProcessor() {
+        checkNotNull(sessionProcessorManager)
+        synchronized(lock) {
+            updating = false
+            val signal = updateSignal
+            updateSignal = null
+
+            if (currentSessionConfig == null) {
+                signal?.complete(Unit)
+                return
+            }
+
+            // Here we're intentionally building a new SessionConfig. Various request parameters,
+            // such as zoom or 3A are directly translated to corresponding CameraPipe types and
+            // APIs. As such, we need to build a new, "combined" SessionConfig that has these
+            // updated request parameters set. Otherwise, certain settings like zoom would be
+            // disregarded.
+            SessionConfig.Builder().apply {
+                currentTemplate?.let { setTemplateType(it.value) }
+                setImplementationOptions(Camera2ImplConfig.Builder().apply {
+                    for ((key, value) in currentParameters) {
+                        setCaptureRequestOptionWithType(key, value)
+                    }
+                }.build())
+                currentInternalParameters[CAMERAX_TAG_BUNDLE]?.let {
+                    val tagBundleMap = (it as TagBundle).toMap()
+                    for ((tag, value) in tagBundleMap) {
+                        addTag(tag, value)
+                    }
+                }
+            }.build().also { sessionConfig ->
+                sessionProcessorManager.sessionConfig = sessionConfig
+            }
+
+            if (currentSessionConfig!!.repeatingCaptureConfig.surfaces.any {
+                    it.containerClass == Preview::class.java ||
+                        it.containerClass == StreamSharing::class.java
+                }) {
+                sessionProcessorManager.startRepeating(object : CaptureCallback {})
+            } else {
+                sessionProcessorManager.stopRepeating()
+            }
+            signal?.complete(Unit)
         }
     }
 
@@ -308,7 +381,15 @@ class UseCaseCameraState @Inject constructor(
         key: CaptureRequest.Key<*>
     ): Int? = this?.get(key) as? Int
 
-    inner class RequestListener() : Request.Listener {
+    @Suppress("UNCHECKED_CAST")
+    private fun <T> Camera2ImplConfig.Builder.setCaptureRequestOptionWithType(
+        key: CaptureRequest.Key<T>,
+        value: Any
+    ) {
+        setCaptureRequestOption(key, value as T)
+    }
+
+    inner class RequestListener : Request.Listener {
         override fun onTotalCaptureResult(
             requestMetadata: RequestMetadata,
             frameNumber: FrameNumber,
@@ -327,15 +408,16 @@ class UseCaseCameraState @Inject constructor(
         override fun onFailed(
             requestMetadata: RequestMetadata,
             frameNumber: FrameNumber,
-            captureFailure: CaptureFailure,
+            requestFailure: RequestFailure,
         ) {
-            super.onFailed(requestMetadata, frameNumber, captureFailure)
-            completeExceptionally(requestMetadata, captureFailure)
+            @Suppress("DEPRECATION")
+            super.onFailed(requestMetadata, frameNumber, requestFailure)
+            completeExceptionally(requestMetadata, requestFailure)
         }
 
         private fun completeExceptionally(
             requestMetadata: RequestMetadata,
-            captureFailure: CaptureFailure? = null
+            requestFailure: RequestFailure? = null
         ) {
             threads.scope.launch(start = CoroutineStart.UNDISPATCHED) {
                 requestMetadata[USE_CASE_CAMERA_STATE_CUSTOM_TAG]?.let { requestNo ->
@@ -343,7 +425,7 @@ class UseCaseCameraState @Inject constructor(
                         updateSignals.completeExceptionally(
                             requestNo,
                             Throwable(
-                                "Failed in framework level" + (captureFailure?.reason?.let {
+                                "Failed in framework level" + (requestFailure?.reason?.let {
                                     " with CaptureFailure.reason = $it"
                                 } ?: "")
                             )

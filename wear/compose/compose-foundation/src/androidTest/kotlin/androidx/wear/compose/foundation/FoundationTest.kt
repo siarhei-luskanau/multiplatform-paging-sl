@@ -16,11 +16,17 @@
 
 package androidx.wear.compose.foundation
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.SemanticsPropertyReceiver
+import androidx.compose.ui.semantics.semantics
 import kotlin.math.abs
 import kotlin.math.atan2
 import kotlin.math.min
@@ -35,11 +41,24 @@ internal const val FLOAT_TOLERANCE = 1f
 
 /**
  * Checks whether [expectedColor] does not exist in current [ImageBitmap]
- */
+ *
 fun ImageBitmap.assertDoesNotContainColor(expectedColor: Color) {
     val histogram = histogram()
     if (histogram.containsKey(expectedColor)) {
         throw AssertionError("Expected color $expectedColor exists in current bitmap")
+    }
+}*/
+
+/**
+ * Checks whether [expectedColor] exist in current [ImageBitmap], covering at least the given ratio
+ * of the image
+ */
+fun ImageBitmap.assertDoesContainColor(expectedColor: Color, expectedRatio: Float = 0.75f) {
+    val histogram = histogram()
+    val ratio = (histogram.getOrDefault(expectedColor, 0L)).toFloat() / (width * height)
+    if (ratio < expectedRatio) {
+        throw AssertionError("Expected color $expectedColor with ratio $expectedRatio." +
+            " Actual ratio = $ratio")
     }
 }
 
@@ -53,6 +72,34 @@ private fun ImageBitmap.histogram(): MutableMap<Color, Long> {
         }
     }
     return histogram
+}
+
+/**
+ * Applies a tag to allow modified curved container element to be found in tests. This is similar to
+ * [Modifier.testTag], but specifically for curved containers.
+ *
+ * This is a convenience method for a [semantics] that sets [SemanticsPropertyReceiver.testTag].
+ * Currently, this supports basic assert operations operations only.
+ *
+ * @param tag The tag to apply to the curved container.
+ */
+public fun CurvedModifier.testTag(
+    tag: String
+) = this.then { child ->
+    TestTagWrapper(child, tag)
+}
+
+private class TestTagWrapper(
+    val child: CurvedChild,
+    val tag: String
+) : BaseCurvedChildWrapper(child) {
+
+    @Composable
+    override fun SubComposition() {
+        Box(modifier = Modifier.testTag(tag)) {
+            super.SubComposition()
+        }
+    }
 }
 
 internal fun checkSpy(dimensions: RadialDimensions, capturedInfo: CapturedInfo) =

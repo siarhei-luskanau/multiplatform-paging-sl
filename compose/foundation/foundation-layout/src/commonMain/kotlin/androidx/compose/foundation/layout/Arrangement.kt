@@ -24,8 +24,8 @@ import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.util.fastRoundToInt
 import kotlin.math.min
-import kotlin.math.roundToInt
 
 /**
  * Used to specify the arrangement of the layout's children in layouts like [Row] or [Column] in
@@ -566,7 +566,6 @@ object Arrangement {
     internal data class SpacedAligned(
         val space: Dp,
         val rtlMirror: Boolean,
-        @Suppress("PrimitiveInLambda")
         val alignment: ((Int, LayoutDirection) -> Int)?
     ) : HorizontalOrVertical {
 
@@ -640,7 +639,7 @@ object Arrangement {
         val consumedSize = size.fold(0) { a, b -> a + b }
         var current = (totalSize - consumedSize).toFloat() / 2
         size.forEachIndexed(reverseInput) { index, it ->
-            outPosition[index] = current.roundToInt()
+            outPosition[index] = current.fastRoundToInt()
             current += it.toFloat()
         }
     }
@@ -655,7 +654,7 @@ object Arrangement {
         val gapSize = (totalSize - consumedSize).toFloat() / (size.size + 1)
         var current = gapSize
         size.forEachIndexed(reverseInput) { index, it ->
-            outPosition[index] = current.roundToInt()
+            outPosition[index] = current.fastRoundToInt()
             current += it.toFloat() + gapSize
         }
     }
@@ -679,7 +678,7 @@ object Arrangement {
             current = gapSize
         }
         size.forEachIndexed(reverseInput) { index, it ->
-            outPosition[index] = current.roundToInt()
+            outPosition[index] = current.fastRoundToInt()
             current += it.toFloat() + gapSize
         }
     }
@@ -698,7 +697,7 @@ object Arrangement {
         }
         var current = gapSize / 2
         size.forEachIndexed(reverseInput) { index, it ->
-            outPosition[index] = current.roundToInt()
+            outPosition[index] = current.fastRoundToInt()
             current += it.toFloat() + gapSize
         }
     }

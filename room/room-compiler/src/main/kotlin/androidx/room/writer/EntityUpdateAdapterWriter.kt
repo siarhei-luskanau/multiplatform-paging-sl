@@ -22,6 +22,7 @@ import androidx.room.compiler.codegen.XFunSpec.Builder.Companion.addStatement
 import androidx.room.compiler.codegen.XTypeSpec
 import androidx.room.ext.CommonTypeNames
 import androidx.room.ext.RoomTypeNames
+import androidx.room.ext.SQLiteDriverTypeNames
 import androidx.room.ext.SupportDbTypeNames
 import androidx.room.solver.CodeGenScope
 import androidx.room.vo.FieldWithIndex
@@ -46,14 +47,26 @@ class EntityUpdateAdapterWriter private constructor(
             )
     }
 
-    fun createAnonymous(typeWriter: TypeWriter, dbParam: String): XTypeSpec {
-        return XTypeSpec.anonymousClassBuilder(typeWriter.codeLanguage, "%L", dbParam).apply {
-            superclass(RoomTypeNames.DELETE_OR_UPDATE_ADAPTER.parametrizedBy(pojo.typeName))
+    fun createAnonymous(typeWriter: TypeWriter, dbParam: String, useDriverApi: Boolean): XTypeSpec {
+        return if (useDriverApi) {
+            XTypeSpec.anonymousClassBuilder(typeWriter.codeLanguage)
+        } else {
+            XTypeSpec.anonymousClassBuilder(typeWriter.codeLanguage, "%L", dbParam)
+        }.apply {
+            superclass(
+                if (useDriverApi) {
+                    RoomTypeNames.DELETE_OR_UPDATE_ADAPTER
+                        .parametrizedBy(pojo.typeName)
+                } else {
+                    RoomTypeNames.DELETE_OR_UPDATE_ADAPTER_COMPAT
+                        .parametrizedBy(pojo.typeName)
+                }
+            )
             addFunction(
                 XFunSpec.builder(
                     language = language,
                     name = "createQuery",
-                    visibility = VisibilityModifier.PUBLIC,
+                    visibility = VisibilityModifier.PROTECTED,
                     isOverride = true
                 ).apply {
                     returns(CommonTypeNames.STRING)
@@ -80,15 +93,22 @@ class EntityUpdateAdapterWriter private constructor(
                 XFunSpec.builder(
                     language = language,
                     name = "bind",
-                    visibility = VisibilityModifier.PUBLIC,
+                    visibility = VisibilityModifier.PROTECTED,
                     isOverride = true
                 ).apply {
                     val stmtParam = "statement"
-                    addParameter(SupportDbTypeNames.SQLITE_STMT, stmtParam)
+                    addParameter(
+                        if (useDriverApi) {
+                            SQLiteDriverTypeNames.STATEMENT
+                        } else {
+                            SupportDbTypeNames.SQLITE_STMT
+                        },
+                        stmtParam
+                    )
                     val entityParam = "entity"
                     addParameter(pojo.typeName, entityParam)
                     val mappedField = FieldWithIndex.byOrder(pojo.fields)
-                    val bindScope = CodeGenScope(typeWriter)
+                    val bindScope = CodeGenScope(writer = typeWriter, useDriverApi = useDriverApi)
                     FieldReadWriteWriter.bindToStatement(
                         ownerVar = entityParam,
                         stmtParamVar = stmtParam,

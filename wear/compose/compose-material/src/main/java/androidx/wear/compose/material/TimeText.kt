@@ -56,6 +56,9 @@ import androidx.wear.compose.foundation.padding
 import androidx.wear.compose.material.TimeTextDefaults.CurvedTextSeparator
 import androidx.wear.compose.material.TimeTextDefaults.TextSeparator
 import androidx.wear.compose.material.TimeTextDefaults.timeFormat
+import androidx.wear.compose.materialcore.currentTimeMillis
+import androidx.wear.compose.materialcore.is24HourFormat
+import androidx.wear.compose.materialcore.isRoundDevice
 import java.util.Calendar
 import java.util.Locale
 
@@ -312,7 +315,6 @@ internal class DefaultTimeSource constructor(timeFormat: String) : TimeSource {
 @Composable
 @VisibleForTesting
 internal fun currentTime(
-    @Suppress("PrimitiveInLambda")
     time: () -> Long,
     timeFormat: String
 ): State<String> {
@@ -325,7 +327,6 @@ internal fun currentTime(
     }
 
     val context = LocalContext.current
-    @Suppress("PrimitiveInLambda")
     val updatedTimeLambda by rememberUpdatedState(time)
 
     DisposableEffect(context, updatedTimeLambda) {

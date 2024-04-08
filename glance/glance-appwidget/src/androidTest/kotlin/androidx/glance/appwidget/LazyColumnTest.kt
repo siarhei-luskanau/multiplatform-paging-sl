@@ -17,12 +17,14 @@
 package androidx.glance.appwidget
 
 import android.app.Activity
-import android.os.Build
+import android.util.Log
 import android.view.Gravity
 import android.view.View
+import android.view.ViewGroup
 import android.view.ViewTreeObserver
 import android.widget.Button
 import android.widget.FrameLayout
+import android.widget.ListAdapter
 import android.widget.ListView
 import android.widget.TextView
 import androidx.compose.runtime.collectAsState
@@ -46,9 +48,10 @@ import androidx.test.filters.MediumTest
 import androidx.test.filters.SdkSuppress
 import com.google.common.truth.Truth.assertThat
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
-import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -60,13 +63,12 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withTimeout
 import org.junit.Rule
 import org.junit.Test
 
-@OptIn(ExperimentalCoroutinesApi::class)
-// b/205868100 Run on 34+ once FLAG_UNSAFE_MUTABLE_IMPLICIT_INTENT is added
-@SdkSuppress(minSdkVersion = 29, maxSdkVersion = 33)
 @MediumTest
+@SdkSuppress(minSdkVersion = 29)
 class LazyColumnTest {
     @get:Rule
     val mHostRule = AppWidgetHostRule()
@@ -106,8 +108,10 @@ class LazyColumnTest {
             val adapter = list.adapter!!
             assertThat(adapter.hasStableIds()).isFalse()
             assertThat(adapter.count).isEqualTo(2)
-            assertThat(adapter.getItemId(0)).isEqualTo(ReservedItemIdRangeEnd)
-            assertThat(adapter.getItemId(1)).isEqualTo(ReservedItemIdRangeEnd - 1)
+            runBlocking {
+                adapter.waitForItemIdAtPosition(0, ReservedItemIdRangeEnd)
+                adapter.waitForItemIdAtPosition(1, ReservedItemIdRangeEnd - 1)
+            }
         }
     }
 
@@ -126,8 +130,10 @@ class LazyColumnTest {
             val adapter = list.adapter!!
             assertThat(adapter.hasStableIds()).isTrue()
             assertThat(adapter.count).isEqualTo(2)
-            assertThat(adapter.getItemId(0)).isEqualTo(ReservedItemIdRangeEnd)
-            assertThat(adapter.getItemId(1)).isEqualTo(1L)
+            runBlocking {
+                adapter.waitForItemIdAtPosition(0, ReservedItemIdRangeEnd)
+                adapter.waitForItemIdAtPosition(1, 1L)
+            }
         }
     }
 
@@ -145,9 +151,11 @@ class LazyColumnTest {
             val adapter = list.adapter!!
             assertThat(adapter.count).isEqualTo(3)
             assertThat(adapter.hasStableIds()).isFalse()
-            assertThat(adapter.getItemId(0)).isEqualTo(ReservedItemIdRangeEnd)
-            assertThat(adapter.getItemId(1)).isEqualTo(ReservedItemIdRangeEnd - 1)
-            assertThat(adapter.getItemId(2)).isEqualTo(ReservedItemIdRangeEnd - 2)
+            runBlocking {
+                adapter.waitForItemIdAtPosition(0, ReservedItemIdRangeEnd)
+                adapter.waitForItemIdAtPosition(1, ReservedItemIdRangeEnd - 1)
+                adapter.waitForItemIdAtPosition(2, ReservedItemIdRangeEnd - 2)
+            }
         }
     }
 
@@ -166,10 +174,12 @@ class LazyColumnTest {
             val adapter = list.adapter!!
             assertThat(adapter.count).isEqualTo(4)
             assertThat(adapter.hasStableIds()).isTrue()
-            assertThat(adapter.getItemId(0)).isEqualTo(0L)
-            assertThat(adapter.getItemId(1)).isEqualTo(2L)
-            assertThat(adapter.getItemId(2)).isEqualTo(4L)
-            assertThat(adapter.getItemId(3)).isEqualTo(ReservedItemIdRangeEnd - 3)
+            runBlocking {
+                adapter.waitForItemIdAtPosition(0, 0L)
+                adapter.waitForItemIdAtPosition(1, 2L)
+                adapter.waitForItemIdAtPosition(2, 4L)
+                adapter.waitForItemIdAtPosition(3, ReservedItemIdRangeEnd - 3)
+            }
         }
     }
 
@@ -186,10 +196,14 @@ class LazyColumnTest {
         mHostRule.startHost()
 
         mHostRule.waitForListViewChildren { list ->
-            val textView0 = list.getUnboxedListItem<TextView>(0)
-            val textView1 = list.getUnboxedListItem<TextView>(1)
-            val textView2 = list.getUnboxedListItem<TextView>(2)
-            val textView3 = list.getUnboxedListItem<TextView>(3)
+            val textView0 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 0, viewPosition = 0)
+            val textView1 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 1, viewPosition = 0)
+            val textView2 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 2, viewPosition = 0)
+            val textView3 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 3, viewPosition = 0)
             assertThat(textView0.text.toString()).isEqualTo("Row 0")
             assertThat(textView1.text.toString()).isEqualTo("Row 1")
             assertThat(textView2.text.toString()).isEqualTo("Row 2")
@@ -210,10 +224,14 @@ class LazyColumnTest {
         mHostRule.startHost()
 
         mHostRule.waitForListViewChildren { list ->
-            val textView0 = list.getUnboxedListItem<TextView>(0)
-            val textView1 = list.getUnboxedListItem<TextView>(1)
-            val textView2 = list.getUnboxedListItem<TextView>(2)
-            val textView3 = list.getUnboxedListItem<TextView>(3)
+            val textView0 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 0, viewPosition = 0)
+            val textView1 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 1, viewPosition = 0)
+            val textView2 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 2, viewPosition = 0)
+            val textView3 =
+                list.getViewFromUnboxedListItem<TextView>(itemPosition = 3, viewPosition = 0)
             assertThat(textView0.text.toString()).isEqualTo("Row 0")
             assertThat(textView1.text.toString()).isEqualTo("Row 1")
             assertThat(textView2.text.toString()).isEqualTo("Row 2")
@@ -234,7 +252,7 @@ class LazyColumnTest {
         mHostRule.startHost()
 
         mHostRule.waitForListViewChildren { list ->
-            list.getUnboxedListItem<TextView>(0)
+            list.getViewFromUnboxedListItem<TextView>(itemPosition = 0, viewPosition = 0)
         }
     }
 
@@ -251,7 +269,7 @@ class LazyColumnTest {
         mHostRule.startHost()
 
         mHostRule.waitForListViewChildren { list ->
-            list.getUnboxedListItem<TextView>(0)
+            list.getViewFromUnboxedListItem<TextView>(itemPosition = 0, viewPosition = 0)
         }
     }
 
@@ -374,7 +392,7 @@ class LazyColumnTest {
             rowItem0.performClick()
         }
 
-        mHostRule.waitForListViewChildWithText(text = "Row item 0, count 1") {}
+        mHostRule.waitForListViewChildWithText(text = "Row item 0, count 2") {}
     }
 
     @Test
@@ -462,7 +480,8 @@ class LazyColumnTest {
         val buttons = arrayOfNulls<Button>(5)
         mHostRule.waitForListViewChildren { list ->
             for (it in 0..4) {
-                val button = list.getUnboxedListItem<Button>(it)
+                val button =
+                    list.getViewFromUnboxedListItem<Button>(itemPosition = it, viewPosition = 0)
                 buttons[it] = button
             }
         }
@@ -497,7 +516,10 @@ class LazyColumnTest {
         val buttons = arrayOfNulls<FrameLayout>(5)
         mHostRule.waitForListViewChildren { list ->
             for (it in 0..4) {
-                val button = list.getUnboxedListItem<FrameLayout>(it)
+                val button = list.getViewFromUnboxedListItem<FrameLayout>(
+                    itemPosition = it,
+                    viewPosition = 0
+                )
                 buttons[it] = assertIs<FrameLayout>(button)
             }
         }
@@ -633,12 +655,44 @@ fun <T> Flow<T>.debounce(timeout: Duration): Flow<T> = channelFlow {
 }.buffer(0)
 
 internal inline fun <reified T : View> ListView.getUnboxedListItem(position: Int): T {
+    // Get adapter item at position
     val remoteViewFrame = assertIs<FrameLayout>(getChildAt(position))
 
-    // Android S- have a RemoteViewsAdapter$RemoteViewsFrameLayout first, Android T+ do not.
-    if (Build.VERSION.SDK_INT > Build.VERSION_CODES.S) {
-        return remoteViewFrame.getChildAt(0).getTargetView()
+    // Find Glance's root view for each item
+    val rootView = assertNotNull(remoteViewFrame.findViewById(R.id.rootView)) as ViewGroup
+    // The RemoteViews created in translateComposition for holding an item
+    return rootView.getChildAt(0).getTargetView()
+}
+
+private suspend fun ListAdapter.waitForItemIdAtPosition(
+    position: Int,
+    expectedItemId: Long
+) {
+    var actualItemId = getItemId(position)
+    try {
+        withTimeout(600) {
+            while (actualItemId != expectedItemId) {
+                Log.i(
+                    "LazyColumnTest", "ItemId at $position was expected to be " +
+                        "$expectedItemId, but was $actualItemId. Waiting for 200 ms."
+                )
+                delay(200) // Wait before retrying
+                actualItemId = getItemId(position)
+            }
+        }
+    } catch (e: TimeoutCancellationException) {
+        throw AssertionError(
+            "ItemId at $position was expected to be $expectedItemId, but was $actualItemId"
+        )
     }
-    val frame = assertIs<FrameLayout>(remoteViewFrame.getChildAt(0))
-    return frame.getChildAt(0).getTargetView()
+}
+
+internal inline fun <reified T : View> ListView.getViewFromUnboxedListItem(
+    itemPosition: Int,
+    viewPosition: Int
+): T {
+    // Box added during normalization to allow aligning item contents per the alignment set on
+    // LazyColumn
+    val alignmentView = assertIs<FrameLayout>(getUnboxedListItem(itemPosition))
+    return alignmentView.getChildAt(viewPosition).getTargetView()
 }

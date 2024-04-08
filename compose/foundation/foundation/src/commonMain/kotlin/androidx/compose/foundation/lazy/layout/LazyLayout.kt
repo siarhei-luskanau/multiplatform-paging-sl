@@ -18,6 +18,7 @@ package androidx.compose.foundation.lazy.layout
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
@@ -37,6 +38,12 @@ import androidx.compose.ui.unit.Constraints
  * @param prefetchState allows to schedule items for prefetching
  * @param measurePolicy Measure policy which allows to only compose and measure needed items.
  */
+@Deprecated(
+    message = "Use an overload accepting a lambda prodicing an item provider instead",
+    replaceWith = ReplaceWith(
+        "LazyLayout({ itemProvider }, modifier, prefetchState, measurePolicy)"
+    )
+)
 @ExperimentalFoundationApi
 @Composable
 fun LazyLayout(
@@ -48,9 +55,23 @@ fun LazyLayout(
     LazyLayout({ itemProvider }, modifier, prefetchState, measurePolicy)
 }
 
+/**
+ * A layout that only composes and lays out currently needed items. Can be used to build
+ * efficient scrollable layouts.
+ *
+ * @param itemProvider lambda producing an item provider containing all the needed info about
+ * the items which could be used to compose and measure items as part of [measurePolicy].
+ * @param modifier to apply on the layout
+ * @param prefetchState allows to schedule items for prefetching
+ * @param measurePolicy Measure policy which allows to only compose and measure needed items.
+ *
+ * Note: this function is a part of [LazyLayout] harness that allows for building custom lazy
+ * layouts. LazyLayout and all corresponding APIs are still under development and are subject to
+ * change.
+ */
 @ExperimentalFoundationApi
 @Composable
-internal fun LazyLayout(
+fun LazyLayout(
     itemProvider: () -> LazyLayoutItemProvider,
     modifier: Modifier = Modifier,
     prefetchState: LazyLayoutPrefetchState? = null,
@@ -65,12 +86,23 @@ internal fun LazyLayout(
         val subcomposeLayoutState = remember {
             SubcomposeLayoutState(LazyLayoutItemReusePolicy(itemContentFactory))
         }
-        prefetchState?.let {
-            LazyLayoutPrefetcher(
+        if (prefetchState != null) {
+            val executor = prefetchState.prefetchExecutor ?: rememberDefaultPrefetchExecutor()
+            DisposableEffect(
                 prefetchState,
                 itemContentFactory,
-                subcomposeLayoutState
-            )
+                subcomposeLayoutState,
+                executor
+            ) {
+                prefetchState.prefetchHandleProvider = PrefetchHandleProvider(
+                    itemContentFactory,
+                    subcomposeLayoutState,
+                    executor
+                )
+                onDispose {
+                    prefetchState.prefetchHandleProvider = null
+                }
+            }
         }
 
         SubcomposeLayout(
@@ -81,8 +113,7 @@ internal fun LazyLayout(
                     with(
                         LazyLayoutMeasureScopeImpl(
                             itemContentFactory,
-                            this,
-                            prefetchState?.prefetcher?.timeTracker
+                            this
                         )
                     ) {
                         measurePolicy(constraints)
@@ -124,15 +155,3 @@ private class LazyLayoutItemReusePolicy(
  * 5 (RecycledViewPool.DEFAULT_MAX_SCRAP) + 2 (Recycler.DEFAULT_CACHE_SIZE)
  */
 private const val MaxItemsToRetainForReuse = 7
-
-/**
- * Platform specific implementation of lazy layout items prefetching - precomposing next items in
- * advance during the scrolling.
- */
-@ExperimentalFoundationApi
-@Composable
-internal expect fun LazyLayoutPrefetcher(
-    prefetchState: LazyLayoutPrefetchState,
-    itemContentFactory: LazyLayoutItemContentFactory,
-    subcomposeLayoutState: SubcomposeLayoutState
-)

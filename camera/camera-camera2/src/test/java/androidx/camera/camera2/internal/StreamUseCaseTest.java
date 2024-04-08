@@ -19,7 +19,9 @@ package androidx.camera.camera2.internal;
 import static android.os.Build.VERSION.SDK_INT;
 
 import static androidx.camera.camera2.internal.StreamUseCaseUtil.STREAM_USE_CASE_STREAM_SPEC_OPTION;
+import static androidx.camera.camera2.internal.StreamUseCaseUtil.shouldUseStreamUseCase;
 import static androidx.camera.core.DynamicRange.BIT_DEPTH_10_BIT;
+import static androidx.camera.core.DynamicRange.BIT_DEPTH_8_BIT;
 import static androidx.camera.core.ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY;
 import static androidx.camera.core.ImageCapture.CAPTURE_MODE_ZERO_SHUTTER_LAG;
 
@@ -34,6 +36,7 @@ import android.view.Surface;
 
 import androidx.annotation.NonNull;
 import androidx.camera.camera2.impl.Camera2ImplConfig;
+import androidx.camera.camera2.internal.SupportedSurfaceCombination.FeatureSettings;
 import androidx.camera.camera2.internal.compat.CameraCharacteristicsCompat;
 import androidx.camera.core.DynamicRange;
 import androidx.camera.core.ImageCapture;
@@ -52,9 +55,9 @@ import androidx.camera.core.impl.UseCaseConfigFactory;
 import androidx.camera.core.internal.utils.SizeUtil;
 import androidx.camera.core.streamsharing.StreamSharing;
 import androidx.camera.testing.fakes.FakeCamera;
-import androidx.camera.testing.fakes.FakeUseCase;
-import androidx.camera.testing.fakes.FakeUseCaseConfig;
-import androidx.camera.testing.fakes.FakeUseCaseConfigFactory;
+import androidx.camera.testing.impl.fakes.FakeUseCase;
+import androidx.camera.testing.impl.fakes.FakeUseCaseConfig;
+import androidx.camera.testing.impl.fakes.FakeUseCaseConfigFactory;
 import androidx.concurrent.futures.ResolvableFuture;
 
 import com.google.common.util.concurrent.ListenableFuture;
@@ -196,16 +199,24 @@ public class StreamUseCaseTest {
 
     @Test
     public void shouldUseStreamUseCase_cameraModeNotSupported() {
-        assertFalse(StreamUseCaseUtil.shouldUseStreamUseCase(
-                SupportedSurfaceCombination.FeatureSettings.of(CameraMode.CONCURRENT_CAMERA,
-                        DynamicRange.BIT_DEPTH_8_BIT)));
+        FeatureSettings featureSettings = FeatureSettings.of(
+                CameraMode.CONCURRENT_CAMERA,
+                BIT_DEPTH_8_BIT,
+                /*isPreviewStabilizationOn=*/false,
+                /*isUltraHdrOn=*/ false
+        );
+        assertFalse(shouldUseStreamUseCase(featureSettings));
     }
 
     @Test
     public void shouldUseStreamUseCase_bitDepthNotSupported() {
-        assertFalse(StreamUseCaseUtil.shouldUseStreamUseCase(
-                SupportedSurfaceCombination.FeatureSettings.of(CameraMode.DEFAULT,
-                        BIT_DEPTH_10_BIT)));
+        FeatureSettings featureSettings = FeatureSettings.of(
+                CameraMode.DEFAULT,
+                BIT_DEPTH_10_BIT,
+                /*isPreviewStabilizationOn=*/false,
+                /*isUltraHdrOn=*/ false
+        );
+        assertFalse(shouldUseStreamUseCase(featureSettings));
     }
 
     @Test

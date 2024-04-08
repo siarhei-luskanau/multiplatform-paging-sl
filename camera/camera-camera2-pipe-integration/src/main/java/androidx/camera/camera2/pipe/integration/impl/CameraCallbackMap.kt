@@ -30,6 +30,7 @@ import androidx.camera.camera2.pipe.FrameInfo
 import androidx.camera.camera2.pipe.FrameMetadata
 import androidx.camera.camera2.pipe.FrameNumber
 import androidx.camera.camera2.pipe.Request
+import androidx.camera.camera2.pipe.RequestFailure
 import androidx.camera.camera2.pipe.RequestMetadata
 import androidx.camera.camera2.pipe.StreamId
 import androidx.camera.camera2.pipe.integration.adapter.CameraUseCaseAdapter
@@ -37,6 +38,8 @@ import androidx.camera.camera2.pipe.integration.adapter.CaptureResultAdapter
 import androidx.camera.camera2.pipe.integration.config.CameraScope
 import androidx.camera.core.impl.CameraCaptureCallback
 import androidx.camera.core.impl.CameraCaptureFailure
+import androidx.camera.core.impl.CaptureConfig
+import androidx.camera.core.impl.TagBundle
 import java.util.concurrent.Executor
 import javax.inject.Inject
 
@@ -113,22 +116,31 @@ class CameraCallbackMap @Inject constructor() : Request.Listener {
                 }
             } else {
                 val captureResult = CaptureResultAdapter(requestMetadata, frameNumber, result)
-                executor.execute { callback.onCaptureCompleted(captureResult) }
+                executor.execute {
+                    callback.onCaptureCompleted(requestMetadata.getCaptureConfigId(), captureResult)
+                }
             }
         }
+    }
+
+    private fun RequestMetadata.getCaptureConfigId(): Int {
+        val tagBundle = this[CAMERAX_TAG_BUNDLE]
+        return tagBundle?.getTag(CaptureConfig.CAPTURE_CONFIG_ID_TAG_KEY)
+            as? Int ?: CaptureConfig.DEFAULT_ID
     }
 
     override fun onFailed(
         requestMetadata: RequestMetadata,
         frameNumber: FrameNumber,
-        captureFailure: CaptureFailure
+        requestFailure: RequestFailure
     ) {
         for ((callback, executor) in callbacks) {
             if (callback is CameraUseCaseAdapter.CaptureCallbackContainer) {
                 val session: CameraCaptureSession? =
                     requestMetadata.unwrapAs(CameraCaptureSession::class)
                 val request: CaptureRequest? = requestMetadata.unwrapAs(CaptureRequest::class)
-                if (session != null && request != null) {
+                val captureFailure = requestFailure.unwrapAs(CaptureFailure::class)
+                if (session != null && request != null && captureFailure != null) {
                     executor.execute {
                         callback.captureCallback.onCaptureFailed(
                             session, request,
@@ -138,14 +150,20 @@ class CameraCallbackMap @Inject constructor() : Request.Listener {
                 }
             } else {
                 val failure = CameraCaptureFailure(CameraCaptureFailure.Reason.ERROR)
-                executor.execute { callback.onCaptureFailed(failure) }
+                executor.execute {
+                    callback.onCaptureFailed(requestMetadata.getCaptureConfigId(), failure)
+                }
             }
         }
     }
 
     override fun onAborted(request: Request) {
         for ((callback, executor) in callbacks) {
-            executor.execute { callback.onCaptureCancelled() }
+            // TODO: get the correct requestId
+            val tagBundle = request.extras[CAMERAX_TAG_BUNDLE] as? TagBundle
+            val captureConfigId = tagBundle?.getTag(CaptureConfig.CAPTURE_CONFIG_ID_TAG_KEY)
+                as? Int ?: CaptureConfig.DEFAULT_ID
+            executor.execute { callback.onCaptureCancelled(captureConfigId) }
         }
     }
 
@@ -185,7 +203,9 @@ class CameraCallbackMap @Inject constructor() : Request.Listener {
                     }
                 }
             } else {
-                executor.execute { callback.onCaptureCancelled() }
+                executor.execute {
+                    callback.onCaptureCancelled(requestMetadata.getCaptureConfigId())
+                }
             }
         }
     }
@@ -227,6 +247,8 @@ class CameraCallbackMap @Inject constructor() : Request.Listener {
                         )
                     }
                 }
+            } else {
+                executor.execute { callback.onCaptureStarted(requestMetadata.getCaptureConfigId()) }
             }
         }
     }

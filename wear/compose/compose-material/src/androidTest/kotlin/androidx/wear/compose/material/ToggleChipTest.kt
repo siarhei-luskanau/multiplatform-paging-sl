@@ -32,12 +32,16 @@ import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHeightIsAtLeast
 import androidx.compose.ui.test.assertHeightIsEqualTo
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertIsNotSelected
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertIsSelected
 import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.isSelectable
 import androidx.compose.ui.test.isToggleable
 import androidx.compose.ui.test.junit4.ComposeContentTestRule
 import androidx.compose.ui.test.junit4.createComposeRule
@@ -46,6 +50,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import org.junit.Assert
 import org.junit.Rule
 import org.junit.Test
@@ -70,6 +75,21 @@ class ToggleChipBehaviourTest {
     }
 
     @Test
+    fun selection_control_supports_testtag() {
+        rule.setContentWithTheme {
+            ToggleChip(
+                selected = true,
+                onSelect = {},
+                label = { Text("Label") },
+                selectionControl = { TestImage() },
+                modifier = Modifier.testTag(TEST_TAG)
+            )
+        }
+
+        rule.onNodeWithTag(TEST_TAG).assertExists()
+    }
+
+    @Test
     fun split_chip_supports_testtag() {
         rule.setContentWithTheme {
             SplitToggleChip(
@@ -85,6 +105,21 @@ class ToggleChipBehaviourTest {
         rule.onNodeWithTag(TEST_TAG).assertExists()
     }
 
+    @Test
+    fun split_chip_selection_control_supports_testtag() {
+        rule.setContentWithTheme {
+            SplitToggleChip(
+                selected = true,
+                onSelect = {},
+                label = { Text("Label") },
+                selectionControl = { TestImage() },
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG)
+            )
+        }
+
+        rule.onNodeWithTag(TEST_TAG).assertExists()
+    }
     @Test
     fun has_clickaction_when_enabled() {
         rule.setContentWithTheme {
@@ -180,6 +215,37 @@ class ToggleChipBehaviourTest {
         }
 
         rule.onNode(isToggleable()).assertExists()
+    }
+
+    @Test
+    fun selection_control_is_selectable() {
+        rule.setContentWithTheme {
+            ToggleChip(
+                selected = true,
+                onSelect = {},
+                label = { Text("Label") },
+                modifier = Modifier.testTag(TEST_TAG),
+                selectionControl = { TestImage() },
+            )
+        }
+
+        rule.onNode(isSelectable()).assertExists()
+    }
+
+    @Test
+    fun split_chip_selection_control_is_selectable() {
+        rule.setContentWithTheme {
+            SplitToggleChip(
+                selected = true,
+                onSelect = {},
+                label = { Text("Label") },
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG),
+                selectionControl = { TestImage() },
+            )
+        }
+
+        rule.onNode(isSelectable()).assertExists()
     }
 
     @Test
@@ -295,6 +361,37 @@ class ToggleChipBehaviourTest {
     }
 
     @Test
+    fun is_selected_correctly() {
+        rule.setContentWithTheme {
+            ToggleChip(
+                selected = true,
+                onSelect = {},
+                label = { Text("Label") },
+                modifier = Modifier.testTag(TEST_TAG),
+                selectionControl = { TestImage() },
+            )
+        }
+
+        rule.onNodeWithTag(TEST_TAG).assertIsSelected()
+    }
+
+    @Test
+    fun split_chip_is_selected_correctly() {
+        rule.setContentWithTheme {
+            SplitToggleChip(
+                selected = true,
+                onSelect = {},
+                label = { Text("Label") },
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG),
+                selectionControl = { TestImage() },
+            )
+        }
+
+        rule.onNodeWithTag(TEST_TAG).onChildAt(1).assertIsSelected()
+    }
+
+    @Test
     fun is_off_when_unchecked() {
         rule.setContentWithTheme {
             ToggleChip(
@@ -323,6 +420,37 @@ class ToggleChipBehaviourTest {
         }
 
         rule.onNodeWithTag(TEST_TAG).onChildAt(1).assertIsOff()
+    }
+
+    @Test
+    fun is_unselected_correctly() {
+        rule.setContentWithTheme {
+            ToggleChip(
+                selected = false,
+                onSelect = {},
+                label = { Text("Label") },
+                modifier = Modifier.testTag(TEST_TAG),
+                selectionControl = { TestImage() },
+            )
+        }
+
+        rule.onNodeWithTag(TEST_TAG).assertIsNotSelected()
+    }
+
+    @Test
+    fun split_chip_is_unselected_correctly() {
+        rule.setContentWithTheme {
+            SplitToggleChip(
+                selected = false,
+                onSelect = {},
+                label = { Text("Label") },
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG),
+                selectionControl = { TestImage() },
+            )
+        }
+
+        rule.onNodeWithTag(TEST_TAG).onChildAt(1).assertIsNotSelected()
     }
 
     @Test
@@ -367,6 +495,50 @@ class ToggleChipBehaviourTest {
             .assertIsOff()
             .performClick()
             .assertIsOn()
+    }
+
+    @Test
+    fun responds_to_selection() {
+        rule.setContentWithTheme {
+            val (selected, onSelected) = remember { mutableStateOf(false) }
+            ToggleChip(
+                selected = selected,
+                onSelect = onSelected,
+                label = { Text("Label") },
+                enabled = true,
+                modifier = Modifier.testTag(TEST_TAG),
+                selectionControl = { TestImage() },
+            )
+        }
+
+        rule
+            .onNodeWithTag(TEST_TAG)
+            .assertIsNotSelected()
+            .performClick()
+            .assertIsSelected()
+    }
+
+    @Test
+    fun split_chip_responds_to_selection() {
+        rule.setContentWithTheme {
+            val (selected, onSelected) = remember { mutableStateOf(false) }
+            SplitToggleChip(
+                selected = selected,
+                onSelect = onSelected,
+                label = { Text("Label") },
+                selectionControl = { TestImage() },
+                enabled = true,
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG)
+            )
+        }
+
+        rule
+            .onNodeWithTag(TEST_TAG)
+            .onChildAt(1)
+            .assertIsNotSelected()
+            .performClick()
+            .assertIsSelected()
     }
 
     @Test
@@ -458,28 +630,51 @@ class ToggleChipBehaviourTest {
     }
 
     @Test
-    fun has_role_checkbox() {
+    fun does_not_select_when_disabled() {
         rule.setContentWithTheme {
+            val (selected, onSelected) = remember { mutableStateOf(false) }
             ToggleChip(
-                checked = false,
-                onCheckedChange = {},
+                selected = selected,
+                onSelect = onSelected,
                 label = { Text("Label") },
-                toggleControl = { TestImage() },
+                selectionControl = { TestImage() },
+                enabled = false,
                 modifier = Modifier.testTag(TEST_TAG)
             )
         }
 
-        rule.onNodeWithTag(TEST_TAG)
-            .assert(
-                SemanticsMatcher.expectValue(
-                    SemanticsProperties.Role,
-                    Role.Checkbox
-                )
-            )
+        rule
+            .onNodeWithTag(TEST_TAG)
+            .assertIsNotSelected()
+            .performClick()
+            .assertIsNotSelected()
     }
 
     @Test
-    fun split_chip_has_role_checkbox() {
+    fun split_chip_does_not_select_when_disabled() {
+        rule.setContentWithTheme {
+            val (selected, onSelected) = remember { mutableStateOf(false) }
+            SplitToggleChip(
+                selected = selected,
+                onSelect = onSelected,
+                label = { Text("Label") },
+                selectionControl = { TestImage() },
+                enabled = false,
+                onClick = {},
+                modifier = Modifier.testTag(TEST_TAG)
+            )
+        }
+
+        rule
+            .onNodeWithTag(TEST_TAG)
+            .onChildAt(1)
+            .assertIsNotSelected()
+            .performClick()
+            .assertIsNotSelected()
+    }
+
+    @Test
+    fun split_chip_clickable_has_role_button() {
         rule.setContentWithTheme {
             SplitToggleChip(
                 checked = false,
@@ -495,7 +690,7 @@ class ToggleChipBehaviourTest {
             .assert(
                 SemanticsMatcher.expectValue(
                     SemanticsProperties.Role,
-                    Role.Checkbox
+                    Role.Button
                 )
             )
     }
@@ -542,6 +737,27 @@ class ToggleChipSizeTest {
     fun gives_base_chip_correct_height() =
         verifyHeight(ChipDefaults.Height)
 
+    @Test
+    fun gives_base_chip_has_adjustable_height() {
+        val expectedMinHeight = ToggleChipDefaults.Height + 1.dp
+        rule.setContentWithThemeForSizeAssertions {
+            ToggleChip(
+                checked = true,
+                onCheckedChange = {},
+                label = {
+                    Text(
+                        text = "ToggleChip text spanning over multiple lines of text " +
+                            "to test height is adjustable. This should exceed the minimum height" +
+                            " for the ToggleChip."
+                    )
+                },
+                toggleControl = {
+                    Checkbox(checked = true)
+                }
+            )
+        }.assertHeightIsAtLeast(expectedMinHeight)
+    }
+
     private fun verifyHeight(expectedHeight: Dp) {
         rule.verifyHeight(expectedHeight) {
             ToggleChip(
@@ -561,6 +777,28 @@ class SplitToggleChipSizeTest {
     @Test
     fun gives_base_chip_correct_height() =
         verifyHeight(ChipDefaults.Height)
+
+    @Test
+    fun gives_base_chip_has_adjustable_height() {
+        val expectedMinHeight = ToggleChipDefaults.Height + 1.dp
+        rule.setContentWithThemeForSizeAssertions {
+            SplitToggleChip(
+                checked = true,
+                onCheckedChange = {},
+                onClick = {},
+                label = {
+                    Text(
+                        text = "SplitToggleChip text spanning over multiple lines of text " +
+                            "to test height is adjustable. This should exceed the minimum height " +
+                            "for the SplitToggleChip."
+                    )
+                },
+                toggleControl = {
+                    Checkbox(checked = true)
+                }
+            )
+        }.assertHeightIsAtLeast(expectedMinHeight)
+    }
 
     private fun verifyHeight(expectedHeight: Dp) {
         rule.verifyHeight(expectedHeight) {

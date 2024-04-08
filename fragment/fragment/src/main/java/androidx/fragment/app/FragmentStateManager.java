@@ -236,6 +236,11 @@ class FragmentStateManager {
         if (mFragment.mDeferStart && mFragment.mState < Fragment.STARTED) {
             maxState = Math.min(maxState, Fragment.ACTIVITY_CREATED);
         }
+        // Fragments that are transitioning are part of a seeking effect and must be at least
+        // AWAITING_EXIT_EFFECTS
+        if (mFragment.mTransitioning && mFragment.mContainer != null) {
+            maxState = Math.max(maxState, Fragment.AWAITING_EXIT_EFFECTS);
+        }
         if (FragmentManager.isLoggingEnabled(Log.VERBOSE)) {
             Log.v(FragmentManager.TAG, "computeExpectedState() of " + maxState + " for "
                     + mFragment);
@@ -360,7 +365,7 @@ class FragmentStateManager {
                     if (FragmentManager.isLoggingEnabled(Log.DEBUG)) {
                         Log.d(TAG, "Cleaning up state of never attached fragment: " + mFragment);
                     }
-                    mFragmentStore.getNonConfig().clearNonConfigState(mFragment);
+                    mFragmentStore.getNonConfig().clearNonConfigState(mFragment, true);
                     mFragmentStore.makeInactive(this);
                     if (FragmentManager.isLoggingEnabled(Log.DEBUG)) {
                         Log.d(TAG, "initState called for fragment: " + mFragment);
@@ -575,7 +580,7 @@ class FragmentStateManager {
                 mFragment.mView.setVisibility(View.GONE);
             }
             // How I wish we could use doOnAttach
-            if (ViewCompat.isAttachedToWindow(mFragment.mView)) {
+            if (mFragment.mView.isAttachedToWindow()) {
                 ViewCompat.requestApplyInsets(mFragment.mView);
             } else {
                 final View fragmentView = mFragment.mView;
@@ -814,7 +819,7 @@ class FragmentStateManager {
                 shouldClear = true;
             }
             if ((beingRemoved && !mFragment.mBeingSaved) || shouldClear) {
-                mFragmentStore.getNonConfig().clearNonConfigState(mFragment);
+                mFragmentStore.getNonConfig().clearNonConfigState(mFragment, false);
             }
             mFragment.performDestroy();
             mDispatcher.dispatchOnFragmentDestroyed(mFragment, false);

@@ -47,10 +47,7 @@ internal actual typealias CheckResult = androidx.annotation.CheckResult
 private object SdkStubsFallbackFrameClock : MonotonicFrameClock {
     private const val DefaultFrameDelay = 16L // milliseconds
 
-    override suspend fun <R> withFrameNanos(
-        @Suppress("PrimitiveInLambda")
-        onFrame: (frameTimeNanos: Long) -> R
-    ): R =
+    override suspend fun <R> withFrameNanos(onFrame: (frameTimeNanos: Long) -> R): R =
         withContext(Dispatchers.Main) {
             delay(DefaultFrameDelay)
             onFrame(System.nanoTime())
@@ -63,7 +60,6 @@ private object DefaultChoreographerFrameClock : MonotonicFrameClock {
     }
 
     override suspend fun <R> withFrameNanos(
-        @Suppress("PrimitiveInLambda")
         onFrame: (frameTimeNanos: Long) -> R
     ): R = suspendCancellableCoroutine<R> { co ->
         val callback = Choreographer.FrameCallback { frameTimeNanos ->
@@ -117,3 +113,13 @@ private const val LogTag = "ComposeInternal"
 internal actual fun logError(message: String, e: Throwable) {
     Log.e(LogTag, message, e)
 }
+
+internal actual val MainThreadId: Long =
+    try {
+        Looper.getMainLooper().thread.id
+    } catch (e: Exception) {
+        // When linked against Android SDK stubs and running host-side tests, APIs such as
+        // Looper.getMainLooper() can throw or return null
+        // This branch intercepts that exception and returns default value for such cases.
+        -1
+    }

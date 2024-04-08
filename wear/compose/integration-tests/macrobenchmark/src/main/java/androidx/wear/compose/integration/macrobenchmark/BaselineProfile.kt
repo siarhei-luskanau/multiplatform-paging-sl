@@ -17,16 +17,14 @@
 package androidx.wear.compose.integration.macrobenchmark.test
 
 import android.content.Intent
+import androidx.benchmark.macro.MacrobenchmarkScope
 import androidx.benchmark.macro.junit4.BaselineProfileRule
 import androidx.test.filters.LargeTest
 import androidx.test.filters.SdkSuppress
-import androidx.test.platform.app.InstrumentationRegistry
 import androidx.test.uiautomator.By
 import androidx.test.uiautomator.BySelector
-import androidx.test.uiautomator.UiDevice
 import androidx.test.uiautomator.Until
 import androidx.testutils.createCompilationParams
-import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runners.Parameterized
@@ -38,17 +36,15 @@ import org.junit.runners.Parameterized
 // 2) Run this BaselineProfile test then click 'Baseline profile results' link
 // 3) Build profileparser:
 //    If necessary, include it in settings.gradle:
-//      includeProject(":wear:compose:integration-tests:profileparser",
-//                     "wear/compose/integration-tests/profileparser",
-//                     [BuildType.MAIN])
+//      includeProject(":wear:compose:integration-tests:profileparser", [BuildType.MAIN])
 //    ./gradlew :wear:compose:integration-tests:profileparser:assemble
 // 4) Run profileparser for each of wear.compose.material, wear.compose.foundation and
 //    wear.compose.navigation. From <workspace>/frameworks/support:
-//    java -jar
+//    /usr/bin/java -jar
 //      ../../out/androidx/wear/compose/integration-tests/profileparser/build/libs/profileparser-all.jar
 //      <input-generated-file eg ./wear/compose/BaselineProfile_profile-baseline-prof.txt>
 //      <library-name e.g. androidx/wear/compose/material>
-//      <output-file eg ./wear/compose/compose-material/src/androidMain/baseline-prof.txt>
+//      <output-file eg ./wear/compose/compose-material/src/main/baseline-prof.txt>
 @LargeTest
 @SdkSuppress(minSdkVersion = 29)
 class BaselineProfile {
@@ -56,29 +52,27 @@ class BaselineProfile {
     @get:Rule
     val baselineRule = BaselineProfileRule()
 
-    private lateinit var device: UiDevice
     private val ALERT_DIALOG = "alert-dialog"
-    private val CONFIRMATION_DIALOG = "confirmation-dialog"
     private val BUTTONS = "buttons"
     private val CARDS = "cards"
-    private val CHIPS = "chips"
-    private val RADIO_BUTTON = "radio-button"
     private val CHECKBOX = "checkbox"
-    private val SWITCH = "switch"
+    private val CHIPS = "chips"
+    private val CONFIRMATION_DIALOG = "confirmation-dialog"
     private val DIALOGS = "dialogs"
+    private val EXPANDABLES = "expandables"
+    private val EXPAND_ITEMS = "ExpandItems"
+    private val EXPAND_TEXT = "ExpandText"
+    private val HIERARCHICAL_FOCUS_COORDINATOR = "HierarchicalFocusCoordinator"
     private val PICKER = "picker"
+    private val PLACEHOLDERS = "placeholders"
+    private val PROGRESS_INDICATOR = "progress-indicator"
     private val PROGRESSINDICATORS = "progressindicators"
+    private val PROGRESS_INDICATOR_INDETERMINATE = "progress-indicator-indeterminate"
+    private val RADIO_BUTTON = "radio-button"
     private val SLIDER = "slider"
     private val STEPPER = "stepper"
-    private val PROGRESS_INDICATOR = "progress-indicator"
-    private val PROGRESS_INDICATOR_INDETERMINATE = "progress-indicator-indeterminate"
-    private val PLACEHOLDERS = "placeholders"
-
-    @Before
-    fun setUp() {
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        device = UiDevice.getInstance(instrumentation)
-    }
+    private val SWIPE_TO_REVEAL = "swipe-to-reveal"
+    private val SWITCH = "switch"
 
     @Test
     fun profile() {
@@ -90,18 +84,21 @@ class BaselineProfile {
                 startActivityAndWait(intent)
                 testDestination(description = BUTTONS)
                 testDestination(description = CARDS)
+                testExpandables()
                 testChips()
                 testDialogs()
+                testDestination(description = HIERARCHICAL_FOCUS_COORDINATOR)
                 testDestination(description = PICKER)
                 testDestination(description = PLACEHOLDERS)
                 testProgressIndicators()
                 testDestination(description = SLIDER)
                 testDestination(description = STEPPER)
+                testDestination(description = SWIPE_TO_REVEAL)
             }
         )
     }
 
-    private fun testChips() {
+    private fun MacrobenchmarkScope.testChips() {
         findAndClick(By.desc(CHIPS))
         device.waitForIdle()
         findAndClick(By.desc(CHECKBOX))
@@ -111,7 +108,7 @@ class BaselineProfile {
         device.waitForIdle()
     }
 
-    private fun testDialogs() {
+    private fun MacrobenchmarkScope.testDialogs() {
         findAndClick(By.desc(DIALOGS))
         device.waitForIdle()
         testDestination(description = ALERT_DIALOG)
@@ -120,7 +117,21 @@ class BaselineProfile {
         device.waitForIdle()
     }
 
-    private fun testProgressIndicators() {
+    private fun MacrobenchmarkScope.testExpandables() {
+        findAndClick(By.desc(EXPANDABLES))
+        device.waitForIdle()
+        // Expand the bottom expandable first for other to be on screen
+        findAndClick(By.desc(EXPAND_TEXT))
+        findAndClick(By.desc(EXPAND_ITEMS))
+        device.waitForIdle()
+        device.pressBack()
+        device.waitForIdle()
+    }
+
+    private fun MacrobenchmarkScope.testProgressIndicators() {
+        // swipe down for the "Progress Indicator" button to be on screen
+        device.executeShellCommand("input swipe 250 200 250 100 300")
+        device.waitForIdle()
         findAndClick(By.desc(PROGRESSINDICATORS))
         device.waitForIdle()
         testDestination(description = PROGRESS_INDICATOR)
@@ -129,14 +140,14 @@ class BaselineProfile {
         device.waitForIdle()
     }
 
-    private fun testDestination(description: String) {
+    private fun MacrobenchmarkScope.testDestination(description: String) {
         findAndClick(By.desc(description))
         device.waitForIdle()
         device.pressBack()
         device.waitForIdle()
     }
 
-    private fun findAndClick(selector: BySelector) {
+    private fun MacrobenchmarkScope.findAndClick(selector: BySelector) {
         device.wait(Until.findObject(selector), 3000)
         device.findObject(selector).click()
     }

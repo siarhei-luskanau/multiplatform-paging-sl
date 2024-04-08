@@ -16,6 +16,7 @@
 
 package androidx.room.solver.query
 
+import androidx.kruth.assertThat
 import androidx.room.Dao
 import androidx.room.Query
 import androidx.room.compiler.codegen.CodeLanguage
@@ -27,7 +28,6 @@ import androidx.room.ext.RoomTypeNames.STRING_UTIL
 import androidx.room.processor.QueryMethodProcessor
 import androidx.room.testing.context
 import androidx.room.writer.QueryWriter
-import com.google.common.truth.Truth.assertThat
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.JUnit4
@@ -136,7 +136,7 @@ class QueryWriterTest {
             writer.prepareReadAndBind("_sql", "_stmt", scope)
             assertThat(scope.generate().toString().trim()).isEqualTo(
                 """
-                final java.lang.StringBuilder _stringBuilder = ${STRING_UTIL.canonicalName}.newStringBuilder();
+                final java.lang.StringBuilder _stringBuilder = new java.lang.StringBuilder();
                 _stringBuilder.append("SELECT id FROM users WHERE id IN(");
                 final int _inputSize = ids == null ? 1 : ids.length;
                 ${STRING_UTIL.canonicalName}.appendPlaceholders(_stringBuilder, _inputSize);
@@ -162,7 +162,7 @@ class QueryWriterTest {
     }
 
     val collectionOut = """
-        final java.lang.StringBuilder _stringBuilder = ${STRING_UTIL.canonicalName}.newStringBuilder();
+        final java.lang.StringBuilder _stringBuilder = new java.lang.StringBuilder();
         _stringBuilder.append("SELECT id FROM users WHERE id IN(");
         final int _inputSize = ids == null ? 1 : ids.size();
         ${STRING_UTIL.canonicalName}.appendPlaceholders(_stringBuilder, _inputSize);
@@ -265,7 +265,7 @@ class QueryWriterTest {
             writer.prepareReadAndBind("_sql", "_stmt", scope)
             assertThat(scope.generate().toString().trim()).isEqualTo(
                 """
-                final java.lang.StringBuilder _stringBuilder = ${STRING_UTIL.canonicalName}.newStringBuilder();
+                final java.lang.StringBuilder _stringBuilder = new java.lang.StringBuilder();
                 _stringBuilder.append("SELECT id FROM users WHERE age > ");
                 _stringBuilder.append("?");
                 _stringBuilder.append(" OR bage > ");
@@ -307,7 +307,7 @@ class QueryWriterTest {
             writer.prepareReadAndBind("_sql", "_stmt", scope)
             assertThat(scope.generate().toString().trim()).isEqualTo(
                 """
-                final java.lang.StringBuilder _stringBuilder = ${STRING_UTIL.canonicalName}.newStringBuilder();
+                final java.lang.StringBuilder _stringBuilder = new java.lang.StringBuilder();
                 _stringBuilder.append("SELECT id FROM users WHERE age IN (");
                 final int _inputSize = ages == null ? 1 : ages.length;
                 ${STRING_UTIL.canonicalName}.appendPlaceholders(_stringBuilder, _inputSize);

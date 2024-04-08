@@ -17,8 +17,11 @@
 package androidx.compose.compiler.plugins.kotlin
 
 import org.jetbrains.kotlin.ir.declarations.IrAnnotationContainer
+import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
 import org.jetbrains.kotlin.ir.types.IrType
+import org.jetbrains.kotlin.ir.util.constructedClass
 import org.jetbrains.kotlin.ir.util.hasAnnotation
+import org.jetbrains.kotlin.ir.util.hasEqualFqName
 import org.jetbrains.kotlin.name.CallableId
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
@@ -42,11 +45,13 @@ object ComposeClassIds {
     val ComposableTarget = classIdFor("ComposableTarget")
     val ComposeVersion = classIdFor("ComposeVersion")
     val Composer = classIdFor("Composer")
+    val DisallowComposableCalls = classIdFor("DisallowComposableCalls")
     val FunctionKeyMetaClass = internalClassIdFor("FunctionKeyMetaClass")
     val FunctionKeyMeta = internalClassIdFor("FunctionKeyMeta")
     val LiveLiteralFileInfo = internalClassIdFor("LiveLiteralFileInfo")
     val LiveLiteralInfo = internalClassIdFor("LiveLiteralInfo")
     val NoLiveLiterals = classIdFor("NoLiveLiterals")
+    val ReadOnlyComposable = classIdFor("ReadOnlyComposable")
     val State = classIdFor("State")
     val StabilityInferred = internalClassIdFor("StabilityInferred")
 }
@@ -80,6 +85,10 @@ object ComposeCallableIds {
     val traceEventEnd = topLevelCallableId(KtxNameConventions.TRACE_EVENT_END)
     val traceEventStart = topLevelCallableId(KtxNameConventions.TRACE_EVENT_START)
     val updateChangedFlags = topLevelCallableId(KtxNameConventions.UPDATE_CHANGED_FLAGS)
+    val rememberComposableLambda =
+        internalTopLevelCallableId(KtxNameConventions.REMEMBER_COMPOSABLE_LAMBDA)
+    val rememberComposableLambdaN =
+        internalTopLevelCallableId(KtxNameConventions.REMEMBER_COMPOSABLE_LAMBDAN)
 }
 
 object ComposeFqNames {
@@ -87,6 +96,7 @@ object ComposeFqNames {
     private fun internalFqNameFor(cname: String) = FqName("$internalRoot.$cname")
     private fun composablesFqNameFor(cname: String) = fqNameFor("ComposablesKt.$cname")
 
+    val InternalPackage = internalRootFqName
     val Composable = ComposeClassIds.Composable.asSingleFqName()
     val ComposableTarget = ComposeClassIds.ComposableTarget.asSingleFqName()
     val ComposableTargetMarker = fqNameFor("ComposableTargetMarker")
@@ -98,12 +108,15 @@ object ComposeFqNames {
     val ComposableInferredTargetSchemeArgument = Name.identifier("scheme")
     val CurrentComposerIntrinsic = fqNameFor("<get-currentComposer>")
     val getCurrentComposerFullName = composablesFqNameFor("<get-currentComposer>")
-    val DisallowComposableCalls = fqNameFor("DisallowComposableCalls")
-    val ReadOnlyComposable = fqNameFor("ReadOnlyComposable")
+    val DisallowComposableCalls = ComposeClassIds.DisallowComposableCalls.asSingleFqName()
+    val ReadOnlyComposable = ComposeClassIds.ReadOnlyComposable.asSingleFqName()
     val ExplicitGroupsComposable = fqNameFor("ExplicitGroupsComposable")
     val NonRestartableComposable = fqNameFor("NonRestartableComposable")
+    val NonSkippableComposable = fqNameFor("NonSkippableComposable")
+    val DontMemoize = fqNameFor("DontMemoize")
     val composableLambdaType = ComposeClassIds.ComposableLambda.asSingleFqName()
     val composableLambda = ComposeCallableIds.composableLambda.asSingleFqName()
+    val rememberComposableLambda = ComposeCallableIds.rememberComposableLambda.asSingleFqName()
     val composableLambdaFullName =
         internalFqNameFor("ComposableLambdaKt.composableLambda")
     val remember = ComposeCallableIds.remember.asSingleFqName()
@@ -121,3 +134,6 @@ fun IrType.hasComposableAnnotation(): Boolean =
 
 fun IrAnnotationContainer.hasComposableAnnotation(): Boolean =
     hasAnnotation(ComposeFqNames.Composable)
+
+fun IrConstructorCall.isComposableAnnotation() =
+    symbol.owner.constructedClass.hasEqualFqName(ComposeFqNames.Composable)

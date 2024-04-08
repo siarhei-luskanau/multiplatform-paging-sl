@@ -66,7 +66,6 @@ import kotlin.math.roundToInt
 @Composable
 fun Stepper(
     value: Float,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Float) -> Unit,
     steps: Int,
     decreaseIcon: @Composable () -> Unit,
@@ -102,6 +101,7 @@ fun Stepper(
             LocalContentColor provides iconColor.copy(alpha = ContentAlpha.disabled),
             LocalContentAlpha provides iconColor.copy(alpha = ContentAlpha.disabled).alpha
         ),
+        buttonRipple = rippleOrFallbackImplementation(bounded = false)
     ) {
         CompositionLocalProvider(
             LocalContentColor provides contentColor
@@ -155,7 +155,6 @@ fun Stepper(
 @Composable
 fun Stepper(
     value: Int,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Int) -> Unit,
     valueProgression: IntProgression,
     decreaseIcon: @Composable () -> Unit,
@@ -219,7 +218,6 @@ fun Stepper(
 @Composable
 public fun Stepper(
     value: Float,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Float) -> Unit,
     steps: Int,
     decreaseIcon: @Composable () -> Unit,
@@ -286,7 +284,6 @@ public fun Stepper(
 @Composable
 fun Stepper(
     value: Int,
-    @Suppress("PrimitiveInLambda")
     onValueChange: (Int) -> Unit,
     valueProgression: IntProgression,
     decreaseIcon: @Composable () -> Unit,

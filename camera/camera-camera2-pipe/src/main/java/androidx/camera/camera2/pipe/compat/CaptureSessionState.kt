@@ -248,7 +248,7 @@ internal class CaptureSessionState(
      * a closed state. This will not cancel repeating requests or abort captures.
      */
     fun disconnect() {
-        shutdown(abortAndStopRepeating = false)
+        shutdown(abortAndStopRepeating = cameraGraphFlags.abortCapturesOnStop)
     }
 
     /**
@@ -312,6 +312,12 @@ internal class CaptureSessionState(
                     captureSession.close()
                 }
             }
+            Debug.traceStop()
+        } else {
+            // We still need to indicate the stop signal because the graph state would transition to
+            // GraphStateStarting when the graph is being started.
+            Debug.traceStart { "$graphListener#onGraphStopped" }
+            graphListener.onGraphStopped(null)
             Debug.traceStop()
         }
 

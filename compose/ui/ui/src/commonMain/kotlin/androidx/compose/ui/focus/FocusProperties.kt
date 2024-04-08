@@ -129,9 +129,7 @@ interface FocusProperties {
     @set:ExperimentalComposeUiApi
     @ExperimentalComposeUiApi
     var enter: (FocusDirection) -> FocusRequester
-        @Suppress("PrimitiveInLambda")
         get() = { FocusRequester.Default }
-        @Suppress("PrimitiveInLambda")
         set(_) {}
 
     /**
@@ -153,9 +151,7 @@ interface FocusProperties {
     @set:ExperimentalComposeUiApi
     @ExperimentalComposeUiApi
     var exit: (FocusDirection) -> FocusRequester
-        @Suppress("PrimitiveInLambda")
         get() = { FocusRequester.Default }
-        @Suppress("PrimitiveInLambda")
         set(_) {}
 }
 
@@ -186,7 +182,7 @@ fun Modifier.focusProperties(
 ): Modifier = this then FocusPropertiesElement(scope)
 
 private data class FocusPropertiesElement(
-    val scope: FocusProperties.() -> Unit
+    val scope: FocusPropertiesScope
 ) : ModifierNodeElement<FocusPropertiesNode>() {
     override fun create() = FocusPropertiesNode(scope)
 
@@ -201,10 +197,10 @@ private data class FocusPropertiesElement(
 }
 
 private class FocusPropertiesNode(
-    var focusPropertiesScope: FocusProperties.() -> Unit,
+    var focusPropertiesScope: FocusPropertiesScope,
 ) : FocusPropertiesModifierNode, Modifier.Node() {
 
     override fun applyFocusProperties(focusProperties: FocusProperties) {
-        focusProperties.apply(focusPropertiesScope)
+        focusPropertiesScope.apply(focusProperties)
     }
 }

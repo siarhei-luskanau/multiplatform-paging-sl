@@ -16,6 +16,7 @@
 
 package androidx.compose.foundation.layout
 
+import androidx.annotation.FloatRange
 import androidx.compose.runtime.Stable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -38,7 +39,7 @@ import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.constrain
 import androidx.compose.ui.unit.constrainHeight
 import androidx.compose.ui.unit.constrainWidth
-import kotlin.math.roundToInt
+import androidx.compose.ui.util.fastRoundToInt
 
 /**
  * Declare the preferred width of the content to be exactly [width]dp. The incoming measurement
@@ -455,7 +456,7 @@ fun Modifier.requiredSizeIn(
  * @sample androidx.compose.foundation.layout.samples.FillHalfWidthModifier
  */
 @Stable
-fun Modifier.fillMaxWidth(/*@FloatRange(from = 0.0, to = 1.0)*/ fraction: Float = 1f) =
+fun Modifier.fillMaxWidth(@FloatRange(from = 0.0, to = 1.0) fraction: Float = 1f) =
     this.then(if (fraction == 1f) FillWholeMaxWidth else FillElement.width(fraction))
 
 private val FillWholeMaxWidth = FillElement.width(1f)
@@ -475,7 +476,7 @@ private val FillWholeMaxWidth = FillElement.width(1f)
  * @sample androidx.compose.foundation.layout.samples.FillHalfHeightModifier
  */
 @Stable
-fun Modifier.fillMaxHeight(/*@FloatRange(from = 0.0, to = 1.0)*/ fraction: Float = 1f) =
+fun Modifier.fillMaxHeight(@FloatRange(from = 0.0, to = 1.0) fraction: Float = 1f) =
     this.then(if (fraction == 1f) FillWholeMaxHeight else FillElement.height(fraction))
 
 private val FillWholeMaxHeight = FillElement.height(1f)
@@ -499,7 +500,7 @@ private val FillWholeMaxHeight = FillElement.height(1f)
  * @sample androidx.compose.foundation.layout.samples.FillHalfSizeModifier
  */
 @Stable
-fun Modifier.fillMaxSize(/*@FloatRange(from = 0.0, to = 1.0)*/ fraction: Float = 1f) =
+fun Modifier.fillMaxSize(@FloatRange(from = 0.0, to = 1.0) fraction: Float = 1f) =
     this.then(if (fraction == 1f) FillWholeMaxSize else FillElement.size(fraction))
 
 private val FillWholeMaxSize = FillElement.size(1f)
@@ -676,7 +677,7 @@ private class FillNode(
         val minWidth: Int
         val maxWidth: Int
         if (constraints.hasBoundedWidth && direction != Direction.Vertical) {
-            val width = (constraints.maxWidth * fraction).roundToInt()
+            val width = (constraints.maxWidth * fraction).fastRoundToInt()
                 .coerceIn(constraints.minWidth, constraints.maxWidth)
             minWidth = width
             maxWidth = width
@@ -687,7 +688,7 @@ private class FillNode(
         val minHeight: Int
         val maxHeight: Int
         if (constraints.hasBoundedHeight && direction != Direction.Horizontal) {
-            val height = (constraints.maxHeight * fraction).roundToInt()
+            val height = (constraints.maxHeight * fraction).fastRoundToInt()
                 .coerceIn(constraints.minHeight, constraints.maxHeight)
             minHeight = height
             maxHeight = height
@@ -916,7 +917,8 @@ private class WrapContentElement(
 
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
-        if (javaClass != other?.javaClass) return false
+        if (other === null) return false
+        if (this::class != other::class) return false
 
         other as WrapContentElement
 

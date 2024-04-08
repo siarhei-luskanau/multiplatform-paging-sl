@@ -19,11 +19,23 @@ package androidx.compose.foundation.text.selection
 import androidx.compose.foundation.AtomicLong
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.layout.LayoutCoordinates
 
-internal class SelectionRegistrarImpl : SelectionRegistrar {
+internal class SelectionRegistrarImpl private constructor(
+    initialIncrementId: Long
+) : SelectionRegistrar {
+    companion object {
+        val Saver = Saver<SelectionRegistrarImpl, Long>(
+            save = { it.incrementId.get() },
+            restore = { SelectionRegistrarImpl(it) }
+        )
+    }
+
+    constructor() : this(initialIncrementId = 1L)
+
     /**
      * A flag to check if the [Selectable]s have already been sorted.
      */
@@ -54,25 +66,22 @@ internal class SelectionRegistrarImpl : SelectionRegistrar {
      * denote an invalid id.
      * @see SelectionRegistrar.InvalidSelectableId
      */
-    private var incrementId = AtomicLong(1)
+    private var incrementId = AtomicLong(initialIncrementId)
 
     /**
      * The callback to be invoked when the position change was triggered.
      */
-    @Suppress("PrimitiveInLambda")
     internal var onPositionChangeCallback: ((Long) -> Unit)? = null
 
     /**
      * The callback to be invoked when the selection is initiated.
      */
-    @Suppress("PrimitiveInLambda")
     internal var onSelectionUpdateStartCallback:
         ((Boolean, LayoutCoordinates, Offset, SelectionAdjustment) -> Unit)? = null
 
     /**
      * The callback to be invoked when the selection is initiated with selectAll [Selection].
      */
-    @Suppress("PrimitiveInLambda")
     internal var onSelectionUpdateSelectAll: (
         (Boolean, Long) -> Unit
     )? = null
@@ -81,7 +90,6 @@ internal class SelectionRegistrarImpl : SelectionRegistrar {
      * The callback to be invoked when the selection is updated.
      * If the first offset is null it means that the start of selection is unknown for the caller.
      */
-    @Suppress("PrimitiveInLambda")
     internal var onSelectionUpdateCallback:
         ((Boolean, LayoutCoordinates, Offset, Offset, Boolean, SelectionAdjustment) -> Boolean)? =
         null
@@ -94,13 +102,11 @@ internal class SelectionRegistrarImpl : SelectionRegistrar {
     /**
      * The callback to be invoked when one of the selectable has changed.
      */
-    @Suppress("PrimitiveInLambda")
     internal var onSelectableChangeCallback: ((Long) -> Unit)? = null
 
     /**
      * The callback to be invoked after a selectable is unsubscribed from this [SelectionRegistrar].
      */
-    @Suppress("PrimitiveInLambda")
     internal var afterSelectableUnsubscribe: ((Long) -> Unit)? = null
 
     override var subselections: Map<Long, Selection> by mutableStateOf(emptyMap())

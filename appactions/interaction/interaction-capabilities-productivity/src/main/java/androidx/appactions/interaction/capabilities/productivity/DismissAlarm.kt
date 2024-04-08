@@ -23,18 +23,17 @@ import androidx.appactions.interaction.capabilities.core.BaseExecutionSession
 import androidx.appactions.interaction.capabilities.core.Capability
 import androidx.appactions.interaction.capabilities.core.CapabilityFactory
 import androidx.appactions.interaction.capabilities.core.impl.converters.EntityConverter
-import androidx.appactions.interaction.capabilities.core.impl.converters.TypeConverters
+import androidx.appactions.interaction.capabilities.core.impl.converters.ParamValueConverter
+import androidx.appactions.interaction.capabilities.core.impl.converters.UnionTypeSpec
 import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecBuilder
+import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecRegistry
 import androidx.appactions.interaction.capabilities.core.properties.Property
 import androidx.appactions.interaction.capabilities.serializers.types.ALARM_TYPE_SPEC
-import androidx.appactions.interaction.proto.ParamValue
-import androidx.appactions.interaction.protobuf.Struct
-import androidx.appactions.interaction.protobuf.Value
-
-private const val CAPABILITY_NAME = "actions.intent.DISMISS_ALARM"
+import androidx.appactions.interaction.capabilities.serializers.types.GENERIC_ERROR_STATUS_TYPE_SPEC
+import androidx.appactions.interaction.capabilities.serializers.types.SUCCESS_STATUS_TYPE_SPEC
 
 /** A capability corresponding to actions.intent.DISMISS_ALARM */
-@CapabilityFactory(name = CAPABILITY_NAME)
+@CapabilityFactory(name = DismissAlarm.CAPABILITY_NAME)
 class DismissAlarm private constructor() {
     internal enum class SlotMetadata(val path: String) {
         ALARM("alarm")
@@ -54,7 +53,7 @@ class DismissAlarm private constructor() {
         )
     }
 
-    class Arguments internal constructor(val alarm: AlarmValue?) {
+    class Arguments internal constructor(val alarm: AlarmReference?) {
         override fun toString(): String {
             return "Arguments(alarm=$alarm)"
         }
@@ -75,9 +74,9 @@ class DismissAlarm private constructor() {
         }
 
         class Builder {
-            private var alarm: AlarmValue? = null
+            private var alarm: AlarmReference? = null
 
-            fun setAlarm(alarm: AlarmValue): Builder = apply { this.alarm = alarm }
+            fun setAlarm(alarm: AlarmReference): Builder = apply { this.alarm = alarm }
 
             fun build(): Arguments = Arguments(alarm)
         }
@@ -122,20 +121,18 @@ class DismissAlarm private constructor() {
             this.genericErrorStatus = genericErrorStatus
         }
 
-        internal fun toParamValue(): ParamValue {
-            var status: String = ""
-            if (successStatus != null) {
-                status = successStatus.toString()
-            }
-            if (genericErrorStatus != null) {
-                status = genericErrorStatus.toString()
-            }
-            val value: Value = Value.newBuilder().setStringValue(status).build()
-            return ParamValue.newBuilder()
-                .setStructValue(
-                    Struct.newBuilder().putFields(TypeConverters.FIELD_NAME_TYPE, value).build()
-                )
-                .build()
+        companion object {
+            private val TYPE_SPEC = UnionTypeSpec.Builder<ExecutionStatus>()
+                .bindMemberType(
+                    memberGetter = ExecutionStatus::successStatus,
+                    ctor = { ExecutionStatus(it) },
+                    typeSpec = SUCCESS_STATUS_TYPE_SPEC
+                ).bindMemberType(
+                    memberGetter = ExecutionStatus::genericErrorStatus,
+                    ctor = { ExecutionStatus(it) },
+                    typeSpec = GENERIC_ERROR_STATUS_TYPE_SPEC
+                ).build()
+            internal val PARAM_VALUE_CONVERTER = ParamValueConverter.of(TYPE_SPEC)
         }
     }
 
@@ -143,20 +140,26 @@ class DismissAlarm private constructor() {
     class Confirmation internal constructor()
 
     companion object {
+        /** Canonical name for [DismissAlarm] capability */
+        const val CAPABILITY_NAME = "actions.intent.DISMISS_ALARM"
         private val ACTION_SPEC =
             ActionSpecBuilder.ofCapabilityNamed(CAPABILITY_NAME)
                 .setArguments(Arguments::class.java, Arguments::Builder, Arguments.Builder::build)
                 .setOutput(Output::class.java)
                 .bindParameter(
                     SlotMetadata.ALARM.path,
+                    Arguments::alarm,
                     Arguments.Builder::setAlarm,
-                    AlarmValue.PARAM_VALUE_CONVERTER
+                    AlarmReference.PARAM_VALUE_CONVERTER
                 )
                 .bindOutput(
                     "executionStatus",
                     Output::executionStatus,
-                    ExecutionStatus::toParamValue
+                    ExecutionStatus.PARAM_VALUE_CONVERTER
                 )
                 .build()
+        init {
+            ActionSpecRegistry.registerActionSpec(Arguments::class, Output::class, ACTION_SPEC)
+        }
     }
 }

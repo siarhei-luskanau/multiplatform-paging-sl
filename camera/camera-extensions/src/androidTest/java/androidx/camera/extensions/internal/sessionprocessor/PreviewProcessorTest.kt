@@ -21,12 +21,12 @@ import android.graphics.ImageFormat
 import android.graphics.PixelFormat.RGBA_8888
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraCaptureSession
-import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.TotalCaptureResult
 import android.media.Image
 import android.media.ImageReader
 import android.media.ImageWriter
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Size
@@ -35,8 +35,10 @@ import androidx.camera.camera2.Camera2Config
 import androidx.camera.core.CameraXThreads
 import androidx.camera.extensions.impl.PreviewImageProcessorImpl
 import androidx.camera.extensions.impl.ProcessResultImpl
-import androidx.camera.testing.Camera2Util
-import androidx.camera.testing.CameraUtil
+import androidx.camera.extensions.util.Api21Impl
+import androidx.camera.extensions.util.Api21Impl.toCameraDeviceWrapper
+import androidx.camera.testing.impl.Camera2Util
+import androidx.camera.testing.impl.CameraUtil
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.filters.LargeTest
@@ -62,7 +64,7 @@ class PreviewProcessorTest {
     val useCamera = CameraUtil.grantCameraPermissionAndPreTest(
         CameraUtil.PreTestCameraIdList(Camera2Config.defaultConfig())
     )
-    private lateinit var cameraDevice: CameraDevice
+    private lateinit var cameraDevice: Api21Impl.CameraDeviceWrapper
     private lateinit var cameraCaptureSession: CameraCaptureSession
     private lateinit var surfaceTexture: SurfaceTexture
     private lateinit var previewSurface: Surface
@@ -85,6 +87,8 @@ class PreviewProcessorTest {
     @Before
     fun setUp() = runBlocking {
         Assume.assumeTrue(CameraUtil.deviceHasCamera())
+        // PreviewImageProcessorImpl doesn't exist on Xiaomi devices
+        Assume.assumeFalse(Build.BRAND.uppercase().equals("XIAOMI"))
 
         backgroundThread = HandlerThread(
             CameraXThreads.TAG + "preview_processor_test"
@@ -104,9 +108,14 @@ class PreviewProcessorTest {
             WIDTH, HEIGHT, ImageFormat.YUV_420_888, MAX_IMAGES
         )
 
-        cameraDevice = Camera2Util.openCameraDevice(cameraManager, CAMERA_ID, backgroundHandler)
+        cameraDevice = Camera2Util.openCameraDevice(
+            cameraManager,
+            CAMERA_ID,
+            backgroundHandler
+        ).toCameraDeviceWrapper()
+
         cameraCaptureSession = Camera2Util.openCaptureSession(
-            cameraDevice,
+            cameraDevice.unwrap(),
             arrayListOf(imageReaderYuv.surface),
             backgroundHandler
         )
@@ -169,7 +178,7 @@ class PreviewProcessorTest {
             previewUpdateDeferred.complete(true)
         }
 
-        Camera2Util.startRepeating(cameraDevice, cameraCaptureSession,
+        Camera2Util.startRepeating(cameraDevice.unwrap(), cameraCaptureSession,
             arrayListOf(imageReaderYuv.surface)) {
             if (!captureResultFetched) {
                 captureResultFetched = true
@@ -221,15 +230,15 @@ class PreviewProcessorTest {
 
     private class FakePreviewImageProcessorImpl : PreviewImageProcessorImpl {
         private var imageWriter: ImageWriter? = null
-        override fun process(image: Image?, result: TotalCaptureResult?) {
+        override fun process(image: Image, result: TotalCaptureResult) {
             val emptyImage = imageWriter!!.dequeueInputImage()
             imageWriter!!.queueInputImage(emptyImage)
         }
 
         override fun process(
-            image: Image?,
-            result: TotalCaptureResult?,
-            resultCallback: ProcessResultImpl?,
+            image: Image,
+            result: TotalCaptureResult,
+            resultCallback: ProcessResultImpl,
             executor: Executor?
         ) {
             val blankImage = imageWriter!!.dequeueInputImage()

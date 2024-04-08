@@ -21,13 +21,12 @@ import androidx.appactions.interaction.capabilities.core.Capability
 import androidx.appactions.interaction.capabilities.core.CapabilityFactory
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeConverters
 import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecBuilder
+import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecRegistry
 import androidx.appactions.interaction.capabilities.core.properties.Property
 import java.time.LocalTime
 
-private const val CAPABILITY_NAME = "actions.intent.GET_HEALTH_OBSERVATION"
-
 /** A capability corresponding to actions.intent.GET_HEALTH_OBSERVATION */
-@CapabilityFactory(name = CAPABILITY_NAME)
+@CapabilityFactory(name = GetHealthObservation.CAPABILITY_NAME)
 class GetHealthObservation private constructor() {
 
     internal enum class SlotMetadata(val path: String) {
@@ -103,6 +102,8 @@ class GetHealthObservation private constructor() {
     sealed interface ExecutionSession : BaseExecutionSession<Arguments, Output>
 
     companion object {
+        /** Canonical name for [GetHealthObservation] capability */
+        const val CAPABILITY_NAME = "actions.intent.GET_HEALTH_OBSERVATION"
         // TODO(b/273602015): Update to use Name property from builtintype library.
         private val ACTION_SPEC =
             ActionSpecBuilder.ofCapabilityNamed(CAPABILITY_NAME)
@@ -114,14 +115,19 @@ class GetHealthObservation private constructor() {
                 .setOutput(Output::class.java)
                 .bindParameter(
                     SlotMetadata.START_TIME.path,
+                    Arguments::startTime,
                     Arguments.Builder::setStartTime,
                     TypeConverters.LOCAL_TIME_PARAM_VALUE_CONVERTER
                 )
                 .bindParameter(
                     SlotMetadata.END_TIME.path,
+                    Arguments::endTime,
                     Arguments.Builder::setEndTime,
                     TypeConverters.LOCAL_TIME_PARAM_VALUE_CONVERTER
                 )
                 .build()
+        init {
+            ActionSpecRegistry.registerActionSpec(Arguments::class, Output::class, ACTION_SPEC)
+        }
     }
 }

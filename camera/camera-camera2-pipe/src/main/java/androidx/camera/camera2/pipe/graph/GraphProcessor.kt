@@ -18,10 +18,13 @@
 
 package androidx.camera.camera2.pipe.graph
 
+import android.os.Build
 import androidx.annotation.GuardedBy
 import androidx.annotation.RequiresApi
 import androidx.camera.camera2.pipe.CameraGraph
 import androidx.camera.camera2.pipe.CaptureSequenceProcessor
+import androidx.camera.camera2.pipe.FrameInfo
+import androidx.camera.camera2.pipe.FrameNumber
 import androidx.camera.camera2.pipe.GraphState
 import androidx.camera.camera2.pipe.GraphState.GraphStateError
 import androidx.camera.camera2.pipe.GraphState.GraphStateStarted
@@ -29,14 +32,22 @@ import androidx.camera.camera2.pipe.GraphState.GraphStateStarting
 import androidx.camera.camera2.pipe.GraphState.GraphStateStopped
 import androidx.camera.camera2.pipe.GraphState.GraphStateStopping
 import androidx.camera.camera2.pipe.Request
+import androidx.camera.camera2.pipe.RequestMetadata
+import androidx.camera.camera2.pipe.compat.Camera2Quirks
+import androidx.camera.camera2.pipe.compat.CameraPipeKeys
 import androidx.camera.camera2.pipe.config.CameraGraphScope
 import androidx.camera.camera2.pipe.config.ForCameraGraph
+import androidx.camera.camera2.pipe.core.CoroutineMutex
 import androidx.camera.camera2.pipe.core.Debug
 import androidx.camera.camera2.pipe.core.Log.debug
+import androidx.camera.camera2.pipe.core.Log.info
 import androidx.camera.camera2.pipe.core.Log.warn
 import androidx.camera.camera2.pipe.core.Threads
+import androidx.camera.camera2.pipe.core.withLockLaunch
 import androidx.camera.camera2.pipe.formatForLogs
 import androidx.camera.camera2.pipe.putAllMetadata
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 import javax.inject.Inject
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -120,6 +131,7 @@ internal class GraphProcessorImpl
 @Inject
 constructor(
     private val threads: Threads,
+    private val cameraGraphId: CameraGraphId,
     private val cameraGraphConfig: CameraGraph.Config,
     private val graphState3A: GraphState3A,
     @ForCameraGraph private val graphScope: CoroutineScope,
@@ -127,6 +139,7 @@ constructor(
 ) : GraphProcessor, GraphListener {
     private val lock = Any()
     private val tryStartRepeatingExecutionLock = Any()
+    private val coroutineMutex = CoroutineMutex()
 
     @GuardedBy("lock")
     private val submitQueue: MutableList<List<Request>> = ArrayList()
@@ -154,6 +167,27 @@ constructor(
 
     @GuardedBy("lock")
     private var pendingParametersDeferred: CompletableDeferred<Boolean>? = null
+
+    // On some devices, we need to wait for 10 frames to complete before we can guarantee the
+    // success of single capture requests. This is a quirk identified as part of b/287020251 and
+    // reported in b/289284907.
+    private var repeatingRequestsCompleted = CountDownLatch(10)
+
+    // Graph listener added to repeating requests in order to handle the aforementioned quirk.
+    private val graphProcessorRepeatingListeners =
+        if (!Camera2Quirks.shouldWaitForRepeatingBeforeCapture()) {
+            graphListeners
+        } else {
+            graphListeners + object : Request.Listener {
+                override fun onComplete(
+                    requestMetadata: RequestMetadata,
+                    frameNumber: FrameNumber,
+                    result: FrameInfo
+                ) {
+                    repeatingRequestsCompleted.countDown()
+                }
+            }
+        }
 
     private val _graphState = MutableStateFlow<GraphState>(GraphStateStopped)
 
@@ -193,9 +227,10 @@ constructor(
         _graphState.value = GraphStateStopping
     }
 
-    override fun onGraphStopped(requestProcessor: GraphRequestProcessor) {
+    override fun onGraphStopped(requestProcessor: GraphRequestProcessor?) {
         debug { "$this onGraphStopped" }
         _graphState.value = GraphStateStopped
+        if (requestProcessor == null) return
         var old: GraphRequestProcessor? = null
         synchronized(lock) {
             if (closed) {
@@ -248,9 +283,11 @@ constructor(
             if (closed) return
             repeatingQueue.add(request)
             debug { "startRepeating with ${request.formatForLogs()}" }
-        }
 
-        graphScope.launch(threads.lightweightDispatcher) { tryStartRepeating() }
+            coroutineMutex.withLockLaunch(graphScope) {
+                tryStartRepeating()
+            }
+        }
     }
 
     override fun stopRepeating() {
@@ -260,15 +297,15 @@ constructor(
             processor = _requestProcessor
             repeatingQueue.clear()
             currentRepeatingRequest = null
-        }
 
-        graphScope.launch(threads.lightweightDispatcher) {
-            Debug.traceStart { "$this#stopRepeating" }
-            // Start with requests that have already been submitted
-            if (processor != null) {
-                synchronized(processor) { processor.stopRepeating() }
+            coroutineMutex.withLockLaunch(graphScope) {
+                Debug.traceStart { "$this#stopRepeating" }
+                // Start with requests that have already been submitted
+                if (processor != null) {
+                    synchronized(processor) { processor.stopRepeating() }
+                }
+                Debug.traceStop()
             }
-            Debug.traceStop()
         }
     }
 
@@ -277,6 +314,15 @@ constructor(
     }
 
     override fun submit(requests: List<Request>) {
+        requests.firstOrNull { it.inputRequest != null }?.let {
+            check(Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                "Reprocessing not supported on Android ${Build.VERSION.SDK_INT} devices"
+            }
+            checkNotNull(cameraGraphConfig.input) {
+                "Cannot submit request $it with input request ${it.inputRequest} " +
+                    "to $this because CameraGraph was not configured to support reprocessing"
+            }
+        }
         synchronized(lock) {
             if (closed) {
                 graphScope.launch(threads.lightweightDispatcher) { abortBurst(requests) }
@@ -452,7 +498,7 @@ constructor(
                         requests = listOf(request),
                         defaultParameters = cameraGraphConfig.defaultParameters,
                         requiredParameters = requiredParameters,
-                        listeners = graphListeners
+                        listeners = graphProcessorRepeatingListeners,
                     )
                 ) {
                     // ONLY update the current repeating request if the update succeeds
@@ -502,6 +548,15 @@ constructor(
     }
 
     private fun submitLoop() {
+        if (Camera2Quirks.shouldWaitForRepeatingBeforeCapture() && hasRepeatingRequest()) {
+            debug {
+                "Quirk: Waiting for 10 repeating requests to complete before submitting requests"
+            }
+            if (!repeatingRequestsCompleted.await(2, TimeUnit.SECONDS)) {
+                warn { "Failed to wait for 10 repeating requests to complete after 2 seconds" }
+            }
+        }
+
         var burst: List<Request>
         var processor: GraphRequestProcessor
 
@@ -532,7 +587,18 @@ constructor(
                 submitted =
                     synchronized(processor) {
                         val requiredParameters = mutableMapOf<Any, Any?>()
-                        graphState3A.writeTo(requiredParameters)
+                        if (cameraGraphConfig.defaultParameters[
+                                CameraPipeKeys.ignore3ARequiredParameters] == true ||
+                            cameraGraphConfig.requiredParameters[
+                                CameraPipeKeys.ignore3ARequiredParameters] == true
+                        ) {
+                            info {
+                                "${CameraPipeKeys.ignore3ARequiredParameters} is set to true, " +
+                                    "ignoring 3A required parameters"
+                            }
+                        } else {
+                            graphState3A.writeTo(requiredParameters)
+                        }
                         requiredParameters.putAllMetadata(cameraGraphConfig.requiredParameters)
 
                         processor.submit(
@@ -583,4 +649,6 @@ constructor(
             }
         }
     }
+
+    override fun toString(): String = "GraphProcessor(cameraGraph: $cameraGraphId)"
 }

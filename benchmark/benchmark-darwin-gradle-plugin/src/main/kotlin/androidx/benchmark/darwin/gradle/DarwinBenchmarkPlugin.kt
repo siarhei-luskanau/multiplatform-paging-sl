@@ -40,7 +40,7 @@ class DarwinBenchmarkPlugin : Plugin<Project> {
         project.plugins.withType(KotlinMultiplatformPluginWrapper::class.java) {
             val multiplatformExtension: KotlinMultiplatformExtension =
                 project.extensions.getByType(it.projectExtensionClass.java)
-            multiplatformExtension.targets.all { kotlinTarget ->
+            multiplatformExtension.targets.configureEach { kotlinTarget ->
                 if (kotlinTarget is KotlinNativeTarget) {
                     if (kotlinTarget.konanTarget.family.isAppleFamily) {
                         // We want to apply the plugin only once.
@@ -156,6 +156,7 @@ class DarwinBenchmarkPlugin : Plugin<Project> {
         // Context: b/257326666
         return providers.environmentVariable(DIST_DIR).map { value ->
             val parent = value.ifBlank {
+                @Suppress("DEPRECATION") // b/290811136
                 project.buildDir.absolutePath
             }
             File(parent, LIBRARY_METRICS)

@@ -18,6 +18,11 @@ package androidx.room.compiler.processing.util.compiler
 
 import androidx.room.compiler.processing.util.Source
 import java.io.File
+import java.util.regex.Pattern
+
+private val BY_ROUNDS_PATH_PATTERN =
+    ("(byRounds${Pattern.quote(File.separator)}[0-9]+" +
+        "${Pattern.quote(File.separator)})?(.*)").toPattern()
 
 /**
  * Represents sources that are positioned in the [root] folder.
@@ -59,16 +64,24 @@ internal class SourceSet(
     }
 
     /**
-     * Finds the source file matching the given relative path (from root)
+     * Finds the source file matching the given relative path (from root). This will ignore
+     * "byRounds/<round number>" directories added by KSP.
      */
     fun findSourceFile(
         path: String
     ): Source? {
         val file = File(path).canonicalFile
-        if (!file.path.startsWith(root.path)) {
+        if (!file.startsWith(root)) {
             return null
         }
-        val relativePath = path.substringAfter(root.canonicalPath + File.separator)
+        val relativePath = file.relativeTo(root).path.let {
+            val matcher = BY_ROUNDS_PATH_PATTERN.matcher(it)
+            if (matcher.find()) {
+                matcher.group(2)
+            } else {
+                it
+            }
+        }
         return sources.firstOrNull {
             it.relativePath == relativePath
         }

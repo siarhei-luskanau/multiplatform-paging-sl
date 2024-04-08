@@ -52,6 +52,7 @@ import androidx.core.os.UserManagerCompat;
 import androidx.core.util.Consumer;
 import androidx.work.Configuration;
 import androidx.work.Logger;
+import androidx.work.WorkInfo;
 import androidx.work.impl.Schedulers;
 import androidx.work.impl.WorkDatabase;
 import androidx.work.impl.WorkDatabasePathHelper;
@@ -307,6 +308,7 @@ public class ForceStopRunnable implements Runnable {
                 // To solve this, we simply force-reschedule all unfinished work.
                 for (WorkSpec workSpec : workSpecs) {
                     workSpecDao.setState(ENQUEUED, workSpec.id);
+                    workSpecDao.setStopReason(workSpec.id, WorkInfo.STOP_REASON_UNKNOWN);
                     workSpecDao.markWorkSpecScheduled(workSpec.id, SCHEDULE_NOT_REQUESTED_YET);
                 }
             }
@@ -394,11 +396,7 @@ public class ForceStopRunnable implements Runnable {
         // scheduled ~forever and shouldn't need WorkManager to be initialized to reschedule.
         long triggerAt = System.currentTimeMillis() + TEN_YEARS;
         if (alarmManager != null) {
-            if (Build.VERSION.SDK_INT >= 19) {
-                alarmManager.setExact(RTC_WAKEUP, triggerAt, pendingIntent);
-            } else {
-                alarmManager.set(RTC_WAKEUP, triggerAt, pendingIntent);
-            }
+            alarmManager.setExact(RTC_WAKEUP, triggerAt, pendingIntent);
         }
     }
 

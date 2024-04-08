@@ -21,13 +21,12 @@ import androidx.appactions.interaction.capabilities.core.Capability
 import androidx.appactions.interaction.capabilities.core.CapabilityFactory
 import androidx.appactions.interaction.capabilities.core.impl.converters.TypeConverters
 import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecBuilder
+import androidx.appactions.interaction.capabilities.core.impl.spec.ActionSpecRegistry
 import androidx.appactions.interaction.capabilities.core.properties.Property
 import androidx.appactions.interaction.capabilities.core.properties.StringValue
 
-private const val CAPABILITY_NAME = "actions.intent.PAUSE_EXERCISE"
-
 /** A capability corresponding to actions.intent.PAUSE_EXERCISE */
-@CapabilityFactory(name = CAPABILITY_NAME)
+@CapabilityFactory(name = PauseExercise.CAPABILITY_NAME)
 class PauseExercise private constructor() {
     internal enum class SlotMetadata(val path: String) {
         NAME("exercise.name")
@@ -87,6 +86,8 @@ class PauseExercise private constructor() {
     sealed interface ExecutionSession : BaseExecutionSession<Arguments, Output>
 
     companion object {
+        /** Canonical name for [PauseExercise] capability */
+        const val CAPABILITY_NAME = "actions.intent.PAUSE_EXERCISE"
         // TODO(b/273602015): Update to use Name property from builtintype library.
         private val ACTION_SPEC =
             ActionSpecBuilder.ofCapabilityNamed(CAPABILITY_NAME)
@@ -94,9 +95,13 @@ class PauseExercise private constructor() {
                 .setOutput(Output::class.java)
                 .bindParameter(
                     SlotMetadata.NAME.path,
+                    Arguments::name,
                     Arguments.Builder::setName,
                     TypeConverters.STRING_PARAM_VALUE_CONVERTER
                 )
                 .build()
+        init {
+            ActionSpecRegistry.registerActionSpec(Arguments::class, Output::class, ACTION_SPEC)
+        }
     }
 }

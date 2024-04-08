@@ -9,6 +9,7 @@ import androidx.compose.runtime.external.kotlinx.collections.immutable.internal.
 import androidx.compose.runtime.external.kotlinx.collections.immutable.internal.MutabilityOwnership
 import androidx.compose.runtime.external.kotlinx.collections.immutable.internal.assert
 import androidx.compose.runtime.external.kotlinx.collections.immutable.internal.forEachOneBit
+import androidx.compose.runtime.checkPrecondition
 
 
 internal const val MAX_BRANCHING_FACTOR = 32
@@ -636,7 +637,7 @@ internal class TrieNode<K, V>(
             // we can use this later to skip calling equals() again
         }
         @Suppress("ExceptionMessage")
-        check(newNodeMap and newDataMap == 0)
+        checkPrecondition(newNodeMap and newDataMap == 0)
         val mutableNode = when {
             this.ownedBy == mutator.ownership && this.dataMap == newDataMap && this.nodeMap == newNodeMap -> this
             else -> {
@@ -867,15 +868,11 @@ internal class TrieNode<K, V>(
     }
 
     // For testing trie structure
-    internal fun accept(
-        @Suppress("PrimitiveInLambda")
-        visitor: (node: TrieNode<K, V>, shift: Int, hash: Int, dataMap: Int, nodeMap: Int) -> Unit
-    ) {
+    internal fun accept(visitor: (node: TrieNode<K, V>, shift: Int, hash: Int, dataMap: Int, nodeMap: Int) -> Unit) {
         accept(visitor, 0, 0)
     }
 
     private fun accept(
-        @Suppress("PrimitiveInLambda")
             visitor: (node: TrieNode<K, V>, shift: Int, hash: Int, dataMap: Int, nodeMap: Int) -> Unit,
             hash: Int,
             shift: Int

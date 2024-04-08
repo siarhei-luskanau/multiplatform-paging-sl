@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-@file:JvmName("SnapshotFloatStateKt")
+@file:JvmName("PrimitiveSnapshotStateKt")
 @file:JvmMultifileClass
 package androidx.compose.runtime
 
@@ -23,7 +23,7 @@ import androidx.compose.runtime.snapshots.AutoboxingStateValueProperty
 import androidx.compose.runtime.snapshots.Snapshot
 import androidx.compose.runtime.snapshots.SnapshotMutableState
 import androidx.compose.runtime.snapshots.StateFactoryMarker
-import androidx.compose.runtime.snapshots.StateObject
+import androidx.compose.runtime.snapshots.StateObjectImpl
 import androidx.compose.runtime.snapshots.StateRecord
 import androidx.compose.runtime.snapshots.overwritable
 import androidx.compose.runtime.snapshots.readable
@@ -62,7 +62,7 @@ fun mutableFloatStateOf(
 @Stable
 @JvmDefaultWithCompatibility
 interface FloatState : State<Float> {
-    @AutoboxingStateValueProperty("floatValue")
+    @get:AutoboxingStateValueProperty("floatValue")
     override val value: Float
         @Suppress("AutoBoxing") get() = floatValue
 
@@ -88,7 +88,8 @@ inline operator fun FloatState.getValue(thisObj: Any?, property: KProperty<*>): 
 @Stable
 @JvmDefaultWithCompatibility
 interface MutableFloatState : FloatState, MutableState<Float> {
-    @AutoboxingStateValueProperty("floatValue")
+    @get:AutoboxingStateValueProperty("floatValue")
+    @set:AutoboxingStateValueProperty("floatValue")
     override var value: Float
         @Suppress("AutoBoxing") get() = floatValue
         set(value) { floatValue = value }
@@ -123,9 +124,15 @@ internal expect fun createSnapshotMutableFloatState(
  */
 internal open class SnapshotMutableFloatStateImpl(
     value: Float
-) : StateObject, MutableFloatState, SnapshotMutableState<Float> {
+) : StateObjectImpl(), MutableFloatState, SnapshotMutableState<Float> {
 
-    private var next = FloatStateStateRecord(value)
+    private var next = FloatStateStateRecord(value).also {
+        if (Snapshot.isInSnapshot) {
+            it.next = FloatStateStateRecord(value).also { next ->
+                next.snapshotId = Snapshot.PreexistingSnapshotId
+            }
+        }
+    }
 
     override val firstStateRecord: StateRecord
         get() = next

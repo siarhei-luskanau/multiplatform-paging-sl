@@ -14,6 +14,8 @@
  * limitations under the License.
  */
 
+@file:OptIn(ExperimentalComposeUiApi::class)
+
 package androidx.compose.ui.layout
 
 import androidx.compose.runtime.Applier
@@ -30,82 +32,23 @@ import androidx.compose.ui.node.NodeCoordinator
 import androidx.compose.ui.platform.InspectorInfo
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.IntSize
-import kotlinx.coroutines.CoroutineScope
-
-@Suppress("ComposableLambdaParameterPosition")
-@Deprecated(
-    "LookaheadLayout has been replaced with LookaheadScope that does not require" +
-        " a Modifier or a MeasurePolicy.",
-    replaceWith = ReplaceWith(
-        "LookaheadScope { Layout(content = { content() }, \n" +
-            " modifier = modifier, measurePolicy = measurePolicy) }"
-    )
-)
-@ExperimentalComposeUiApi
-@UiComposable
-@Composable
-fun LookaheadLayout(
-    content: @Composable @UiComposable LookaheadScope.() -> Unit,
-    modifier: Modifier = Modifier,
-    measurePolicy: MeasurePolicy
-) {
-    LookaheadScope {
-        Layout(
-            content = { content() },
-            modifier = modifier,
-            measurePolicy = measurePolicy
-        )
-    }
-}
 
 /**
- * [LookaheadLayoutScope] provides a receiver scope for all (direct and indirect) child layouts in
- * [LookaheadLayout]. In [LookaheadLayoutScope], the measurement and placement of any layout
- * calculated in the lookahead pass can be observed via [Modifier.intermediateLayout] and
- * [Modifier.onPlaced] respectively.
+ * [LookaheadScope] creates a scope in which all layouts will first determine their destination
+ * layout through a lookahead pass, followed by an _approach_ pass to run the measurement
+ * and placement approach defined in [approachLayout] or [ApproachLayoutModifierNode], in order to
+ * gradually reach the destination.
+ *
+ * Note: [LookaheadScope] does not introduce a new [Layout] to the [content] passed in.
+ * All the [Layout]s in the [content] will have the same parent as they would without
+ * [LookaheadScope].
  *
  * @sample androidx.compose.ui.samples.LookaheadLayoutCoordinatesSample
- */
-@Deprecated(
-    "LookaheadLayoutScope has been renamed to LookaheadScope",
-    ReplaceWith("LookaheadScope")
-)
-@ExperimentalComposeUiApi
-interface LookaheadLayoutScope {
-    @Deprecated(
-        "onPlaced in LookaheadLayoutScope has been deprecated. It's replaced" +
-            " with reading LookaheadLayoutCoordinates directly during placement in" +
-            " IntermediateMeasureScope. See example below."
-    )
-    /**
-     * [onPlaced] gets invoked after the parent [LayoutModifier] has been placed
-     * and before child [LayoutModifier] is placed. This allows child [LayoutModifier] to adjust
-     * its own placement based on its parent.
-     *
-     * @sample androidx.compose.ui.samples.LookaheadLayoutCoordinatesSample
-     */
-    @Suppress("DEPRECATION")
-    fun Modifier.onPlaced(
-        onPlaced: (
-            lookaheadScopeCoordinates: LookaheadLayoutCoordinates,
-            layoutCoordinates: LookaheadLayoutCoordinates
-        ) -> Unit
-    ): Modifier
-}
-
-/**
- * [LookaheadScope] starts a scope in which all layouts scope will receive a lookahead pass
- * preceding the main measure/layout pass. This lookahead pass will calculate the layout
- * size and position for all child layouts, and make the lookahead results available in
- * [Modifier.intermediateLayout]. [Modifier.intermediateLayout] gets invoked in the main
- * pass to allow transient layout changes in the main pass that gradually morph the layout
- * over the course of multiple frames until it catches up with lookahead.
- *
- * @sample androidx.compose.ui.samples.LookaheadLayoutCoordinatesSample
+ * @see ApproachLayoutModifierNode
+ * @see approachLayout
  *
  * @param content The child composable to be laid out.
  */
-@ExperimentalComposeUiApi
 @UiComposable
 @Composable
 fun LookaheadScope(content: @Composable @UiComposable LookaheadScope.() -> Unit) {
@@ -128,73 +71,119 @@ fun LookaheadScope(content: @Composable @UiComposable LookaheadScope.() -> Unit)
 }
 
 /**
- * Creates an intermediate layout intended to help morph the layout from the current layout
- * to the lookahead (i.e. pre-calculated future) layout.
+ * Creates an approach layout intended to help gradually approach the destination layout calculated
+ * in the lookahead pass. This can be particularly helpful when the destination layout is
+ * anticipated to change drastically and would consequently result in visual disruptions.
  *
- * This modifier will be invoked _after_ lookahead pass and will have access to the lookahead
- * results in [measure]. Therefore:
- * 1) [intermediateLayout] measure/layout logic will not affect lookahead pass, but only be
- * invoked during the main measure/layout pass,
- * and 2) [measure] block can define intermediate changes that morphs the layout in the
- * main pass gradually until it converges lookahead pass.
+ * In order to create a smooth approach, an interpolation (often through animations) can be used
+ * in [approachMeasure] to interpolate the measurement or placement from a previously recorded size
+ * and/or position to the destination/target size and/or position. The destination size is
+ * available in [ApproachMeasureScope] as [ApproachMeasureScope.lookaheadSize]. And the target
+ * position can also be acquired in [ApproachMeasureScope] during placement by using
+ * [LookaheadScope.localLookaheadPositionOf] with the layout's
+ * [Placeable.PlacementScope.coordinates]. The sample code below illustrates how that can be
+ * achieved.
  *
- * @sample androidx.compose.ui.samples.IntermediateLayoutSample
+ * [isMeasurementApproachInProgress] signals whether the measurement is in progress of approaching
+ * destination size. It will be queried after the destination has been determined by the lookahead
+ * pass, before [approachMeasure] is invoked. The lookahead size is provided to
+ * [isMeasurementApproachInProgress] for convenience in deciding whether the destination size has
+ * been reached.
+ *
+ * [isMeasurementApproachInProgress] indicates whether the position is currently approaching
+ * destination defined by the lookahead, hence it's a signal to the system for whether additional
+ * approach placements are necessary. [isPlacementApproachInProgress] will be invoked after the
+ * destination position has been determined by lookahead pass, and before the placement phase in
+ * [approachMeasure].
+ *
+ * Once both [isMeasurementApproachInProgress] and [isPlacementApproachInProgress] return false, the
+ * system may skip approach pass until additional approach passes are necessary as indicated by
+ * [isMeasurementApproachInProgress] and [isPlacementApproachInProgress].
+ *
+ * **IMPORTANT**:
+ * It is important to be accurate in [isPlacementApproachInProgress] and
+ * [isMeasurementApproachInProgress]. A prolonged indication of incomplete approach will prevent the
+ * system from potentially skipping approach pass when possible.
+ *
+ * @see ApproachLayoutModifierNode
+ * @sample androidx.compose.ui.samples.approachLayoutSample
  */
-@ExperimentalComposeUiApi
-fun Modifier.intermediateLayout(
-    measure: IntermediateMeasureScope.(
+fun Modifier.approachLayout(
+    isMeasurementApproachInProgress: (lookaheadSize: IntSize) -> Boolean,
+    isPlacementApproachInProgress: Placeable.PlacementScope.(
+        lookaheadCoordinates: LayoutCoordinates
+    ) -> Boolean = defaultPlacementApproachInProgress,
+    approachMeasure: ApproachMeasureScope.(
         measurable: Measurable,
         constraints: Constraints,
     ) -> MeasureResult,
-): Modifier = this then IntermediateLayoutElement(measure)
+): Modifier = this then ApproachLayoutElement(
+    isMeasurementApproachInProgress = isMeasurementApproachInProgress,
+    isPlacementApproachInProgress = isPlacementApproachInProgress,
+    approachMeasure = approachMeasure
+)
 
-@OptIn(ExperimentalComposeUiApi::class)
-private data class IntermediateLayoutElement(
-    val measure: IntermediateMeasureScope.(
+private val defaultPlacementApproachInProgress: Placeable.PlacementScope.(
+    lookaheadCoordinates: LayoutCoordinates
+) -> Boolean = { false }
+
+private data class ApproachLayoutElement(
+    val approachMeasure: ApproachMeasureScope.(
         measurable: Measurable,
         constraints: Constraints,
     ) -> MeasureResult,
-) : ModifierNodeElement<IntermediateLayoutModifierNode>() {
-    override fun create() = IntermediateLayoutModifierNode(measure)
-    override fun update(node: IntermediateLayoutModifierNode) {
-        node.measureBlock = measure
+    val isMeasurementApproachInProgress: (IntSize) -> Boolean,
+    val isPlacementApproachInProgress: Placeable.PlacementScope.(
+        lookaheadCoordinates: LayoutCoordinates
+    ) -> Boolean = defaultPlacementApproachInProgress,
+) : ModifierNodeElement<ApproachLayoutModifierNodeImpl>() {
+    override fun create() =
+        ApproachLayoutModifierNodeImpl(
+            approachMeasure,
+            isMeasurementApproachInProgress,
+            isPlacementApproachInProgress
+        )
+
+    override fun update(node: ApproachLayoutModifierNodeImpl) {
+        node.measureBlock = approachMeasure
+        node.isMeasurementApproachInProgress = isMeasurementApproachInProgress
+        node.isPlacementApproachInProgress = isPlacementApproachInProgress
     }
 
     override fun InspectorInfo.inspectableProperties() {
-        name = "intermediateLayout"
-        properties["measure"] = measure
+        name = "approachLayout"
+        properties["approachMeasure"] = approachMeasure
+        properties["isMeasurementApproachInProgress"] = isMeasurementApproachInProgress
+        properties["isPlacementApproachInProgress"] = isPlacementApproachInProgress
     }
 }
 
-/**
- * [IntermediateMeasureScope] provides access to lookahead results to allow
- * [intermediateLayout] to leverage lookahead results to define intermediate measurements
- * and placements to gradually converge with lookahead.
- *
- * [IntermediateMeasureScope.lookaheadSize] provides the target size of the layout.
- * [IntermediateMeasureScope] is also a [LookaheadScope], thus allowing layouts to
- * read their [LookaheadLayoutCoordinates] during placement using
- * [LookaheadScope.toLookaheadCoordinates], as well as the [LookaheadLayoutCoordinates] of the
- * closest lookahead scope via [LookaheadScope.lookaheadScopeCoordinates].
- * By knowing the target size and position, layout adjustments such as animations can be defined
- * in [intermediateLayout] to morph the layout gradually in both size and position
- * to arrive at its precalculated bounds.
- *
- * Note that [IntermediateMeasureScope] is the closest lookahead scope in the tree.
- * This [LookaheadScope] enables convenient query of the layout's relative position to the
- * [LookaheadScope]. Hence it becomes straightforward to animate position relative to the closest
- * scope, which usually yields a natural looking animation, unless there are specific UX
- * requirements to change position relative to a particular [LookaheadScope].
- *
- * [IntermediateMeasureScope] is a CoroutineScope, as a convenient scope for all the
- * coroutine-based intermediate changes (e.g. animations) to be launched from.
- */
-@ExperimentalComposeUiApi
-sealed interface IntermediateMeasureScope : LookaheadScope, CoroutineScope, MeasureScope {
-    /**
-     * Indicates the target size of the [intermediateLayout].
-     */
-    val lookaheadSize: IntSize
+@OptIn(ExperimentalComposeUiApi::class)
+private class ApproachLayoutModifierNodeImpl(
+    var measureBlock: ApproachMeasureScope.(
+        measurable: Measurable,
+        constraints: Constraints,
+    ) -> MeasureResult,
+    var isMeasurementApproachInProgress: (IntSize) -> Boolean,
+    var isPlacementApproachInProgress:
+    Placeable.PlacementScope.(LayoutCoordinates) -> Boolean,
+) : ApproachLayoutModifierNode, Modifier.Node() {
+    override fun isMeasurementApproachInProgress(lookaheadSize: IntSize): Boolean {
+        return isMeasurementApproachInProgress.invoke(lookaheadSize)
+    }
+
+    override fun Placeable.PlacementScope.isPlacementApproachInProgress(
+        lookaheadCoordinates: LayoutCoordinates
+    ): Boolean {
+        return isPlacementApproachInProgress.invoke(this, lookaheadCoordinates)
+    }
+
+    override fun ApproachMeasureScope.approachMeasure(
+        measurable: Measurable,
+        constraints: Constraints
+    ): MeasureResult {
+        return measureBlock(measurable, constraints)
+    }
 }
 
 /**
@@ -202,22 +191,23 @@ sealed interface IntermediateMeasureScope : LookaheadScope, CoroutineScope, Meas
  * [LookaheadScope]. This receiver scope allows access to [lookaheadScopeCoordinates] from
  * any child's [Placeable.PlacementScope]. It also allows any child to convert
  * [LayoutCoordinates] (which can be retrieved in [Placeable.PlacementScope]) to
- * [LookaheadLayoutCoordinates] using [toLookaheadCoordinates].
+ * [LayoutCoordinates] in lookahead coordinate space using [toLookaheadCoordinates].
  *
  * @sample androidx.compose.ui.samples.LookaheadLayoutCoordinatesSample
  */
-@ExperimentalComposeUiApi
 interface LookaheadScope {
     /**
      * Converts a [LayoutCoordinates] into a [LayoutCoordinates] in the Lookahead coordinates space.
      * This is only applicable to child layouts within [LookaheadScope].
      */
+    @ExperimentalComposeUiApi
     fun LayoutCoordinates.toLookaheadCoordinates(): LayoutCoordinates
 
     /**
      * Returns the [LayoutCoordinates] of the [LookaheadScope]. This is
      * only accessible from [Placeable.PlacementScope] (i.e. during placement time).
      */
+    @ExperimentalComposeUiApi
     val Placeable.PlacementScope.lookaheadScopeCoordinates: LayoutCoordinates
 
     /**
@@ -226,68 +216,12 @@ interface LookaheadScope {
      * [toLookaheadCoordinates], and 2) invoking [LayoutCoordinates.localPositionOf] with the
      * converted coordinates.
      */
+    @ExperimentalComposeUiApi
     fun LayoutCoordinates.localLookaheadPositionOf(coordinates: LayoutCoordinates) =
         this.toLookaheadCoordinates().localPositionOf(
             coordinates.toLookaheadCoordinates(),
             Offset.Zero
         )
-
-    @Suppress("DEPRECATION")
-    @Deprecated(
-        "onPlaced in LookaheadLayoutScope has been deprecated. It's replaced" +
-            " with reading LookaheadLayoutCoordinates directly during placement in" +
-            " IntermediateMeasureScope. See example below."
-    )
-        /**
-         * [onPlaced] gets invoked after the parent [LayoutModifier] has been placed
-         * and before child [LayoutModifier] is placed. This allows child [LayoutModifier] to adjust
-         * its own placement based on its parent.
-         *
-         * [onPlaced] callback will be invoked with the [LookaheadLayoutCoordinates] of the LayoutNode
-         * emitted by [LookaheadLayout] as the first parameter, and the [LookaheadLayoutCoordinates] of
-         * this modifier as the second parameter. Given the [LookaheadLayoutCoordinates]s, both
-         * lookahead position and current position of this modifier in the [LookaheadLayout]'s
-         * coordinates system can be calculated using
-         * [LookaheadLayoutCoordinates.localLookaheadPositionOf] and
-         * [LookaheadLayoutCoordinates.localPositionOf], respectively.
-         *
-         * @sample androidx.compose.ui.samples.LookaheadLayoutCoordinatesSample
-         */
-    fun Modifier.onPlaced(
-        onPlaced: (
-            lookaheadScopeCoordinates: LookaheadLayoutCoordinates,
-            layoutCoordinates: LookaheadLayoutCoordinates
-        ) -> Unit
-    ): Modifier
-
-    @Deprecated(
-        "",
-        ReplaceWith(
-            "intermediateLayout { measurable, constraints ->" +
-                "measure.invoke(this, measurable, constraints, lookaheadSize)" +
-                "}"
-        )
-    )
-        /**
-         * Creates an intermediate layout based on target size of the child layout calculated
-         * in the lookahead. This allows the intermediate layout to morph the child layout
-         * after lookahead through [measure], in which the size of the child layout calculated from the
-         * lookahead is provided. [intermediateLayout] does _not_ participate in the lookahead. It is
-         * only invoked for retroactively changing the layout based on the lookahead before the layout
-         * is drawn.
-         *
-         * @sample androidx.compose.ui.samples.IntermediateLayoutSample
-         */
-    fun Modifier.intermediateLayout(
-        measure: MeasureScope.(
-            measurable: Measurable,
-            constraints: Constraints,
-            lookaheadSize: IntSize
-        ) -> MeasureResult,
-    ): Modifier =
-        this.intermediateLayout { measurable: Measurable, constraints: Constraints ->
-            measure(measurable, constraints, lookaheadSize)
-        }
 }
 
 @OptIn(ExperimentalComposeUiApi::class)
@@ -295,7 +229,7 @@ internal class LookaheadScopeImpl(
     var scopeCoordinates: (() -> LayoutCoordinates)? = null
 ) : LookaheadScope {
     override fun LayoutCoordinates.toLookaheadCoordinates(): LayoutCoordinates {
-        return this as? LookaheadLayoutCoordinatesImpl
+        return this as? LookaheadLayoutCoordinates
             ?: (this as NodeCoordinator).let {
                 // If the coordinator has no lookahead delegate. Its
                 // lookahead coords is the same as its coords
@@ -305,22 +239,4 @@ internal class LookaheadScopeImpl(
 
     override val Placeable.PlacementScope.lookaheadScopeCoordinates: LayoutCoordinates
         get() = scopeCoordinates!!()
-
-    @Suppress("DEPRECATION")
-    @Deprecated(
-        "onPlaced in LookaheadLayoutScope has been deprecated. It's replaced" +
-            " with reading LookaheadLayoutCoordinates directly during placement in" +
-            "IntermediateMeasureScope"
-    )
-    override fun Modifier.onPlaced(
-        onPlaced: (
-            lookaheadScopeCoordinates: LookaheadLayoutCoordinates,
-            layoutCoordinates: LookaheadLayoutCoordinates
-        ) -> Unit
-    ): Modifier = this.onPlaced { coordinates ->
-        onPlaced(
-            scopeCoordinates!!().toLookaheadCoordinates() as LookaheadLayoutCoordinates,
-            coordinates.toLookaheadCoordinates() as LookaheadLayoutCoordinates
-        )
-    }
 }

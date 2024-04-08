@@ -14,23 +14,29 @@
  * limitations under the License.
  */
 
+/**
+ * This file was created using the `create_project.py` script located in the
+ * `<AndroidX root>/development/project-creator` directory.
+ *
+ * Please use that script when creating a new project, rather than copying an existing project and
+ * modifying its settings.
+ */
 
-import androidx.build.KmpPlatformsKt
 import androidx.build.LibraryType
+import androidx.build.PlatformIdentifier
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
-import org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget
 
 plugins {
     id("AndroidXPlugin")
 }
-
-def enableNative = KmpPlatformsKt.enableNative(project)
 
 androidXMultiplatform {
     jvm()
     mac()
     linux()
     ios()
+
+    defaultPlatform(PlatformIdentifier.JVM)
 
     sourceSets {
         all {
@@ -43,7 +49,6 @@ androidXMultiplatform {
                 api(libs.kotlinStdlib)
                 api(libs.kotlinCoroutinesCore)
                 api(libs.okio)
-                api(libs.atomicFu)
             }
         }
         jvmMain {
@@ -54,12 +59,12 @@ androidXMultiplatform {
         }
         commonTest {
             dependencies {
-                api(project(":internal-testutils-kmp"))
+                api(project(":kruth:kruth"))
                 api(libs.kotlinTestCommon)
                 api(libs.kotlinTestAnnotationsCommon)
                 api(libs.kotlinCoroutinesTest)
                 api(project(":internal-testutils-datastore"))
-                api(project(":internal-testutils-kmp"))
+                api(project(":kruth:kruth"))
             }
         }
         jvmTest {
@@ -68,21 +73,13 @@ androidXMultiplatform {
                 implementation(libs.kotlinTest)
                 implementation(libs.kotlinTestAnnotationsCommon)
                 api(project(":internal-testutils-datastore"))
-                api(project(":internal-testutils-kmp"))
+                api(project(":kruth:kruth"))
             }
         }
 
-        if (enableNative) {
-            nativeMain {
-                dependencies {
-                    implementation(libs.atomicFu)
-                }
-            }
-        }
-
-        targets.withType(KotlinNativeTarget).configureEach {
-            binaries.all {
-                binaryOptions["memoryModel"] = "experimental"
+        nativeMain {
+            dependencies {
+                implementation(libs.atomicFu)
             }
         }
 
