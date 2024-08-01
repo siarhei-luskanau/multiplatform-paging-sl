@@ -54,6 +54,8 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview:$compose_version")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.6.1")
     implementation("androidx.lifecycle:lifecycle-viewmodel:2.6.1")
+    implementation("androidx.annotation:annotation:1.8.1")
+    implementation(project(":lifecycle:lifecycle-common"))
 
     compileOnly(libs.kotlinCompiler)
 
@@ -66,7 +68,7 @@ dependencies {
     // Align dependencies in debugRuntimeClasspath and debugAndroidTestRuntimeClasspath.
     androidTestImplementation("androidx.annotation:annotation-experimental:1.4.0")
     androidTestImplementation("androidx.annotation:annotation:1.8.1")
-    androidTestImplementation("androidx.lifecycle:lifecycle-common:2.8.4")
+    androidTestImplementation(project(":lifecycle:lifecycle-common"))
 
     // Testing framework
     testImplementation(libs.kotlinCoroutinesTest)

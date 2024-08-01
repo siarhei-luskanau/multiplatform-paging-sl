@@ -24,7 +24,7 @@ plugins {
 dependencies {
     implementation(libs.kotlinStdlib)
 
-    implementation("androidx.annotation:annotation:1.4.0")
+    implementation("androidx.annotation:annotation:1.8.1")
     implementation("androidx.core:core:1.6.0")
 
     implementation(project(":activity:activity-compose"))
@@ -40,7 +40,7 @@ dependencies {
     androidTestImplementation(libs.testRunner)
 
     // Align dependencies in debugRuntimeClasspath and debugAndroidTestRuntimeClasspath.
-    androidTestImplementation("androidx.lifecycle:lifecycle-common:2.8.4")
+    androidTestImplementation(project(":lifecycle:lifecycle-common"))
     androidTestImplementation("androidx.annotation:annotation:1.8.1")
     androidTestImplementation(libs.junit)
     androidTestImplementation(libs.testMonitor)
