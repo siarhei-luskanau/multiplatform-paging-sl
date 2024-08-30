@@ -24,4 +24,8 @@ expect class ItemSnapshotList<T>(
   val placeholdersBefore: Int
   val placeholdersAfter: Int
   val items: List<T>
+
+  override val size: Int
+
+  override fun get(index: Int): T?
 }

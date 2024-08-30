@@ -16,8 +16,6 @@
 
 package app.cash.paging
 
-import kotlin.jvm.JvmField
-
 /* @JvmOverloads constructor */
 expect class PagingConfig(
   pageSize: Int,
@@ -32,22 +30,16 @@ expect class PagingConfig(
   /* default = COUNT_UNDEFINED */
   jumpThreshold: Int,
 ) {
-  @JvmField
   val pageSize: Int
 
-  @JvmField
   val prefetchDistance: Int
 
-  @JvmField
   val enablePlaceholders: Boolean
 
-  @JvmField
   val initialLoadSize: Int
 
-  @JvmField
   val maxSize: Int
-
-  @JvmField
+  
   val jumpThreshold: Int
 
   companion object
